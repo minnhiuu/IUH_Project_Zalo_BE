@@ -1,5 +1,6 @@
 package com.bondhub.authservice.controller;
 
+import com.bondhub.authservice.client.UserServiceClient;
 import com.bondhub.authservice.dto.auth.request.LoginRequest;
 import com.bondhub.authservice.dto.auth.request.RefreshTokenRequest;
 import com.bondhub.authservice.dto.auth.request.RegisterRequest;
@@ -50,6 +51,7 @@ public class AuthController {
     @PostMapping("/register")
     public ResponseEntity<ApiResponse<TokenResponse>> register(@Valid @RequestBody RegisterRequest request) {
         log.info("POST /auth/register - Registration request for email: {}", request.email());
+
         TokenResponse tokenResponse = authenticationService.register(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(tokenResponse));
     }
@@ -65,6 +67,20 @@ public class AuthController {
         log.info("POST /auth/refresh - Token refresh request");
         TokenResponse tokenResponse = authenticationService.refreshToken(request);
         return ResponseEntity.ok(ApiResponse.success(tokenResponse));
+    }
+
+    /**
+     * Logout endpoint
+     *
+     * @param request Logout request
+     * @return Success response
+     */
+    @PostMapping("/logout")
+    public ResponseEntity<ApiResponse<Void>> logout(
+            @Valid @RequestBody com.bondhub.authservice.dto.auth.request.LogoutRequest request) {
+        log.info("POST /auth/logout - Logout request");
+        authenticationService.logout(request);
+        return ResponseEntity.ok(ApiResponse.success(null));
     }
 
     /**

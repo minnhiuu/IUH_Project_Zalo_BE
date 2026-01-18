@@ -165,6 +165,32 @@ public class JwtUtil {
     }
 
     /**
+     * Extract token type from token
+     *
+     * @param token JWT token
+     * @return Token type ("access" or "refresh")
+     */
+    public String extractTokenType(String token) {
+        return extractClaim(token, claims -> claims.get("type", String.class));
+    }
+
+    /**
+     * Validate if token is a refresh token
+     *
+     * @param token JWT token
+     * @return true if token is a refresh token, false otherwise
+     */
+    public boolean isRefreshToken(String token) {
+        try {
+            String tokenType = extractTokenType(token);
+            return "refresh".equals(tokenType);
+        } catch (Exception e) {
+            log.error("Error checking token type: {}", e.getMessage());
+            return false;
+        }
+    }
+
+    /**
      * Extract specific claim from token
      *
      * @param token          JWT token

@@ -35,6 +35,13 @@ public interface AuthenticationService {
     TokenResponse refreshToken(RefreshTokenRequest request);
 
     /**
+     * Logout user (invalidate refresh token)
+     *
+     * @param request Logout request
+     */
+    void logout(com.bondhub.authservice.dto.auth.request.LogoutRequest request);
+
+    /**
      * Validate JWT token
      *
      * @param token JWT token to validate

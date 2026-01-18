@@ -34,7 +34,12 @@ public class CommonSecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(SecurityPaths.SERVICE_PUBLIC_PATHS.toArray(new String[0])).permitAll()
+                        .requestMatchers("/error", "/actuator/**").permitAll()
                         .anyRequest().authenticated())
+                .exceptionHandling(exception -> exception
+                        .authenticationEntryPoint((request, response, authException) -> {
+                            // Let @RestControllerAdvice handle exceptions, don't return 403
+                        }))
                 .addFilterBefore(securityContextFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();

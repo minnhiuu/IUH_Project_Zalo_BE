@@ -30,6 +30,9 @@ public class SecurityTestController {
      */
     @GetMapping("/public")
     public ResponseEntity<ApiResponse<Map<String, Object>>> publicEndpoint() {
+
+        log.info("Huyen beo");
+
         Map<String, Object> response = new HashMap<>();
         response.put("message", "This is a public endpoint - no authentication required");
         response.put("timestamp", LocalDateTime.now());

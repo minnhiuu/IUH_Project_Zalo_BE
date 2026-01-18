@@ -7,7 +7,7 @@ import org.springframework.cloud.openfeign.EnableFeignClients;
 
 @SpringBootApplication
 @EnableFeignClients
-@ComponentScan(basePackages = { "com.bondhub.authservice", "com.bondhub.common.config", "com.bondhub.common.utils"})
+@ComponentScan(basePackages = { "com.bondhub.authservice", "com.bondhub.common" })
 public class AuthServiceApplication {
 
     public static void main(String[] args) {

@@ -27,13 +27,13 @@ public class UserPrincipal implements UserDetails {
 
     @Override
     public String getPassword() {
-        // Not needed for header-based authentication
+
         return null;
     }
 
     @Override
     public String getUsername() {
-        return email; // Use email as username
+        return email;
     }
 
     @Override

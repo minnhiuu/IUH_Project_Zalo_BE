@@ -32,13 +32,11 @@ public class AccountServiceImpl implements AccountService {
     public ApiResponse<AccountResponse> createAccount(AccountCreateRequest request) {
         log.info("Creating new account with email: {}", request.email());
 
-        // Check if email already exists
         if (request.email() != null && accountRepository.existsByEmail(request.email())) {
             log.warn("Account with email {} already exists", request.email());
             throw new AppException(ErrorCode.ACC_EMAIL_ALREADY_USED);
         }
 
-        // Check if phone number already exists
         if (request.phoneNumber() != null && accountRepository.existsByPhoneNumber(request.phoneNumber())) {
             log.warn("Account with phone number {} already exists", request.phoneNumber());
             throw new AppException(ErrorCode.ACC_PHONE_NUMBER_ALREADY_USED);
@@ -111,7 +109,6 @@ public class AccountServiceImpl implements AccountService {
                     return new AppException(ErrorCode.ACC_ACCOUNT_NOT_FOUND);
                 });
 
-        // Check if email is being changed and if it already exists
         if (request.email() != null && !request.email().equals(accountToUpdate.getEmail())) {
             if (accountRepository.existsByEmail(request.email())) {
                 log.warn("Email {} already exists for another account", request.email());
@@ -119,7 +116,6 @@ public class AccountServiceImpl implements AccountService {
             }
         }
 
-        // Check if phone number is being changed and if it already exists
         if (request.phoneNumber() != null && !request.phoneNumber().equals(accountToUpdate.getPhoneNumber())) {
             if (accountRepository.existsByPhoneNumber(request.phoneNumber())) {
                 log.warn("Phone number {} already exists for another account", request.phoneNumber());
@@ -129,7 +125,6 @@ public class AccountServiceImpl implements AccountService {
 
         accountMapper.updateEntityFromRequest(accountToUpdate, request);
 
-        // Hash password if it's being updated
         if (request.password() != null) {
             accountToUpdate.setPassword(passwordEncoder.encode(request.password()));
         }

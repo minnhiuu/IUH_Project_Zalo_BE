@@ -1,0 +1,22 @@
+package com.bondhub.authservice.client;
+
+import com.bondhub.common.dto.ApiResponse;
+import org.springframework.cloud.openfeign.FeignClient;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+
+import java.util.Map;
+
+@FeignClient(name = "user-service")
+public interface UserServiceClient {
+
+    /**
+     * Test public endpoint from UserService
+     * This endpoint does not require authentication
+     *
+     * @return Response containing message and timestamp
+     */
+    @GetMapping("/users/test/security/public")
+    ResponseEntity<ApiResponse<Map<String, Object>>> testPublicEndpoint();
+
+}

@@ -39,23 +39,19 @@ public class AuthenticationServiceImpl implements AuthenticationService {
     public TokenResponse login(LoginRequest request) {
         log.info("Login attempt for phone number: {}", request.phoneNumber());
 
-        // Find account by phone number
         Account account = accountRepository.findByPhoneNumber(request.phoneNumber())
                 .orElseThrow(() -> new AppException(ErrorCode.AUTH_INVALID_CREDENTIALS));
 
-        // Verify password
         if (!passwordEncoder.matches(request.password(), account.getPassword())) {
             log.warn("Invalid password for phone number: {}", request.phoneNumber());
             throw new AppException(ErrorCode.AUTH_INVALID_CREDENTIALS);
         }
 
-        // Check if account is enabled
         if (!account.getEnabled()) {
             log.warn("Account disabled for phone number: {}", request.phoneNumber());
             throw new AppException(ErrorCode.AUTH_UNAUTHENTICATED);
         }
 
-        // Generate tokens
         String accessToken = jwtUtil.generateAccessToken(
                 account.getId(),
                 account.getEmail(),
@@ -74,19 +70,16 @@ public class AuthenticationServiceImpl implements AuthenticationService {
     public TokenResponse register(RegisterRequest request) {
         log.info("Registration attempt for email: {}", request.email());
 
-        // Check if email already exists
         if (accountRepository.existsByEmail(request.email())) {
             throw new AppException(ErrorCode.ACC_EMAIL_ALREADY_USED);
         }
 
-        // Check if phone number already exists (if provided)
         if (request.phoneNumber() != null && !request.phoneNumber().isBlank()) {
             if (accountRepository.existsByPhoneNumber(request.phoneNumber())) {
                 throw new AppException(ErrorCode.ACC_PHONE_NUMBER_ALREADY_USED);
             }
         }
 
-        // Create new account with default USER role
         Set<Role> defaultRoles = new HashSet<>();
         defaultRoles.add(Role.USER);
 
@@ -100,7 +93,6 @@ public class AuthenticationServiceImpl implements AuthenticationService {
 
         account = accountRepository.save(account);
 
-        // Generate tokens
         String accessToken = jwtUtil.generateAccessToken(
                 account.getId(),
                 account.getEmail(),
@@ -119,35 +111,50 @@ public class AuthenticationServiceImpl implements AuthenticationService {
     public TokenResponse refreshToken(RefreshTokenRequest request) {
         String refreshToken = request.refreshToken();
 
-        // Validate refresh token
         if (!jwtUtil.validateToken(refreshToken)) {
             throw new AppException(ErrorCode.JWT_INVALID_TOKEN);
         }
 
-        // Extract user ID from refresh token
+        if (!jwtUtil.isRefreshToken(refreshToken)) {
+            throw new AppException(ErrorCode.JWT_INVALID_TOKEN);
+        }
+
         String userId = jwtUtil.extractUserId(refreshToken);
 
-        // Find account
         Account account = accountRepository.findById(userId)
                 .orElseThrow(() -> new AppException(ErrorCode.ACC_ACCOUNT_NOT_FOUND));
 
-        // Check if account is enabled
         if (!account.getEnabled()) {
             throw new AppException(ErrorCode.AUTH_UNAUTHENTICATED);
         }
 
-        // Generate new access token
         String newAccessToken = jwtUtil.generateAccessToken(
                 account.getId(),
                 account.getEmail(),
                 account.getRoles() != null ? account.getRoles() : new HashSet<>());
+        String newRefreshToken = jwtUtil.generateRefreshToken(account.getId());
 
         log.info("Token refresh successful for user: {}", userId);
 
         return TokenResponse.of(
                 newAccessToken,
-                refreshToken, // Return the same refresh token
+                newRefreshToken,
                 jwtProperties.getAccessTokenExpiration());
+    }
+
+    @Override
+    public void logout(com.bondhub.authservice.dto.auth.request.LogoutRequest request) {
+        String refreshToken = request.refreshToken();
+        log.info("Logout request received with refresh token");
+
+        if (jwtUtil.validateToken(refreshToken) && jwtUtil.isRefreshToken(refreshToken)) {
+            String userId = jwtUtil.extractUserId(refreshToken);
+            log.info("User {} logged out successfully", userId);
+        } else {
+            log.warn("Logout attempt with invalid or non-refresh token");
+        }
+
+        // TODO: Add redis logic
     }
 
     @Override

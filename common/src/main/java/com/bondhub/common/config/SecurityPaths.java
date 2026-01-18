@@ -18,6 +18,7 @@ public class SecurityPaths {
             "/api/auth/register",
             "/api/auth/refresh",
             "/api/auth/validate",
+            "/api/auth/logout",
 
             // Test endpoints
             "/api/users/test/security/public",
@@ -47,6 +48,7 @@ public class SecurityPaths {
             "/auth/register",
             "/auth/refresh",
             "/auth/validate",
+            "/auth/logout",
 
             // Test endpoints (gateway strips /api/users -> /users)
             "/users/test/security/public",
