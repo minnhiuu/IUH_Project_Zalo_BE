@@ -4,6 +4,9 @@ server:
 spring:
   application:
     name: auth-service
+  
+  messages:
+    basename: i18n/messages, i18n/messages-auth
 
 
     # MongoDB Configuration

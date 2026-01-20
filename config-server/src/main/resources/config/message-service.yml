@@ -5,6 +5,9 @@ spring:
   application:
     name: message-service
 
+  messages:
+    basename: i18n/messages, i18n/messages-message
+
   # MongoDB Configuration
   data:
     mongodb:

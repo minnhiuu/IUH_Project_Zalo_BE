@@ -419,6 +419,58 @@
         }
       ],
       "description": "Security context filter test endpoints - demonstrates @PreAuthorize, role-based access, and security context functionality"
+    },
+    {
+      "name": "i18n Testing",
+      "item": [
+        {
+          "name": "Trigger Error (Default/EN)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/users/me",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "me"
+              ]
+            },
+            "description": "Trigger an error (401 Unauthorized) without specifying a language. Should return English message by default."
+          },
+          "response": []
+        },
+        {
+          "name": "Trigger Error (Vietnamese)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept-Language",
+                "value": "vi",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/users/me",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "me"
+              ]
+            },
+            "description": "Trigger an error (401 Unauthorized) with Accept-Language: vi. Should return Vietnamese message."
+          },
+          "response": []
+        }
+      ],
+      "description": "Tests for Internationalization (i18n)"
     }
   ],
   "variable": [

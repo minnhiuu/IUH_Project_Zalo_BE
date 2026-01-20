@@ -5,6 +5,9 @@ spring:
   application:
     name: notification-service
 
+  messages:
+    basename: i18n/messages, i18n/messages-notification
+
   # MongoDB Configuration
   data:
     mongodb:

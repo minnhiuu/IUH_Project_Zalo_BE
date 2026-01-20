@@ -5,6 +5,9 @@ spring:
   application:
     name: user-service
 
+  messages:
+    basename: i18n/messages, i18n/messages-user
+
     data:
       mongodb:
         uri: ${MONGODB_URI_USERS:mongodb://root:rootpassword123@127.0.0.1:27017/bondhub_user?authSource=admin}
