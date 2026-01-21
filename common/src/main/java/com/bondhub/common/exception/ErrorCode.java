@@ -15,6 +15,9 @@ public enum ErrorCode {
         JWT_EXPIRED_TOKEN(HttpStatus.UNAUTHORIZED, 1004, "error.jwt.expired.token"),
         JWT_SIGNATURE_INVALID(HttpStatus.UNAUTHORIZED, 1005, "error.jwt.signature.invalid"),
         AUTH_INVALID_CREDENTIALS(HttpStatus.UNAUTHORIZED, 1006, "error.auth.invalid.credentials"),
+        AUTH_DEVICE_ID_REQUIRED(HttpStatus.BAD_REQUEST, 1007, "error.auth.device.id.required"),
+        AUTH_DEVICE_MISMATCH(HttpStatus.FORBIDDEN, 1008, "error.auth.device.mismatch"),
+        AUTH_SESSION_KICKED(HttpStatus.UNAUTHORIZED, 1009, "error.auth.session.kicked"),
 
         // User account errors (2xxx)
         ACC_PHONE_NUMBER_ALREADY_USED(HttpStatus.CONFLICT, 2001, "error.acc.phone.number.already.used"),

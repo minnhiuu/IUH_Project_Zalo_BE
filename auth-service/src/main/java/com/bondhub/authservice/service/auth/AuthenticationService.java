@@ -1,7 +1,7 @@
 package com.bondhub.authservice.service.auth;
 
 import com.bondhub.authservice.dto.auth.request.LoginRequest;
-import com.bondhub.authservice.dto.auth.request.RefreshTokenRequest;
+import com.bondhub.authservice.dto.auth.request.RefreshRequest;
 import com.bondhub.authservice.dto.auth.request.RegisterRequest;
 import com.bondhub.authservice.dto.auth.response.TokenResponse;
 
@@ -16,30 +16,14 @@ public interface AuthenticationService {
      * @param request Login request with email and password
      * @return Token response with access and refresh tokens
      */
-    TokenResponse login(LoginRequest request);
+    TokenResponse login(LoginRequest request, String userAgent, String ipAddress);
 
-    /**
-     * Register new user account and generate tokens
-     *
-     * @param request Registration request
-     * @return Token response with access and refresh tokens
-     */
     TokenResponse register(RegisterRequest request);
 
-    /**
-     * Refresh access token using refresh token
-     *
-     * @param request Refresh token request
-     * @return Token response with new access token
-     */
-    TokenResponse refreshToken(RefreshTokenRequest request);
+    TokenResponse refresh(String refreshToken, RefreshRequest request,
+            String userAgent, String ipAddress);
 
-    /**
-     * Logout user (invalidate refresh token)
-     *
-     * @param request Logout request
-     */
-    void logout(com.bondhub.authservice.dto.auth.request.LogoutRequest request);
+    void logout(String refreshToken);
 
     /**
      * Validate JWT token

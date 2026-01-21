@@ -1,11 +1,14 @@
 package com.bondhub.authservice.service.auth;
 
 import com.bondhub.authservice.dto.auth.request.LoginRequest;
-import com.bondhub.authservice.dto.auth.request.RefreshTokenRequest;
+import com.bondhub.authservice.dto.auth.request.RefreshRequest;
 import com.bondhub.authservice.dto.auth.request.RegisterRequest;
 import com.bondhub.authservice.dto.auth.response.TokenResponse;
+import com.bondhub.authservice.enums.DeviceType;
 import com.bondhub.authservice.model.Account;
 import com.bondhub.authservice.repository.AccountRepository;
+import com.bondhub.authservice.service.token.TokenStoreService;
+import com.bondhub.authservice.util.SecurityUtil;
 import com.bondhub.common.config.JwtProperties;
 import com.bondhub.common.enums.Role;
 import com.bondhub.common.exception.AppException;
@@ -20,10 +23,8 @@ import org.springframework.stereotype.Service;
 
 import java.util.HashSet;
 import java.util.Set;
+import java.util.UUID;
 
-/**
- * Authentication service implementation
- */
 @Service
 @RequiredArgsConstructor
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
@@ -34,10 +35,13 @@ public class AuthenticationServiceImpl implements AuthenticationService {
     PasswordEncoder passwordEncoder;
     JwtUtil jwtUtil;
     JwtProperties jwtProperties;
+    TokenStoreService tokenStoreService;
+    SecurityUtil securityUtil;
 
     @Override
-    public TokenResponse login(LoginRequest request) {
-        log.info("Login attempt for phone number: {}", request.phoneNumber());
+    public TokenResponse login(LoginRequest request, String userAgent, String ipAddress) {
+        log.info("Login attempt for phone number: {}, deviceId: {}, type: {}",
+                request.phoneNumber(), request.deviceId(), request.deviceType());
 
         Account account = accountRepository.findByPhoneNumber(request.phoneNumber())
                 .orElseThrow(() -> new AppException(ErrorCode.AUTH_INVALID_CREDENTIALS));
@@ -48,22 +52,10 @@ public class AuthenticationServiceImpl implements AuthenticationService {
         }
 
         if (!account.getEnabled()) {
-            log.warn("Account disabled for phone number: {}", request.phoneNumber());
             throw new AppException(ErrorCode.AUTH_UNAUTHENTICATED);
         }
 
-        String accessToken = jwtUtil.generateAccessToken(
-                account.getId(),
-                account.getEmail(),
-                account.getRoles() != null ? account.getRoles() : new HashSet<>());
-        String refreshToken = jwtUtil.generateRefreshToken(account.getId());
-
-        log.info("Login successful for phone number: {}", request.phoneNumber());
-
-        return TokenResponse.of(
-                accessToken,
-                refreshToken,
-                jwtProperties.getAccessTokenExpiration());
+        return generateFullTokenResponse(account, request.deviceId(), request.deviceType(), userAgent, ipAddress);
     }
 
     @Override
@@ -93,33 +85,35 @@ public class AuthenticationServiceImpl implements AuthenticationService {
 
         account = accountRepository.save(account);
 
-        String accessToken = jwtUtil.generateAccessToken(
-                account.getId(),
-                account.getEmail(),
-                account.getRoles());
-        String refreshToken = jwtUtil.generateRefreshToken(account.getId());
+        // For simplicity during registration, I don't handle device info yet.
+        String sessionId = UUID.randomUUID().toString();
+        String accessToken = jwtUtil.generateAccessToken(account.getId(), account.getEmail(), account.getRoles(),
+                sessionId);
 
-        log.info("Registration successful for email: {}", request.email());
-
-        return TokenResponse.of(
-                accessToken,
-                refreshToken,
-                jwtProperties.getAccessTokenExpiration());
+        return TokenResponse.of(accessToken, null, jwtProperties.getAccessTokenExpiration());
     }
 
     @Override
-    public TokenResponse refreshToken(RefreshTokenRequest request) {
-        String refreshToken = request.refreshToken();
-
-        if (!jwtUtil.validateToken(refreshToken)) {
+    public TokenResponse refresh(String refreshToken, RefreshRequest request, String userAgent, String ipAddress) {
+        if (refreshToken == null || !jwtUtil.validateToken(refreshToken)) {
             throw new AppException(ErrorCode.JWT_INVALID_TOKEN);
         }
 
-        if (!jwtUtil.isRefreshToken(refreshToken)) {
-            throw new AppException(ErrorCode.JWT_INVALID_TOKEN);
-        }
-
+        String sessionId = jwtUtil.extractSessionId(refreshToken);
         String userId = jwtUtil.extractUserId(refreshToken);
+
+        if (sessionId == null || userId == null) {
+            throw new AppException(ErrorCode.JWT_INVALID_TOKEN);
+        }
+
+        // Validate session in Redis with device binding
+        boolean isValid = tokenStoreService.validateRefreshSessionWithBinding(
+                sessionId, refreshToken, request.deviceId(), userAgent, ipAddress);
+
+        if (!isValid) {
+            log.warn("Refresh failed: Session invalid or binding mismatch for sessionId: {}", sessionId);
+            throw new AppException(ErrorCode.JWT_INVALID_TOKEN);
+        }
 
         Account account = accountRepository.findById(userId)
                 .orElseThrow(() -> new AppException(ErrorCode.ACC_ACCOUNT_NOT_FOUND));
@@ -128,37 +122,98 @@ public class AuthenticationServiceImpl implements AuthenticationService {
             throw new AppException(ErrorCode.AUTH_UNAUTHENTICATED);
         }
 
-        String newAccessToken = jwtUtil.generateAccessToken(
-                account.getId(),
-                account.getEmail(),
-                account.getRoles() != null ? account.getRoles() : new HashSet<>());
-        String newRefreshToken = jwtUtil.generateRefreshToken(account.getId());
+        // Revoke old session (Rotation)
+        tokenStoreService.revokeRefreshSession(sessionId);
 
-        log.info("Token refresh successful for user: {}", userId);
+        // Detect device type from existing session or logic (here we assume it persists
+        // or we could extract from session)
+        DeviceType deviceType = tokenStoreService.findRefreshSession(sessionId)
+                .map(s -> s.getDeviceType())
+                .orElse(DeviceType.WEB);
 
-        return TokenResponse.of(
-                newAccessToken,
-                newRefreshToken,
-                jwtProperties.getAccessTokenExpiration());
+        // Issue new tokens
+        return generateFullTokenResponse(account, request.deviceId(), deviceType, userAgent, ipAddress);
     }
 
     @Override
-    public void logout(com.bondhub.authservice.dto.auth.request.LogoutRequest request) {
-        String refreshToken = request.refreshToken();
-        log.info("Logout request received with refresh token");
+    public void logout(String refreshToken) {
+        // 1. Blacklist current Access Token (using JTI from SecurityContext)
+        try {
+            if (securityUtil.isAuthenticated()) {
+                String jti = securityUtil.getCurrentJwtId();
+                String userId = securityUtil.getCurrentUserId();
+                String email = securityUtil.getCurrentEmail();
+                long ttl = securityUtil.getRemainingTtlSeconds();
 
-        if (jwtUtil.validateToken(refreshToken) && jwtUtil.isRefreshToken(refreshToken)) {
-            String userId = jwtUtil.extractUserId(refreshToken);
-            log.info("User {} logged out successfully", userId);
-        } else {
-            log.warn("Logout attempt with invalid or non-refresh token");
+                tokenStoreService.blacklistAccessToken(jti, userId, email, ttl, "Logout");
+            }
+        } catch (Exception e) {
+            log.warn("Could not blacklist access token during logout: {}", e.getMessage());
         }
 
-        // TODO: Add redis logic
+        // 2. Revoke Refresh Token Session in Redis
+        if (refreshToken != null && jwtUtil.validateToken(refreshToken)) {
+            String sessionId = jwtUtil.extractSessionId(refreshToken);
+            if (sessionId != null) {
+                tokenStoreService.revokeRefreshSession(sessionId);
+            }
+        }
+
+        log.info("Logout processed");
     }
 
     @Override
     public boolean validateToken(String token) {
-        return jwtUtil.validateToken(token);
+        if (!jwtUtil.validateToken(token)) {
+            return false;
+        }
+
+        // 1. Check JTI Blacklist (for explicitly logged out tokens)
+        String jti = jwtUtil.extractJti(token);
+        if (jti != null && tokenStoreService.isAccessTokenBlacklisted(jti)) {
+            log.warn("Blocked attempt to use blacklisted access token: jti={}", jti);
+            return false;
+        }
+
+        // 2. Check if Session still exists in Redis (for kicked/revoked sessions)
+        String sessionId = jwtUtil.extractSessionId(token);
+        if (sessionId != null) {
+            boolean sessionExists = tokenStoreService.findRefreshSession(sessionId)
+                    .map(session -> !Boolean.TRUE.equals(session.getRevoked()))
+                    .orElse(false);
+
+            if (!sessionExists) {
+                log.warn("Access token rejected: Session no longer exists or is revoked: sessionId={}", sessionId);
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private TokenResponse generateFullTokenResponse(Account account, String deviceId, DeviceType deviceType,
+            String userAgent, String ipAddress) {
+        String sessionId = UUID.randomUUID().toString();
+
+        long refreshExpirationMs = (deviceType == DeviceType.MOBILE)
+                ? jwtUtil.getMobileRefreshExpirationMs()
+                : jwtUtil.getWebRefreshExpirationMs();
+
+        String accessToken = jwtUtil.generateAccessToken(account.getId(), account.getEmail(), account.getRoles(),
+                sessionId);
+        String refreshToken = jwtUtil.generateRefreshToken(account.getId(), sessionId, refreshExpirationMs);
+
+        tokenStoreService.createRefreshSession(
+                sessionId,
+                account.getId(),
+                account.getPhoneNumber(),
+                deviceId,
+                deviceType,
+                refreshToken,
+                userAgent,
+                ipAddress,
+                refreshExpirationMs / 1000);
+
+        return TokenResponse.of(accessToken, refreshToken, refreshExpirationMs / 1000);
     }
 }

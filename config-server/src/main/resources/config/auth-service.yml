@@ -12,9 +12,25 @@ spring:
     # MongoDB Configuration
   data:
     mongodb:
-      uri: ${MONGODB_URI_AUTH:mongodb://root:rootpassword123@127.0.0.1:27017/bondhub_auth?authSource=admin}
+      uri: ${MONGODB_URI_AUTH:mongodb://root:123456@127.0.0.1:27018/bondhub_auth?authSource=admin}
       auto-index-creation: true
       uuid-representation: standard
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:123456}
+      timeout: 5000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+
+app:
+  cookie:
+    secure: ${COOKIE_SECURE:false} # Set to true in production
+    same-site: ${COOKIE_SAME_SITE:Lax}
+    path: ${COOKIE_PATH:/}
 
 # Eureka Client Configuration
 eureka:
@@ -100,8 +116,10 @@ resilience4j:
       authService:
         timeout-duration: 5s
 
-# JWT Configuration
 jwt:
   secret: ${JWT_SECRET:TGhpcyBpcyBhIHRlbXBvcmFyeSBzZWNyZXQga2V5IGZvciBkZXZlbG9wbWVudCBvbmx5IC0gcGxlYXNlIHVzZSBhIHNlY3VyZSBzZWNyZXQgaW4gcHJvZHVjdGlvbg==}
-  access-token-expiration: 3600000  # 1 hour in milliseconds
-  refresh-token-expiration: 604800000  # 7 days in milliseconds
+  access:
+    expiration: 3600000
+  refresh:
+    expiration-web: 1209600000
+    expiration-mobile: 31536000000

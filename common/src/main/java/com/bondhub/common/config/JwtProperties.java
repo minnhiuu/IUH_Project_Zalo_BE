@@ -4,32 +4,48 @@ import lombok.Getter;
 import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.validation.annotation.Validated;
 
-/**
- * JWT Configuration Properties
- * Binds to jwt.* properties in application.yml
- */
+import jakarta.validation.constraints.Min;
+
 @Configuration
 @ConfigurationProperties(prefix = "jwt")
+@Validated
 @Getter
 @Setter
 public class JwtProperties {
 
-    /**
-     * Secret key for JWT signing and verification
-     * Should be at least 256 bits (32 characters) for HS256
-     */
     private String secret;
 
-    /**
-     * Access token expiration time in milliseconds
-     * Default: 3600000 (1 hour)
-     */
-    private Long accessTokenExpiration = 3600000L;
+    private Access access = new Access();
+    private Refresh refresh = new Refresh();
 
-    /**
-     * Refresh token expiration time in milliseconds
-     * Default: 604800000 (7 days)
-     */
-    private Long refreshTokenExpiration = 604800000L;
+    @Getter
+    @Setter
+    public static class Access {
+        @Min(value = 1, message = "Access token expiration must be greater than 0")
+        private Long expiration = 3600000L;
+    }
+
+    @Getter
+    @Setter
+    public static class Refresh {
+        @Min(value = 1, message = "Refresh token expiration must be greater than 0")
+        private Long expirationWeb = 1209600000L;
+
+        @Min(value = 1, message = "Refresh token expiration must be greater than 0")
+        private Long expirationMobile = 31536000000L;
+    }
+
+    public Long getAccessTokenExpiration() {
+        return access.getExpiration();
+    }
+
+    public Long getRefreshExpirationWeb() {
+        return refresh.getExpirationWeb();
+    }
+
+    public Long getRefreshExpirationMobile() {
+        return refresh.getExpirationMobile();
+    }
 }

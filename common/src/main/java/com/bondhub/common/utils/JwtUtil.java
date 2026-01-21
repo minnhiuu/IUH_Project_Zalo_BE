@@ -35,10 +35,12 @@ public class JwtUtil {
      * @param roles  User roles
      * @return JWT access token
      */
-    public String generateAccessToken(String userId, String email, Set<Role> roles) {
+    public String generateAccessToken(String userId, String email, Set<Role> roles, String sessionId) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", userId);
         claims.put("email", email);
+        claims.put("sessionId", sessionId);
+        claims.put("jti", java.util.UUID.randomUUID().toString());
         // Convert Role enum to String for JWT claims
         claims.put("roles", roles.stream()
                 .map(Role::getName)
@@ -51,14 +53,18 @@ public class JwtUtil {
     /**
      * Generate refresh token
      *
-     * @param userId User ID
+     * @param userId       User ID
+     * @param sessionId    Session ID for device tracking
+     * @param expirationMs Expiration time for this specific token
      * @return JWT refresh token
      */
-    public String generateRefreshToken(String userId) {
+    public String generateRefreshToken(String userId, String sessionId, long expirationMs) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("type", "refresh");
+        claims.put("sessionId", sessionId);
+        claims.put("jti", java.util.UUID.randomUUID().toString());
 
-        return generateToken(claims, userId, jwtProperties.getRefreshTokenExpiration());
+        return generateToken(claims, userId, expirationMs);
     }
 
     /**
@@ -188,6 +194,32 @@ public class JwtUtil {
             log.error("Error checking token type: {}", e.getMessage());
             return false;
         }
+    }
+
+    public String extractJti(String token) {
+        return extractClaim(token, claims -> claims.get("jti", String.class));
+    }
+
+    public String extractSessionId(String token) {
+        return extractClaim(token, claims -> claims.get("sessionId", String.class));
+    }
+
+    public long getRemainingTtl(String token) {
+        Date expiration = extractClaim(token, Claims::getExpiration);
+        long remainingMs = expiration.getTime() - System.currentTimeMillis();
+        return Math.max(0, remainingMs / 1000);
+    }
+
+    public long getWebRefreshExpirationMs() {
+        return jwtProperties.getRefreshExpirationWeb();
+    }
+
+    public long getMobileRefreshExpirationMs() {
+        return jwtProperties.getRefreshExpirationMobile();
+    }
+
+    public long getAccessTokenExpirationSeconds() {
+        return jwtProperties.getAccessTokenExpiration() / 1000;
     }
 
     /**
