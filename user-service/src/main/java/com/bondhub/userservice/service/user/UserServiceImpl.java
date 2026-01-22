@@ -1,14 +1,19 @@
 package com.bondhub.userservice.service.user;
 
+import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
+import com.bondhub.userservice.client.AuthServiceClient;
 import com.bondhub.userservice.dto.request.UserCreateRequest;
 import com.bondhub.userservice.dto.request.UserUpdateRequest;
+import com.bondhub.userservice.dto.response.AccountResponse;
 import com.bondhub.userservice.dto.response.UserResponse;
 import com.bondhub.userservice.mapper.UserMapper;
 import com.bondhub.userservice.model.User;
 import com.bondhub.userservice.repository.UserRepository;
+import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
+import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -18,10 +23,12 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 @Slf4j
+@FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public class UserServiceImpl implements UserService {
 
-    private final UserRepository userRepository;
-    private final UserMapper userMapper;
+    UserRepository userRepository;
+    UserMapper userMapper;
+    AuthServiceClient authServiceClient;
 
     @Override
     public UserResponse createUser(UserCreateRequest request) {
@@ -46,7 +53,20 @@ public class UserServiceImpl implements UserService {
         User user = userRepository.findByAccountId(accountId)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
 
-        return userMapper.toUserResponse(user);
+        UserResponse userResponse = userMapper.toUserResponse(user);
+
+        // Fetch account information from auth service
+        try {
+            ApiResponse<AccountResponse> accountApiResponse = authServiceClient.getAccountById(accountId);
+            if (accountApiResponse != null && accountApiResponse.data() != null) {
+                userResponse.setAccountInfo(accountApiResponse.data());
+                log.info("Account info fetched successfully for accountId: {}", accountId);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to fetch account info for accountId: {}. Continuing without it.", accountId, e);
+        }
+
+        return userResponse;
     }
 
     @Override

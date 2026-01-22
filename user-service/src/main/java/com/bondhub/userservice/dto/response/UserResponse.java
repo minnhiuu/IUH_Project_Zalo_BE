@@ -20,5 +20,6 @@ public class UserResponse {
     String accountId;
     String email;
     String phoneNumber;
-    java.util.List<String> roles;
+    String role;
+    AccountResponse accountInfo;
 }

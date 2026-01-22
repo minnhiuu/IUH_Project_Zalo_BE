@@ -4,9 +4,12 @@ import com.bondhub.authservice.dto.account.request.AccountCreateRequest;
 import com.bondhub.authservice.dto.account.response.AccountResponse;
 import com.bondhub.authservice.dto.account.request.AccountUpdateRequest;
 import com.bondhub.authservice.model.Account;
+import com.bondhub.common.enums.Role;
 import org.mapstruct.BeanMapping;
 import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
 import org.mapstruct.MappingTarget;
+import org.mapstruct.Named;
 import org.mapstruct.NullValuePropertyMappingStrategy;
 import org.mapstruct.ReportingPolicy;
 
@@ -24,10 +27,16 @@ import org.mapstruct.ReportingPolicy;
 @Mapper(componentModel = "spring", unmappedTargetPolicy = ReportingPolicy.IGNORE)
 public interface AccountMapper {
 
+    @Mapping(source = "role", target = "role", qualifiedByName = "roleToString")
     AccountResponse toResponse(Account account);
 
     Account toEntity(AccountCreateRequest request);
 
     @BeanMapping(nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
     void updateEntityFromRequest(@MappingTarget Account account, AccountUpdateRequest request);
+
+    @Named("roleToString")
+    default String roleToString(Role role) {
+        return role != null ? role.name() : null;
+    }
 }

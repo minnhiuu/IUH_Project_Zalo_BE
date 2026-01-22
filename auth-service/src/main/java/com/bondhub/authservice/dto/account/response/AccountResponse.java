@@ -24,6 +24,7 @@ public record AccountResponse(
         String id,
         String phoneNumber,
         String email,
+        String role,
         LocalDateTime createdAt,
         LocalDateTime lastModifiedAt,
         String createdBy,

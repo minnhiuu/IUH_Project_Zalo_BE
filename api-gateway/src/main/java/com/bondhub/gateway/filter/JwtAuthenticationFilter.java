@@ -65,13 +65,13 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
             // Extract user information from token
             String userId = jwtUtil.extractUserId(token);
             String email = jwtUtil.extractEmail(token);
-            Set<String> roles = jwtUtil.extractRoles(token);
+            String role = jwtUtil.extractRole(token);
 
             // Add user context headers for downstream services
             ServerHttpRequest modifiedRequest = request.mutate()
                     .header("X-User-Id", userId)
                     .header("X-User-Email", email)
-                    .header("X-User-Roles", String.join(",", roles))
+                    .header("X-User-Roles", role)
                     .build();
 
             log.debug("Authentication successful for user: {} ({})", email, userId);

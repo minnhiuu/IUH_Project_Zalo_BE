@@ -2,7 +2,6 @@ package com.bondhub.userservice.dto.response;
 
 import lombok.Data;
 import java.time.LocalDateTime;
-import java.util.Set;
 
 @Data
 public class AccountResponse {
@@ -13,5 +12,5 @@ public class AccountResponse {
     private LocalDateTime lastModifiedAt;
     private String createdBy;
     private String lastModifiedBy;
-    private Set<String> roles;
+    private String role;
 }
