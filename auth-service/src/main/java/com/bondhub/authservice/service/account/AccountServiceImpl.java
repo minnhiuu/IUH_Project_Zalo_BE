@@ -6,7 +6,6 @@ import com.bondhub.authservice.dto.account.request.AccountUpdateRequest;
 import com.bondhub.authservice.mapper.AccountMapper;
 import com.bondhub.authservice.model.Account;
 import com.bondhub.authservice.repository.AccountRepository;
-import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
 import lombok.AccessLevel;
@@ -29,7 +28,7 @@ public class AccountServiceImpl implements AccountService {
     PasswordEncoder passwordEncoder;
 
     @Override
-    public ApiResponse<AccountResponse> createAccount(AccountCreateRequest request) {
+    public AccountResponse createAccount(AccountCreateRequest request) {
         log.info("Creating new account with email: {}", request.email());
 
         if (request.email() != null && accountRepository.existsByEmail(request.email())) {
@@ -47,11 +46,11 @@ public class AccountServiceImpl implements AccountService {
 
         Account savedAccount = accountRepository.save(account);
         log.info("Account created successfully with id: {}", savedAccount.getId());
-        return ApiResponse.success(accountMapper.toResponse(savedAccount));
+        return accountMapper.toResponse(savedAccount);
     }
 
     @Override
-    public ApiResponse<AccountResponse> getAccountById(String id) {
+    public AccountResponse getAccountById(String id) {
         log.info("Fetching account with id: {}", id);
         Account account = accountRepository.findById(id)
                 .orElseThrow(() -> {
@@ -60,11 +59,11 @@ public class AccountServiceImpl implements AccountService {
                 });
 
         log.info("Account found with id: {}", id);
-        return ApiResponse.success(accountMapper.toResponse(account));
+        return accountMapper.toResponse(account);
     }
 
     @Override
-    public ApiResponse<AccountResponse> getAccountByEmail(String email) {
+    public AccountResponse getAccountByEmail(String email) {
         log.info("Fetching account with email: {}", email);
         Account account = accountRepository.findByEmail(email)
                 .orElseThrow(() -> {
@@ -73,11 +72,11 @@ public class AccountServiceImpl implements AccountService {
                 });
 
         log.info("Account found with email: {}", email);
-        return ApiResponse.success(accountMapper.toResponse(account));
+        return accountMapper.toResponse(account);
     }
 
     @Override
-    public ApiResponse<AccountResponse> getAccountByPhoneNumber(String phoneNumber) {
+    public AccountResponse getAccountByPhoneNumber(String phoneNumber) {
         log.info("Fetching account with phone number: {}", phoneNumber);
         Account account = accountRepository.findByPhoneNumber(phoneNumber)
                 .orElseThrow(() -> {
@@ -86,22 +85,21 @@ public class AccountServiceImpl implements AccountService {
                 });
 
         log.info("Account found with phone number: {}", phoneNumber);
-        return ApiResponse.success(accountMapper.toResponse(account));
+        return accountMapper.toResponse(account);
     }
 
     @Override
-    public ApiResponse<List<AccountResponse>> getAllAccounts() {
+    public List<AccountResponse> getAllAccounts() {
         log.info("Fetching all accounts");
         List<Account> accounts = accountRepository.findAll();
         log.info("Found {} accounts", accounts.size());
-        List<AccountResponse> accountResponses = accounts.stream()
+        return accounts.stream()
                 .map(accountMapper::toResponse)
                 .toList();
-        return ApiResponse.success(accountResponses);
     }
 
     @Override
-    public ApiResponse<AccountResponse> updateAccount(String id, AccountUpdateRequest request) {
+    public AccountResponse updateAccount(String id, AccountUpdateRequest request) {
         log.info("Updating account with id: {}", id);
         Account accountToUpdate = accountRepository.findById(id)
                 .orElseThrow(() -> {
@@ -131,11 +129,11 @@ public class AccountServiceImpl implements AccountService {
 
         Account updatedAccount = accountRepository.save(accountToUpdate);
         log.info("Account updated successfully with id: {}", id);
-        return ApiResponse.success(accountMapper.toResponse(updatedAccount));
+        return accountMapper.toResponse(updatedAccount);
     }
 
     @Override
-    public ApiResponse<Void> deleteAccount(String id) {
+    public void deleteAccount(String id) {
         log.info("Deleting account with id: {}", id);
 
         if (!accountRepository.existsById(id)) {
@@ -145,22 +143,21 @@ public class AccountServiceImpl implements AccountService {
 
         accountRepository.deleteById(id);
         log.info("Account deleted successfully with id: {}", id);
-        return ApiResponse.successWithoutData();
     }
 
     @Override
-    public ApiResponse<Boolean> existsByEmail(String email) {
+    public boolean existsByEmail(String email) {
         log.info("Checking if account exists with email: {}", email);
         boolean exists = accountRepository.existsByEmail(email);
         log.info("Account with email {} exists: {}", email, exists);
-        return ApiResponse.success(exists);
+        return exists;
     }
 
     @Override
-    public ApiResponse<Boolean> existsByPhoneNumber(String phoneNumber) {
+    public boolean existsByPhoneNumber(String phoneNumber) {
         log.info("Checking if account exists with phone number: {}", phoneNumber);
         boolean exists = accountRepository.existsByPhoneNumber(phoneNumber);
         log.info("Account with phone number {} exists: {}", phoneNumber, exists);
-        return ApiResponse.success(exists);
+        return exists;
     }
 }

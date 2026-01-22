@@ -28,56 +28,37 @@ public class AccountController {
     @PostMapping
     public ResponseEntity<ApiResponse<AccountResponse>> createAccount(@Valid @RequestBody AccountCreateRequest request) {
         log.info("REST request to create account with email: {}", request.email());
-        ApiResponse<AccountResponse> response = accountService.createAccount(request);
-
-        if (response.code() == 1000) {
-            return ResponseEntity.status(HttpStatus.CREATED).body(response);
-        }
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        AccountResponse accountResponse = accountService.createAccount(request);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success(accountResponse));
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponse<AccountResponse>> getAccountById(@PathVariable String id) {
         log.info("REST request to get account by id: {}", id);
-        ApiResponse<AccountResponse> response = accountService.getAccountById(id);
-
-        if (response.code() == 1000) {
-            return ResponseEntity.ok(response);
-        }
-        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+        AccountResponse accountResponse = accountService.getAccountById(id);
+        return ResponseEntity.ok(ApiResponse.success(accountResponse));
     }
 
     @GetMapping("/email/{email}")
     public ResponseEntity<ApiResponse<AccountResponse>> getAccountByEmail(@PathVariable String email) {
         log.info("REST request to get account by email: {}", email);
-        ApiResponse<AccountResponse> response = accountService.getAccountByEmail(email);
-
-        if (response.code() == 1000) {
-            return ResponseEntity.ok(response);
-        }
-        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+        AccountResponse accountResponse = accountService.getAccountByEmail(email);
+        return ResponseEntity.ok(ApiResponse.success(accountResponse));
     }
 
     @GetMapping("/phone/{phoneNumber}")
     public ResponseEntity<ApiResponse<AccountResponse>> getAccountByPhoneNumber(@PathVariable String phoneNumber) {
         log.info("REST request to get account by phone number: {}", phoneNumber);
-        ApiResponse<AccountResponse> response = accountService.getAccountByPhoneNumber(phoneNumber);
-
-        if (response.code() == 1000) {
-            return ResponseEntity.ok(response);
-        }
-        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+        AccountResponse accountResponse = accountService.getAccountByPhoneNumber(phoneNumber);
+        return ResponseEntity.ok(ApiResponse.success(accountResponse));
     }
 
     @GetMapping
     public ResponseEntity<ApiResponse<List<AccountResponse>>> getAllAccounts() {
         log.info("REST request to get all accounts");
-        ApiResponse<List<AccountResponse>> response = accountService.getAllAccounts();
-
-        if (response.code() == 1000) {
-            return ResponseEntity.ok(response);
-        }
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        List<AccountResponse> accountResponses = accountService.getAllAccounts();
+        return ResponseEntity.ok(ApiResponse.success(accountResponses));
     }
 
     @PutMapping("/{id}")
@@ -85,46 +66,28 @@ public class AccountController {
             @PathVariable String id,
             @Valid @RequestBody AccountUpdateRequest request) {
         log.info("REST request to update account with id: {}", id);
-        ApiResponse<AccountResponse> response = accountService.updateAccount(id, request);
-
-        if (response.code() == 1000) {
-            return ResponseEntity.ok(response);
-        } else if (response.code() == 1003) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
-        }
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        AccountResponse accountResponse = accountService.updateAccount(id, request);
+        return ResponseEntity.ok(ApiResponse.success(accountResponse));
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<ApiResponse<Void>> deleteAccount(@PathVariable String id) {
         log.info("REST request to delete account with id: {}", id);
-        ApiResponse<Void> response = accountService.deleteAccount(id);
-
-        if (response.code() == 1000) {
-            return ResponseEntity.ok(response);
-        }
-        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+        accountService.deleteAccount(id);
+        return ResponseEntity.ok(ApiResponse.successWithoutData());
     }
 
     @GetMapping("/exists/email/{email}")
     public ResponseEntity<ApiResponse<Boolean>> existsByEmail(@PathVariable String email) {
         log.info("REST request to check if account exists by email: {}", email);
-        ApiResponse<Boolean> response = accountService.existsByEmail(email);
-
-        if (response.code() == 1000) {
-            return ResponseEntity.ok(response);
-        }
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        boolean exists = accountService.existsByEmail(email);
+        return ResponseEntity.ok(ApiResponse.success(exists));
     }
 
     @GetMapping("/exists/phone/{phoneNumber}")
     public ResponseEntity<ApiResponse<Boolean>> existsByPhoneNumber(@PathVariable String phoneNumber) {
         log.info("REST request to check if account exists by phone number: {}", phoneNumber);
-        ApiResponse<Boolean> response = accountService.existsByPhoneNumber(phoneNumber);
-
-        if (response.code() == 1000) {
-            return ResponseEntity.ok(response);
-        }
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        boolean exists = accountService.existsByPhoneNumber(phoneNumber);
+        return ResponseEntity.ok(ApiResponse.success(exists));
     }
 }

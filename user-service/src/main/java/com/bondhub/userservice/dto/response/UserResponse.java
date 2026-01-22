@@ -18,4 +18,7 @@ public class UserResponse {
     String bio;
     Gender gender;
     String accountId;
+    String email;
+    String phoneNumber;
+    java.util.List<String> roles;
 }
