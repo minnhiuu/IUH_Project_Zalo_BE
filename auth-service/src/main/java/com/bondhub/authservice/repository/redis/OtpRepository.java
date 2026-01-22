@@ -1,6 +1,6 @@
-package com.bondhub.authservice.repository;
+package com.bondhub.authservice.repository.redis;
 
-import com.bondhub.authservice.model.OtpRecord;
+import com.bondhub.authservice.model.redis.OtpRecord;
 import org.springframework.data.repository.CrudRepository;
 import org.springframework.stereotype.Repository;
 

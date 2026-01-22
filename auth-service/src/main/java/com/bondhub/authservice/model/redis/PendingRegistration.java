@@ -1,4 +1,4 @@
-package com.bondhub.authservice.model;
+package com.bondhub.authservice.model.redis;
 
 import lombok.*;
 import org.springframework.data.annotation.Id;
@@ -29,6 +29,11 @@ public class PendingRegistration {
      * Hashed password (for security, even in temporary storage)
      */
     private String passwordHash;
+
+    /**
+     * Full name
+     */
+    private String fullName;
 
     /**
      * Phone number (optional)

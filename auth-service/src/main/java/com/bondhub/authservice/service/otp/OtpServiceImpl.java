@@ -1,10 +1,10 @@
 package com.bondhub.authservice.service.otp;
 
 import com.bondhub.authservice.enums.OtpPurpose;
-import com.bondhub.authservice.model.OtpCooldown;
-import com.bondhub.authservice.model.OtpRecord;
-import com.bondhub.authservice.repository.OtpCooldownRepository;
-import com.bondhub.authservice.repository.OtpRepository;
+import com.bondhub.authservice.model.redis.OtpCooldown;
+import com.bondhub.authservice.model.redis.OtpRecord;
+import com.bondhub.authservice.repository.redis.OtpCooldownRepository;
+import com.bondhub.authservice.repository.redis.OtpRepository;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;

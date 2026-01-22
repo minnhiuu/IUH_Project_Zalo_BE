@@ -1,4 +1,4 @@
-package com.bondhub.authservice.model;
+package com.bondhub.authservice.model.redis;
 
 import lombok.*;
 import org.springframework.data.annotation.Id;

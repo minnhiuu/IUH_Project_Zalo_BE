@@ -26,16 +26,28 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class CommonSecurityConfig {
 
     private final SecurityContextFilter securityContextFilter;
+    private final SecurityProperties securityProperties;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(SecurityPaths.SERVICE_PUBLIC_PATHS.toArray(new String[0])).permitAll()
-                        .requestMatchers("/error", "/actuator/**").permitAll()
-                        .anyRequest().authenticated())
+                .authorizeHttpRequests(auth -> {
+                    // Permit base endpoints
+                    auth.requestMatchers("/").permitAll();
+                    auth.requestMatchers("/error", "/actuator/**").permitAll();
+
+                    // Permit configured public endpoints
+                    if (securityProperties.getPublicEndpoints() != null
+                            && !securityProperties.getPublicEndpoints().isEmpty()) {
+                        auth.requestMatchers(securityProperties.getPublicEndpoints().toArray(String[]::new))
+                                .permitAll();
+                    }
+
+                    // All other requests require authentication
+                    auth.anyRequest().authenticated();
+                })
                 .exceptionHandling(exception -> exception
                         .authenticationEntryPoint((request, response, authException) -> {
                             // Let @RestControllerAdvice handle exceptions, don't return 403

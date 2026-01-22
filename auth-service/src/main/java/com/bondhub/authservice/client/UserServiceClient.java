@@ -1,9 +1,13 @@
 package com.bondhub.authservice.client;
 
+import com.bondhub.common.dto.client.userservice.user.request.UserCreateRequest;
 import com.bondhub.common.dto.ApiResponse;
+import com.bondhub.common.dto.client.userservice.user.response.UserResponse;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 
 import java.util.Map;
 
@@ -19,4 +23,6 @@ public interface UserServiceClient {
     @GetMapping("/users/test/security/public")
     ResponseEntity<ApiResponse<Map<String, Object>>> testPublicEndpoint();
 
+    @PostMapping("/users")
+    ApiResponse<UserResponse> createUser(@RequestBody UserCreateRequest request);
 }

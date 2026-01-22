@@ -1,4 +1,4 @@
-package com.bondhub.authservice.model;
+package com.bondhub.authservice.model.redis;
 
 import com.bondhub.authservice.enums.OtpPurpose;
 import lombok.*;

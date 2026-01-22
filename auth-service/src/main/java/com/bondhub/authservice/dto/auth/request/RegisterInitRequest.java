@@ -10,9 +10,11 @@ import jakarta.validation.constraints.Size;
  * Server will validate, generate OTP, and send email
  */
 public record RegisterInitRequest(
-        @NotBlank(message = "Email is required") @Email(message = "Email must be valid") String email,
+                @NotBlank(message = "Email is required") @Email(message = "Email must be valid") String email,
 
-        @NotBlank(message = "Password is required") @Size(min = 8, message = "Password must be at least 8 characters") String password,
+                @NotBlank(message = "Password is required") @Size(min = 8, message = "Password must be at least 8 characters") String password,
 
-        @Pattern(regexp = "^[0-9]{10,15}$", message = "Phone number must be 10-15 digits") String phoneNumber) {
+                @NotBlank(message = "Full name is required") String fullName,
+
+                @Pattern(regexp = "^[0-9]{10,15}$", message = "Phone number must be 10-15 digits") String phoneNumber) {
 }

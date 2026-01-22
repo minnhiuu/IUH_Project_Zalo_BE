@@ -16,6 +16,9 @@ public class SecurityPaths {
             // Authentication endpoints
             "/api/auth/login",
             "/api/auth/register",
+            "/api/auth/register/verify",
+            "/api/auth/forgot-password",
+            "/api/auth/reset-password",
             "/api/auth/refresh",
             "/api/auth/validate",
             "/api/auth/logout",
@@ -46,6 +49,9 @@ public class SecurityPaths {
             // Auth endpoints (gateway strips /api/auth -> /auth)
             "/auth/login",
             "/auth/register",
+            "/auth/register/verify",
+            "/auth/forgot-password",
+            "/auth/reset-password",
             "/auth/refresh",
             "/auth/validate",
             "/auth/logout",

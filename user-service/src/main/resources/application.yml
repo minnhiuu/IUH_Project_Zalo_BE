@@ -18,3 +18,5 @@ bondhub:
   security:
     gateway-auth:
       enabled: true
+    public-endpoints:
+      - /users

@@ -1,7 +1,7 @@
 package com.bondhub.authservice.service.token;
 
 import com.bondhub.authservice.enums.DeviceType;
-import com.bondhub.authservice.model.RefreshTokenSession;
+import com.bondhub.authservice.model.redis.RefreshTokenSession;
 
 import java.util.Optional;
 

@@ -1,10 +1,10 @@
 package com.bondhub.authservice.service.token;
 
 import com.bondhub.authservice.enums.DeviceType;
-import com.bondhub.authservice.model.BlacklistedAccessToken;
-import com.bondhub.authservice.model.RefreshTokenSession;
-import com.bondhub.authservice.repository.BlacklistedAccessTokenRepository;
-import com.bondhub.authservice.repository.RefreshTokenSessionRepository;
+import com.bondhub.authservice.model.redis.BlacklistedAccessToken;
+import com.bondhub.authservice.model.redis.RefreshTokenSession;
+import com.bondhub.authservice.repository.redis.BlacklistedAccessTokenRepository;
+import com.bondhub.authservice.repository.redis.RefreshTokenSessionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;

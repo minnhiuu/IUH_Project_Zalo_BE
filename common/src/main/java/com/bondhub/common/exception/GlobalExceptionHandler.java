@@ -60,6 +60,9 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<Map<String, String>>> handleUncategorizedException(
             Exception exception) {
         ErrorCode errorCode = ErrorCode.SYS_UNCATEGORIZED;
+
+        exception.printStackTrace();
+
         return ResponseEntity
                 .status(errorCode.getHttpStatus())
                 .body(ApiResponse.error(errorCode.getCode(), errorCode.getMessageKey(), null));

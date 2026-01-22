@@ -1,7 +1,7 @@
-package com.bondhub.authservice.repository;
+package com.bondhub.authservice.repository.redis;
 
 import com.bondhub.authservice.enums.DeviceType;
-import com.bondhub.authservice.model.RefreshTokenSession;
+import com.bondhub.authservice.model.redis.RefreshTokenSession;
 import org.springframework.data.repository.CrudRepository;
 import org.springframework.stereotype.Repository;
 
