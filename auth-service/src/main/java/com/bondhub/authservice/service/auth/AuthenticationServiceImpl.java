@@ -35,8 +35,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
-import java.util.HashSet;
-import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -89,20 +87,18 @@ public class AuthenticationServiceImpl implements AuthenticationService {
             }
         }
 
-        Set<Role> defaultRoles = new HashSet<>();
-        defaultRoles.add(Role.USER);
-
         Account account = Account.builder()
                 .email(request.email())
                 .password(passwordEncoder.encode(request.password()))
                 .phoneNumber(request.phoneNumber())
+                .role(Role.USER)
                 .enabled(true)
                 .build();
 
         account = accountRepository.save(account);
 
         String sessionId = UUID.randomUUID().toString();
-        String accessToken = jwtUtil.generateAccessToken(account.getId(), account.getEmail(), account.getRoles(),
+        String accessToken = jwtUtil.generateAccessToken(account.getId(), account.getEmail(), account.getRole(),
                 sessionId);
 
         return TokenResponse.of(accessToken, null);
@@ -250,14 +246,11 @@ public class AuthenticationServiceImpl implements AuthenticationService {
                 .orElseThrow(() -> new AppException(ErrorCode.ACC_ACCOUNT_NOT_FOUND));
 
         // Step 3: Create verified account
-        Set<Role> defaultRoles = new HashSet<>();
-        defaultRoles.add(Role.USER);
-
         Account account = Account.builder()
                 .email(pendingReg.getEmail())
                 .password(pendingReg.getPasswordHash())
                 .phoneNumber(pendingReg.getPhoneNumber())
-                .roles(defaultRoles)
+                .role(Role.USER)
                 .isVerified(true) // Set to true after OTP verification
                 .enabled(true)
                 .build();
@@ -353,7 +346,7 @@ public class AuthenticationServiceImpl implements AuthenticationService {
                 ? jwtUtil.getMobileRefreshExpirationMs()
                 : jwtUtil.getWebRefreshExpirationMs();
 
-        String accessToken = jwtUtil.generateAccessToken(account.getId(), account.getEmail(), account.getRoles(),
+        String accessToken = jwtUtil.generateAccessToken(account.getId(), account.getEmail(), account.getRole(),
                 sessionId);
         String refreshToken = jwtUtil.generateRefreshToken(account.getId(), sessionId, refreshExpirationMs);
 

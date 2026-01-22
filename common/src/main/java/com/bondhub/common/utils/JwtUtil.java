@@ -13,8 +13,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 /**
  * JWT Utility class for token generation, validation, and extraction
@@ -32,19 +30,17 @@ public class JwtUtil {
      *
      * @param userId User ID
      * @param email  User email
-     * @param roles  User roles
+     * @param role   User role
      * @return JWT access token
      */
-    public String generateAccessToken(String userId, String email, Set<Role> roles, String sessionId) {
+    public String generateAccessToken(String userId, String email, Role role, String sessionId) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", userId);
         claims.put("email", email);
         claims.put("sessionId", sessionId);
         claims.put("jti", java.util.UUID.randomUUID().toString());
-        // Convert Role enum to String for JWT claims
-        claims.put("roles", roles.stream()
-                .map(Role::getName)
-                .collect(Collectors.toList()));
+        // Store single role as string in JWT claims
+        claims.put("role", role != null ? role.getName() : null);
         claims.put("type", "access");
 
         return generateToken(claims, userId, jwtProperties.getAccessTokenExpiration());
@@ -136,23 +132,14 @@ public class JwtUtil {
     }
 
     /**
-     * Extract roles from token
+     * Extract role from token
      *
      * @param token JWT token
-     * @return Set of roles
+     * @return Role string, or null if not present
      */
-    @SuppressWarnings("unchecked")
-    public Set<String> extractRoles(String token) {
+    public String extractRole(String token) {
         Claims claims = extractAllClaims(token);
-        Object rolesObj = claims.get("roles");
-
-        if (rolesObj instanceof Set) {
-            return (Set<String>) rolesObj;
-        } else if (rolesObj instanceof java.util.List) {
-            return new java.util.HashSet<>((java.util.List<String>) rolesObj);
-        }
-
-        return new java.util.HashSet<>();
+        return claims.get("role", String.class);
     }
 
     /**
