@@ -133,11 +133,3 @@ otp:
   ttl-seconds: 300  # 5 minutes
   max-attempts: 5  # Maximum validation attempts before OTP is deleted
   cooldown-seconds: 60  # Cooldown between OTP generation requests (1 minute)
-
-# BondHub Security Configuration
-bondhub:
-  security:
-    gateway-auth:
-      enabled: true
-    public-endpoints:
-      - /auth/**
