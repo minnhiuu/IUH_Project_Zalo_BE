@@ -12,11 +12,3 @@ spring:
         initial-interval: 1000
         max-interval: 2000
         multiplier: 1.1
-
-# Enable Security Context Filter for @PreAuthorize support
-bondhub:
-  security:
-    gateway-auth:
-      enabled: true
-    public-endpoints:
-      - /users

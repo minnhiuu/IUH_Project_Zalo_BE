@@ -15,23 +15,3 @@ spring:
   mail:
     email: ${BREVO_MAIL:noreply@bondhub.com}
 
-# JWT Configuration (fallback - should be configured in config-server)
-jwt:
-  secret: ${JWT_SECRET:TGhpcyBpcyBhIHRlbXBvcmFyeSBzZWNyZXQga2V5IGZvciBkZXZlbG9wbWVudCBvbmx5IC0gcGxlYXNlIHVzZSBhIHNlY3VyZSBzZWNyZXQgaW4gcHJvZHVjdGlvbg==}
-  access-token-expiration: 3600000  # 1 hour
-  refresh-token-expiration: 604800000  # 7 days
-
-# Brevo Email Configuration
-brevo:
-  api-key: ${BREVO_API_KEY:your-brevo-api-key-here}
-  sender:
-    name: ${BREVO_SENDER_NAME:BondHub}
-  template:
-    otp-verification-id: ${BREVO_OTP_TEMPLATE_ID:1}
-
-# OTP Configuration
-otp:
-  length: 6  # Number of digits in OTP
-  ttl-seconds: 300  # 5 minutes
-  max-attempts: 5  # Maximum validation attempts before OTP is deleted
-  cooldown-seconds: 60  # Cooldown between OTP generation requests (1 minute)

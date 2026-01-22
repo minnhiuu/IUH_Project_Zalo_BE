@@ -94,3 +94,11 @@ resilience4j:
     instances:
       userService:
         timeout-duration: 5s
+
+# BondHub Security Configuration
+bondhub:
+  security:
+    gateway-auth:
+      enabled: true
+    public-endpoints:
+      - /users

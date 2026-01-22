@@ -93,3 +93,10 @@ resilience4j:
     instances:
       messageService:
         timeout-duration: 5s
+
+# BondHub Security Configuration
+bondhub:
+  security:
+    gateway-auth:
+      enabled: true
+    public-endpoints: []
