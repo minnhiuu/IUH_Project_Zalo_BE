@@ -76,7 +76,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"testuser@example.com\",\n  \"otp\": \"123456\"\n}"
+              "raw": "{\n  \"email\": \"testuser@example.com\",\n  \"otp\": \"123456\",\n  \"deviceId\": \"web-device-001\",\n  \"deviceType\": \"WEB\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/auth/register/verify",

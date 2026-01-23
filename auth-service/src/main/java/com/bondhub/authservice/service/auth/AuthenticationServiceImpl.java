@@ -291,8 +291,8 @@ public class AuthenticationServiceImpl implements AuthenticationService {
 
         return generateFullTokenResponse(
                 account,
-                "web-device", // Default device ID
-                DeviceType.WEB,
+                request.deviceId(),
+                request.deviceType(),
                 userAgent,
                 ipAddress);
     }
