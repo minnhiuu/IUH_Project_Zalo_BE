@@ -150,7 +150,7 @@ public class AuthenticationServiceImpl implements AuthenticationService {
         try {
             if (securityUtil.isAuthenticated()) {
                 String jti = securityUtil.getCurrentJwtId();
-                String userId = securityUtil.getCurrentUserId();
+                String userId = securityUtil.getCurrentAccountId();
                 String email = securityUtil.getCurrentEmail();
                 long ttl = securityUtil.getRemainingTtlSeconds();
 

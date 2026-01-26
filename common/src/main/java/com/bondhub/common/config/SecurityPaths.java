@@ -21,7 +21,6 @@ public class SecurityPaths {
             "/api/auth/reset-password",
             "/api/auth/refresh",
             "/api/auth/validate",
-            "/api/auth/logout",
 
             // Test endpoints
             "/api/users/test/security/public",

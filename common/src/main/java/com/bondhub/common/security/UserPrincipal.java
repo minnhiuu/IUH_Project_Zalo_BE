@@ -5,6 +5,7 @@ import lombok.Getter;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 
@@ -18,6 +19,8 @@ public class UserPrincipal implements UserDetails {
 
     private final String userId;
     private final String email;
+    private final String jti;
+    private final Long remainingTTL;
     private final Collection<? extends GrantedAuthority> authorities;
 
     @Override

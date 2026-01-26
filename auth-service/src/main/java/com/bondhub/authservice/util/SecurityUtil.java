@@ -2,17 +2,15 @@ package com.bondhub.authservice.util;
 
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
+import com.bondhub.common.security.UserPrincipal;
 import com.bondhub.authservice.model.Account;
 import com.bondhub.authservice.repository.AccountRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.oauth2.jwt.Jwt;
-import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.stereotype.Component;
 
-import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -22,53 +20,38 @@ public class SecurityUtil {
 
     private final AccountRepository accountRepository;
 
-    private static final String CLAIM_USER_ID = "userId";
-    private static final String CLAIM_EMAIL = "email";
-    private static final String CLAIM_ROLES = "roles";
-
-    public Jwt getCurrentJwt() {
+    private UserPrincipal getCurrentUserPrincipal() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
 
         if (authentication == null || !authentication.isAuthenticated()) {
             throw new AppException(ErrorCode.AUTH_UNAUTHENTICATED);
         }
 
-        if (authentication instanceof JwtAuthenticationToken jwtAuth) {
-            return jwtAuth.getToken();
+        Object principal = authentication.getPrincipal();
+        if (principal instanceof UserPrincipal) {
+            return (UserPrincipal) principal;
         }
 
         throw new AppException(ErrorCode.AUTH_UNAUTHENTICATED);
     }
 
     public String getCurrentAccountId() {
-        return getCurrentJwt().getSubject();
+        return getCurrentUserPrincipal().getUserId();
     }
 
     public String getCurrentEmail() {
-
-        Jwt jwt = getCurrentJwt();
-        return jwt.getClaimAsString(CLAIM_EMAIL);
+        return getCurrentUserPrincipal().getEmail();
     }
 
     public String getCurrentJwtId() {
-        Jwt jwt = getCurrentJwt();
-        return jwt.getId();
+        return getCurrentUserPrincipal().getJti();
     }
 
-    @SuppressWarnings("unchecked")
     public List<String> getCurrentRoles() {
-        Jwt jwt = getCurrentJwt();
-        Object roles = jwt.getClaim(CLAIM_ROLES);
-
-        if (roles == null) {
-            return Collections.emptyList();
-        }
-
-        if (roles instanceof List) {
-            return (List<String>) roles;
-        }
-
-        return Collections.emptyList();
+        UserPrincipal userPrincipal = getCurrentUserPrincipal();
+        return userPrincipal.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .collect(Collectors.toList());
     }
 
     public String getCurrentRole() {
@@ -81,24 +64,13 @@ public class SecurityUtil {
     }
 
     public List<String> getCurrentAuthorities() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-
-        if (authentication == null) {
-            return Collections.emptyList();
-        }
-
-        return authentication.getAuthorities().stream()
+        return getCurrentUserPrincipal().getAuthorities().stream()
                 .map(GrantedAuthority::getAuthority)
                 .collect(Collectors.toList());
     }
 
     public long getRemainingTtlSeconds() {
-        Jwt jwt = getCurrentJwt();
-        if (jwt.getExpiresAt() == null) {
-            return 0;
-        }
-        long remainingMs = jwt.getExpiresAt().toEpochMilli() - System.currentTimeMillis();
-        return Math.max(0, remainingMs / 1000);
+        return getCurrentUserPrincipal().getRemainingTTL();
     }
 
     public boolean hasRole(String role) {
@@ -120,8 +92,7 @@ public class SecurityUtil {
     public boolean isAuthenticated() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         return authentication != null
-                && authentication.isAuthenticated()
-                && authentication instanceof JwtAuthenticationToken;
+                && authentication.isAuthenticated();
     }
 
     public Account getCurrentAccount() {
