@@ -7,8 +7,6 @@ import com.bondhub.authservice.dto.auth.request.RefreshRequest;
 import com.bondhub.authservice.dto.auth.request.RegisterInitRequest;
 import com.bondhub.authservice.dto.auth.request.RegisterRequest;
 import com.bondhub.authservice.dto.auth.request.RegisterVerifyRequest;
-import com.bondhub.common.dto.ApiResponse;
-import com.bondhub.common.dto.client.userservice.user.request.UserCreateRequest;
 import com.bondhub.authservice.dto.auth.request.ResetPasswordRequest;
 import com.bondhub.authservice.dto.auth.response.ForgotPasswordResponse;
 import com.bondhub.authservice.dto.auth.response.RegisterInitResponse;
@@ -16,9 +14,9 @@ import com.bondhub.authservice.dto.auth.response.TokenResponse;
 import com.bondhub.authservice.enums.OtpPurpose;
 import com.bondhub.authservice.enums.DeviceType;
 import com.bondhub.authservice.model.Account;
-import com.bondhub.common.event.AccountRegisteredEvent;
-import com.bondhub.common.event.EventType;
-import com.bondhub.common.event.OutboxEventPublisher;
+import com.bondhub.common.event.account.AccountRegisteredEvent;
+import com.bondhub.common.model.kafka.EventType;
+import com.bondhub.common.publisher.OutboxEventPublisher;
 import com.bondhub.authservice.model.redis.PendingRegistration;
 import com.bondhub.authservice.repository.AccountRepository;
 import com.bondhub.authservice.repository.redis.PendingRegistrationRepository;
@@ -26,7 +24,6 @@ import com.bondhub.authservice.service.mail.MailService;
 import com.bondhub.authservice.service.otp.OtpService;
 import com.bondhub.authservice.service.token.TokenStoreService;
 import com.bondhub.authservice.util.SecurityUtil;
-import com.bondhub.common.dto.client.userservice.user.response.UserResponse;
 import com.bondhub.common.enums.Role;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
@@ -222,6 +219,7 @@ public class AuthenticationServiceImpl implements AuthenticationService {
         String otp = otpService.generateAndStoreOtp(request.email(), OtpPurpose.REGISTRATION);
 
         long now = System.currentTimeMillis();
+
         PendingRegistration pendingReg = PendingRegistration.builder()
                 .email(request.email())
                 .passwordHash(passwordEncoder.encode(request.password()))
@@ -230,6 +228,7 @@ public class AuthenticationServiceImpl implements AuthenticationService {
                 .createdAt(now)
                 .ttl(300L)
                 .build();
+
         pendingRegistrationRepository.save(pendingReg);
 
         mailService.sendOtpEmail(request.email(), otp, "Registration Verification");

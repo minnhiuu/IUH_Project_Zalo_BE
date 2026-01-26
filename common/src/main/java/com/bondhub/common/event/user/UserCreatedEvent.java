@@ -1,4 +1,4 @@
-package com.bondhub.common.event;
+package com.bondhub.common.event.user;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -9,10 +9,9 @@ import lombok.NoArgsConstructor;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class AccountRegisteredEvent {
+public class UserCreatedEvent {
+    private String userId;
     private String accountId;
-    private String email;
     private String fullName;
-    private String phoneNumber;
     private Long timestamp;
 }

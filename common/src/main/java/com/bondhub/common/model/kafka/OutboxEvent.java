@@ -1,4 +1,4 @@
-package com.bondhub.common.event;
+package com.bondhub.common.model.kafka;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.*;
@@ -52,6 +52,7 @@ public class OutboxEvent {
         PROCESSING,
         PUBLISHED,
         CONSUMED,  // Consumer has successfully processed the event
-        FAILED
+        FAILED,
+        DEAD
     }
 }

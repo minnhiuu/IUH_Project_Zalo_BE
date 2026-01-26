@@ -25,6 +25,7 @@ public class SecurityPaths {
 
             // Test endpoints
             "/api/users/test/security/public",
+            "/api/users/qr-info",
 
             // Swagger UI and API documentation
             "/swagger-ui",

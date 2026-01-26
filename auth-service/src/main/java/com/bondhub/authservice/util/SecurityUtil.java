@@ -40,11 +40,12 @@ public class SecurityUtil {
         throw new AppException(ErrorCode.AUTH_UNAUTHENTICATED);
     }
 
-    public String getCurrentUserId() {
+    public String getCurrentAccountId() {
         return getCurrentJwt().getSubject();
     }
 
     public String getCurrentEmail() {
+
         Jwt jwt = getCurrentJwt();
         return jwt.getClaimAsString(CLAIM_EMAIL);
     }
@@ -124,7 +125,7 @@ public class SecurityUtil {
     }
 
     public Account getCurrentAccount() {
-        String userId = getCurrentUserId();
+        String userId = getCurrentAccountId();
         return accountRepository.findById(userId)
                 .orElseThrow(() -> new AppException(ErrorCode.ACC_ACCOUNT_NOT_FOUND));
     }

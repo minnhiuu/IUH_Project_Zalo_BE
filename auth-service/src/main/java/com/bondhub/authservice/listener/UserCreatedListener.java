@@ -1,9 +1,10 @@
 package com.bondhub.authservice.listener;
 
 import com.bondhub.common.config.kafka.KafkaTopicProperties;
-import com.bondhub.common.event.OutboxEvent;
-import com.bondhub.common.event.OutboxEventRepository;
-import com.bondhub.common.event.UserCreatedEvent;
+import com.bondhub.common.model.kafka.EventType;
+import com.bondhub.common.model.kafka.OutboxEvent;
+import com.bondhub.common.repository.OutboxEventRepository;
+import com.bondhub.common.event.user.UserCreatedEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -43,7 +44,7 @@ public class UserCreatedListener {
             Optional<OutboxEvent> outboxEventOpt = outboxEventRepository
                     .findTopByAggregateIdAndEventTypeOrderByCreatedAtDesc(
                             event.getAccountId(), 
-                            com.bondhub.common.event.EventType.ACCOUNT_REGISTERED
+                            EventType.ACCOUNT_REGISTERED
                     );
 
             if (outboxEventOpt.isPresent()) {

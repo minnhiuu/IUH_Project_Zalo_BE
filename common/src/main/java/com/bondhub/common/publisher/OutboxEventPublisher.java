@@ -1,6 +1,11 @@
-package com.bondhub.common.event;
+package com.bondhub.common.publisher;
 
 import com.bondhub.common.config.kafka.KafkaTopicProperties;
+import com.bondhub.common.event.account.AccountRegisteredEvent;
+import com.bondhub.common.model.kafka.EventType;
+import com.bondhub.common.model.kafka.OutboxEvent;
+import com.bondhub.common.repository.OutboxEventRepository;
+import com.bondhub.common.event.user.UserCreatedEvent;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

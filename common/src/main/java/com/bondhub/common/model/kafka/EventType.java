@@ -1,4 +1,4 @@
-package com.bondhub.common.event;
+package com.bondhub.common.model.kafka;
 
 public enum EventType {
     // Account Events (auth-service)
