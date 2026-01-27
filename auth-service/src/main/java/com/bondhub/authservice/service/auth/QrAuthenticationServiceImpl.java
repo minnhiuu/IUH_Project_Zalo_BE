@@ -1,5 +1,6 @@
 package com.bondhub.authservice.service.auth;
 
+import com.bondhub.authservice.config.QrProperties;
 import com.bondhub.authservice.dto.auth.request.QrMobileRequest;
 import com.bondhub.authservice.dto.auth.response.QrGenerationResponse;
 import com.bondhub.authservice.dto.auth.response.QrStatusResponse;
@@ -17,9 +18,7 @@ import com.bondhub.common.utils.JwtUtil;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
-import lombok.experimental.NonFinal;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -31,29 +30,25 @@ import java.util.UUID;
 @Slf4j
 public class QrAuthenticationServiceImpl implements QrAuthenticationService {
 
-    QrSessionRepository qrSessionRepository;
-    AccountRepository accountRepository;
+    QrProperties qrProperties;
     SecurityUtil securityUtil;
     JwtUtil jwtUtil;
+
     TokenStoreService tokenStoreService;
+    QrWaitService qrWaitService;
 
-    @Value("${qr.expiration-seconds:30}")
-    @NonFinal
-    long qrTtl;
-
-    @Value("${qr.content-prefix:bondhub://qr/}")
-    @NonFinal
-    String qrContentPrefix;
+    QrSessionRepository qrSessionRepository;
+    AccountRepository accountRepository;
 
     @Override
     public QrGenerationResponse generateQr(String deviceId, String userAgent, String ipAddress) {
         String qrId = UUID.randomUUID().toString();
-        LocalDateTime expiresAt = LocalDateTime.now().plusSeconds(qrTtl);
+        LocalDateTime expiresAt = LocalDateTime.now().plusSeconds(qrProperties.getExpirationSeconds());
 
         QrSession session = QrSession.builder()
                 .id(qrId)
                 .status(QrSessionStatus.PENDING)
-                .ttl(qrTtl)
+                .ttl(qrProperties.getExpirationSeconds())
                 .deviceId(deviceId)
                 .userAgent(userAgent)
                 .ipAddress(ipAddress)
@@ -65,20 +60,7 @@ public class QrAuthenticationServiceImpl implements QrAuthenticationService {
         return QrGenerationResponse.builder()
                 .qrId(qrId)
                 .expiresAt(expiresAt)
-                .qrContent(qrContentPrefix + qrId)
-                .build();
-    }
-
-    @Override
-    public QrStatusResponse checkStatus(String qrId) {
-        QrSession session = qrSessionRepository.findById(qrId)
-                .orElseThrow(() -> new AppException(ErrorCode.QR_SESSION_EXPIRED));
-        return QrStatusResponse.builder()
-                .status(session.getStatus())
-                .accessToken(session.getWebAccessToken())
-                .refreshToken(session.getWebRefreshToken())
-                .userAvatar(session.getUserAvatar())
-                .userFullName(session.getUserFullName())
+                .qrContent(qrProperties.getContentPrefix() + qrId)
                 .build();
     }
 
@@ -103,6 +85,7 @@ public class QrAuthenticationServiceImpl implements QrAuthenticationService {
         session.setUserFullName(account.getEmail());
 
         qrSessionRepository.save(session);
+        qrWaitService.notifyUpdateQrStatus(qrId, session);
         log.info("QR session {} scanned by user {}", qrId, currentAccountId);
     }
 
@@ -156,6 +139,7 @@ public class QrAuthenticationServiceImpl implements QrAuthenticationService {
         session.setWebRefreshToken(refreshToken);
 
         qrSessionRepository.save(session);
+        qrWaitService.notifyUpdateQrStatus(qrId, session);
         log.info("QR session {} confirmed by user {}", qrId, currentAccountId);
     }
 
@@ -176,6 +160,7 @@ public class QrAuthenticationServiceImpl implements QrAuthenticationService {
 
         session.setStatus(QrSessionStatus.REJECTED);
         qrSessionRepository.save(session);
+        qrWaitService.notifyUpdateQrStatus(qrId, session);
         log.info("QR session {} rejected by user {}", qrId, currentAccountId);
     }
 
@@ -184,8 +169,8 @@ public class QrAuthenticationServiceImpl implements QrAuthenticationService {
             throw new AppException(ErrorCode.QR_SESSION_INVALID_STATE);
         }
         
-        if (qrContent.startsWith(qrContentPrefix)) {
-            String extractedId = qrContent.substring(qrContentPrefix.length());
+        if (qrContent.startsWith(qrProperties.getContentPrefix())) {
+            String extractedId = qrContent.substring(qrProperties.getContentPrefix().length());
             if (extractedId.isBlank()) {
                 throw new AppException(ErrorCode.QR_SESSION_INVALID_STATE);
             }

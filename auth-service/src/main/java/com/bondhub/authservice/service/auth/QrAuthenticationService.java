@@ -8,8 +8,6 @@ public interface QrAuthenticationService {
 
     QrGenerationResponse generateQr(String deviceId, String userAgent, String ipAddress);
 
-    QrStatusResponse checkStatus(String qrId);
-
     void scanQr(QrMobileRequest request);
 
     void acceptQr(QrMobileRequest request);

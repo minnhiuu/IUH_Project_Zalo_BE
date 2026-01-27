@@ -156,3 +156,4 @@ otp:
 qr:
   expiration-seconds: ${QR_EXPIRATION_SECONDS}
   content-prefix: ${QR_CONTENT_PREFIX}
+  wait-timeout-ms: ${QR_WAIT_TIMEOUT_MS}
