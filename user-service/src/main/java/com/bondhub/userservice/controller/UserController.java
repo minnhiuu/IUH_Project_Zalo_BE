@@ -32,11 +32,6 @@ public class UserController {
         return ApiResponse.success(userService.getUserByAccountId(accountId));
     }
 
-    @GetMapping("/account/{accountId}/summary")
-    public ApiResponse<UserSummaryResponse> getUserSummaryByAccountId(@PathVariable String accountId) {
-        return ApiResponse.success(userService.getUserSummaryByAccountId(accountId));
-    }
-
     @GetMapping
     public ApiResponse<List<UserResponse>> getAllUsers() {
         return ApiResponse.success(userService.getAllUsers());

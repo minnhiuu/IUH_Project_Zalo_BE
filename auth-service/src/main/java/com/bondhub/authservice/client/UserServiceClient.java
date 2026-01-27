@@ -28,9 +28,6 @@ public interface UserServiceClient {
     @PostMapping("/users")
     ApiResponse<UserResponse> createUser(@RequestBody UserCreateRequest request);
 
-    @GetMapping("/users/account/{accountId}")
-    ApiResponse<UserResponse> getUserByAccountId(@PathVariable("accountId") String accountId);
-
-    @GetMapping("/users/account/{accountId}/summary")
-    ApiResponse<UserSummaryResponse> getUserSummaryByAccountId(@PathVariable("accountId") String accountId);
+    @GetMapping("/internal/users/account/{accountId}/summary")
+    ApiResponse<UserSummaryResponse> getUserSummaryByAccountId(@PathVariable String accountId);
 }

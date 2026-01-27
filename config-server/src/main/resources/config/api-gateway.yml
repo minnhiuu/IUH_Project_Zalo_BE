@@ -16,6 +16,17 @@ spring:
               lower-case-service-id: true
           routes:
             # Auth Service Routes (Public - no JWT required)
+            - id: auth-service-qr-wait
+              uri: lb://auth-service
+              predicates:
+                - Path=/api/auth/qr/wait/**
+              filters:
+                - RewritePath=/api/auth/(?<segment>.*), /auth/${segment}
+                - name: CircuitBreaker
+                  args:
+                    name: qrWaitServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/auth-service
+
             - id: auth-service
               uri: lb://auth-service
               predicates:
@@ -136,6 +147,8 @@ resilience4j:
         base-config: default
       authServiceCircuitBreaker:
         base-config: default
+      qrWaitServiceCircuitBreaker:
+        base-config: default
       messageServiceCircuitBreaker:
         base-config: default
       notificationServiceCircuitBreaker:
@@ -150,6 +163,8 @@ resilience4j:
         base-config: default
       authServiceCircuitBreaker:
         base-config: default
+      qrWaitServiceCircuitBreaker:
+        timeout-duration: ${QR_WAIT_TIMEOUT_MS:30000}ms
       messageServiceCircuitBreaker:
         base-config: default
       notificationServiceCircuitBreaker:

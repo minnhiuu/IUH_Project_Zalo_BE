@@ -1,10 +1,13 @@
 package com.bondhub.authservice.service.auth;
 
+import com.bondhub.authservice.client.UserServiceClient;
 import com.bondhub.authservice.config.QrProperties;
 import com.bondhub.authservice.dto.auth.response.QrStatusResponse;
 import com.bondhub.authservice.enums.QrSessionStatus;
 import com.bondhub.authservice.model.redis.QrSession;
+import com.bondhub.authservice.repository.AccountRepository;
 import com.bondhub.authservice.repository.redis.QrSessionRepository;
+import com.bondhub.authservice.util.SecurityUtil;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
 import lombok.AccessLevel;
@@ -42,7 +45,9 @@ public class QrWaitServiceImpl implements QrWaitService{
 
         deferredResult.onTimeout(() -> {
             qrStatusMap.remove(qrId);
-            deferredResult.setResult(mapToResponse(qrSession));
+            if (!deferredResult.isSetOrExpired()) {
+                deferredResult.setResult(mapToResponse(qrSession));
+            }
         });
 
         deferredResult.onCompletion(() -> {

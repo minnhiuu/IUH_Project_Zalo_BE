@@ -4,7 +4,6 @@ import com.bondhub.authservice.client.UserServiceClient;
 import com.bondhub.authservice.config.QrProperties;
 import com.bondhub.authservice.dto.auth.request.QrMobileRequest;
 import com.bondhub.authservice.dto.auth.response.QrGenerationResponse;
-import com.bondhub.authservice.dto.auth.response.QrStatusResponse;
 import com.bondhub.authservice.enums.DeviceType;
 import com.bondhub.authservice.enums.QrSessionStatus;
 import com.bondhub.authservice.model.Account;
@@ -80,14 +79,18 @@ public class QrAuthenticationServiceImpl implements QrAuthenticationService {
         }
 
         try {
-            ApiResponse<UserSummaryResponse> userResponse = userServiceClient.getUserSummaryByAccountId(currentAccountId);
-            if (userResponse != null && userResponse.data() != null) {
-                UserSummaryResponse user = userResponse.data();
-                session.setUserAvatar(user.getAvatar());
-                session.setUserFullName(user.getFullName());
+            ApiResponse<UserSummaryResponse> response = userServiceClient.getUserSummaryByAccountId(currentAccountId);
+
+            if (response != null && response.data() != null) {
+                UserSummaryResponse userSummary = response.data();
+                session.setUserAvatar(userSummary.getAvatar());
+                session.setUserFullName(userSummary.getFullName());
             }
         } catch (Exception e) {
-            log.warn("Failed to fetch user summary for accountId: {}. error: {}", currentAccountId, e.getMessage());
+            log.error("Error fetching user summary for account: {}", currentAccountId, e);
+            Account account = accountRepository.findById(currentAccountId).orElseThrow();
+            session.setUserFullName(account.getEmail());
+            session.setUserAvatar("https://ui-avatars.com/api/?name=" + account.getEmail());
         }
 
         session.setStatus(QrSessionStatus.SCANNED);
@@ -173,7 +176,8 @@ public class QrAuthenticationServiceImpl implements QrAuthenticationService {
         log.info("QR session {} rejected by user {}", qrId, currentAccountId);
     }
 
-    private String extractQrId(String qrContent) {
+    @Override
+    public String extractQrId(String qrContent) {
         if (qrContent == null || qrContent.isBlank()) {
             throw new AppException(ErrorCode.QR_SESSION_INVALID_STATE);
         }

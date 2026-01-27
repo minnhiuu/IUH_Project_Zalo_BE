@@ -8,12 +8,15 @@ import com.bondhub.authservice.enums.QrSessionStatus;
 import com.bondhub.authservice.service.auth.QrAuthenticationService;
 import com.bondhub.authservice.service.auth.QrWaitService;
 import com.bondhub.common.dto.ApiResponse;
+import com.bondhub.common.exception.AppException;
+import com.bondhub.common.exception.ErrorCode;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.context.request.async.DeferredResult;
@@ -43,15 +46,42 @@ public class QrAuthController {
     public DeferredResult<ApiResponse<QrStatusResponse>> waitQrStatus(
             @PathVariable String qrId,
             @RequestParam QrSessionStatus expectedStatus) {
-        DeferredResult<QrStatusResponse> deferred =
-                qrWaitService.waitForUpdateQrStatus(qrId, expectedStatus);
 
-        DeferredResult<ApiResponse<QrStatusResponse>> wrapper =
-                new DeferredResult<>(qrProperties.getWaitTimeoutMs());
+        String extractedQrId = qrAuthenticationService.extractQrId(qrId);
 
-        deferred.setResultHandler(result ->
+        DeferredResult<QrStatusResponse> serviceDeferred =
+                qrWaitService.waitForUpdateQrStatus(extractedQrId, expectedStatus);
+
+        long controllerTimeout = qrProperties.getWaitTimeoutMs() + 2000L;
+        DeferredResult<ApiResponse<QrStatusResponse>> wrapper = new DeferredResult<>(controllerTimeout);
+
+        serviceDeferred.setResultHandler(result ->
                 wrapper.setResult(ApiResponse.success((QrStatusResponse) result))
         );
+
+        serviceDeferred.onError(throwable -> {
+            log.error("QR wait error for qrId: {}", extractedQrId, throwable);
+            if (throwable instanceof AppException appException) {
+                ErrorCode errorCode = appException.getErrorCode();
+                wrapper.setErrorResult(
+                        ResponseEntity.status(errorCode.getHttpStatus())
+                                .body(ApiResponse.error(errorCode.getCode(), errorCode.getMessageKey(), null))
+                );
+            } else {
+                wrapper.setErrorResult(
+                        ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                                .body(ApiResponse.error(500, "Internal Server Error", null))
+                );
+            }
+        });
+
+        wrapper.onTimeout(() -> {
+            log.warn("QR wait timeout for qrId: {}", extractedQrId);
+            wrapper.setErrorResult(
+                    ResponseEntity.status(HttpStatus.REQUEST_TIMEOUT)
+                            .body(ApiResponse.error(408, "Request Timeout", null))
+            );
+        });
 
         return wrapper;
     }

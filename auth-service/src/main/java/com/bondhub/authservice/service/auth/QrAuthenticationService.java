@@ -13,4 +13,6 @@ public interface QrAuthenticationService {
     void acceptQr(QrMobileRequest request);
 
     void rejectQr(QrMobileRequest request);
+
+    String extractQrId(String qrContent);
 }

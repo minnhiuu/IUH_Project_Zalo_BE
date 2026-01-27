@@ -22,7 +22,10 @@ public class SecurityPaths {
             "/api/auth/refresh",
             "/api/auth/validate",
             "/api/auth/qr/generate",
-            "/api/auth/qr/check",
+            "/api/auth/qr/wait/**",
+
+            // Internal service-to-service endpoints
+            "/api/users/internal/**",
 
             // Test endpoints
             "/api/users/test/security/public",
@@ -58,7 +61,7 @@ public class SecurityPaths {
             "/auth/validate",
             "/auth/logout",
             "/auth/qr/generate",
-            "/auth/qr/check",
+            "/auth/qr/wait/**",
 
             // Test endpoints (gateway strips /api/users -> /users)
             "/users/test/security/public",
@@ -88,14 +91,16 @@ public class SecurityPaths {
      * Check if a path is public at gateway level (doesn't require authentication)
      */
     public static boolean isPublicPath(String path) {
-        return PUBLIC_PATHS.stream().anyMatch(path::contains);
+        return PUBLIC_PATHS.stream()
+                .anyMatch(pattern -> matchesPattern(path, pattern));
     }
 
     /**
      * Check if a path is public at service level (after gateway rewrite)
      */
     public static boolean isServicePublicPath(String path) {
-        return SERVICE_PUBLIC_PATHS.stream().anyMatch(path::contains);
+        return SERVICE_PUBLIC_PATHS.stream()
+                .anyMatch(pattern -> matchesPattern(path, pattern));
     }
 
     /**

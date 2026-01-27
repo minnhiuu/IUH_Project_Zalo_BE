@@ -75,7 +75,6 @@ public class UserServiceImpl implements UserService {
 
         UserResponse userResponse = userMapper.toUserResponse(user);
 
-        // Fetch account information from auth service
         try {
             ApiResponse<AccountResponse> accountApiResponse = authServiceClient.getAccountById(accountId);
             if (accountApiResponse != null && accountApiResponse.data() != null) {
