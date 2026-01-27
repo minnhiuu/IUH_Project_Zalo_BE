@@ -1,6 +1,7 @@
 package com.bondhub.userservice.controller;
 
 import com.bondhub.common.dto.ApiResponse;
+import com.bondhub.common.dto.client.userservice.user.response.UserSummaryResponse;
 import com.bondhub.userservice.dto.request.UserCreateRequest;
 import com.bondhub.userservice.dto.request.UserUpdateRequest;
 import com.bondhub.userservice.dto.response.UserResponse;
@@ -26,6 +27,16 @@ public class UserController {
         return ApiResponse.success(userService.getUserById(id));
     }
 
+    @GetMapping("/account/{accountId}")
+    public ApiResponse<UserResponse> getUserByAccountId(@PathVariable String accountId) {
+        return ApiResponse.success(userService.getUserByAccountId(accountId));
+    }
+
+    @GetMapping("/account/{accountId}/summary")
+    public ApiResponse<UserSummaryResponse> getUserSummaryByAccountId(@PathVariable String accountId) {
+        return ApiResponse.success(userService.getUserSummaryByAccountId(accountId));
+    }
+
     @GetMapping
     public ApiResponse<List<UserResponse>> getAllUsers() {
         return ApiResponse.success(userService.getAllUsers());
@@ -46,4 +57,5 @@ public class UserController {
         userService.deleteUser(id);
         return ApiResponse.successWithoutData();
     }
+
 }

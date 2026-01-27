@@ -1,5 +1,6 @@
 package com.bondhub.authservice.service.auth;
 
+import com.bondhub.authservice.client.UserServiceClient;
 import com.bondhub.authservice.config.QrProperties;
 import com.bondhub.authservice.dto.auth.request.QrMobileRequest;
 import com.bondhub.authservice.dto.auth.response.QrGenerationResponse;
@@ -12,6 +13,8 @@ import com.bondhub.authservice.repository.AccountRepository;
 import com.bondhub.authservice.repository.redis.QrSessionRepository;
 import com.bondhub.authservice.service.token.TokenStoreService;
 import com.bondhub.authservice.util.SecurityUtil;
+import com.bondhub.common.dto.ApiResponse;
+import com.bondhub.common.dto.client.userservice.user.response.UserSummaryResponse;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
 import com.bondhub.common.utils.JwtUtil;
@@ -36,6 +39,7 @@ public class QrAuthenticationServiceImpl implements QrAuthenticationService {
 
     TokenStoreService tokenStoreService;
     QrWaitService qrWaitService;
+    UserServiceClient userServiceClient;
 
     QrSessionRepository qrSessionRepository;
     AccountRepository accountRepository;
@@ -75,14 +79,19 @@ public class QrAuthenticationServiceImpl implements QrAuthenticationService {
             throw new AppException(ErrorCode.QR_SESSION_INVALID_STATE);
         }
 
-        Account account = accountRepository.findById(currentAccountId)
-                .orElseThrow(() -> new AppException(ErrorCode.ACC_ACCOUNT_NOT_FOUND));
+        try {
+            ApiResponse<UserSummaryResponse> userResponse = userServiceClient.getUserSummaryByAccountId(currentAccountId);
+            if (userResponse != null && userResponse.data() != null) {
+                UserSummaryResponse user = userResponse.data();
+                session.setUserAvatar(user.getAvatar());
+                session.setUserFullName(user.getFullName());
+            }
+        } catch (Exception e) {
+            log.warn("Failed to fetch user summary for accountId: {}. error: {}", currentAccountId, e.getMessage());
+        }
 
         session.setStatus(QrSessionStatus.SCANNED);
         session.setAccountId(currentAccountId);
-        // tnhxinhdep: TODO: Map to User Service to get profile
-        session.setUserAvatar("https://ui-avatars.com/api/?name=" + account.getEmail());
-        session.setUserFullName(account.getEmail());
 
         qrSessionRepository.save(session);
         qrWaitService.notifyUpdateQrStatus(qrId, session);
