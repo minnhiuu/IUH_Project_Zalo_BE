@@ -25,4 +25,6 @@ public class BaseModel {
 
     @LastModifiedBy
     String lastModifiedBy;
+
+    boolean active;
 }

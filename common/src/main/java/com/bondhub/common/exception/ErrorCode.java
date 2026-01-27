@@ -50,7 +50,10 @@ public enum ErrorCode {
         INVALID_YEAR_ATTRIBUTE_PAIR(HttpStatus.BAD_REQUEST, 2204, "error.invalid.year.attribute.pair"),
         INVALID_OPERATION(HttpStatus.BAD_REQUEST, 2205, "error.invalid.operation"),
         INVALID_PROMOTION_CONDITION(HttpStatus.BAD_REQUEST, 2206, "error.invalid.promotion.condition"),
-        ACC_PASSWORD_MISMATCH(HttpStatus.BAD_REQUEST, 2207, "error.acc.password.mismatch")
+        ACC_PASSWORD_MISMATCH(HttpStatus.BAD_REQUEST, 2207, "error.acc.password.mismatch"),
+        QR_SESSION_EXPIRED(HttpStatus.BAD_REQUEST, 1010, "error.qr.session.expired"),
+        QR_SESSION_INVALID_STATE(HttpStatus.CONFLICT, 1011, "error.qr.session.invalid.state"),
+        QR_SESSION_UNAUTHORIZED(HttpStatus.FORBIDDEN, 1012, "error.qr.session.unauthorized")
 
         ;
 

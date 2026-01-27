@@ -3,9 +3,11 @@ package com.bondhub.authservice.client;
 import com.bondhub.common.dto.client.userservice.user.request.UserCreateRequest;
 import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.common.dto.client.userservice.user.response.UserResponse;
+import com.bondhub.common.dto.client.userservice.user.response.UserSummaryResponse;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 
@@ -25,4 +27,10 @@ public interface UserServiceClient {
 
     @PostMapping("/users")
     ApiResponse<UserResponse> createUser(@RequestBody UserCreateRequest request);
+
+    @GetMapping("/users/account/{accountId}")
+    ApiResponse<UserResponse> getUserByAccountId(@PathVariable("accountId") String accountId);
+
+    @GetMapping("/users/account/{accountId}/summary")
+    ApiResponse<UserSummaryResponse> getUserSummaryByAccountId(@PathVariable("accountId") String accountId);
 }

@@ -21,10 +21,12 @@ public class SecurityPaths {
             "/api/auth/reset-password",
             "/api/auth/refresh",
             "/api/auth/validate",
-            "/api/auth/logout",
+            "/api/auth/qr/generate",
+            "/api/auth/qr/check",
 
             // Test endpoints
             "/api/users/test/security/public",
+            "/api/users/qr-info",
 
             // Swagger UI and API documentation
             "/swagger-ui",
@@ -55,6 +57,8 @@ public class SecurityPaths {
             "/auth/refresh",
             "/auth/validate",
             "/auth/logout",
+            "/auth/qr/generate",
+            "/auth/qr/check",
 
             // Test endpoints (gateway strips /api/users -> /users)
             "/users/test/security/public",

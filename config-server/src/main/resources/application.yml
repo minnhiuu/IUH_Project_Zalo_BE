@@ -16,6 +16,9 @@ spring:
         # Override configuration on the server side
         override-none: false
         override-system-properties: false
+  # Disable Kafka for infrastructure service
+  kafka:
+    enabled: false
 
 # Eureka Client Configuration (if using service discovery)
 eureka:

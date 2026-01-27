@@ -42,7 +42,7 @@ services:
       timeout: 5s
       retries: 5
 
-  # Kafka Message Broker (KRaft mode - no Zookeeper needed)
+  # Kafka Message Broker (KRaft mode )
   kafka:
     image: confluentinc/cp-kafka:7.6.0
     container_name: bondhub-kafka
@@ -80,6 +80,23 @@ services:
       timeout: 10s
       retries: 5
       start_period: 30s
+
+  # Kafka UI for Monitoring and Management
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: bondhub-kafka-ui
+    restart: unless-stopped
+    environment:
+      KAFKA_CLUSTERS_0_NAME: bondhub-cluster
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+      DYNAMIC_CONFIG_ENABLED: "true"
+    ports:
+      - "${KAFKA_UI_PORT:-8090}:8080"
+    networks:
+      - bondhub-network
+    depends_on:
+      kafka:
+        condition: service_healthy
 
 volumes:
   postgres_data:

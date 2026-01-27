@@ -15,6 +15,26 @@ spring:
       auto-index-creation: true
       uuid-representation: standard
 
+  # Kafka Configuration for Notification Service
+  kafka:
+    # Producer configuration for notification status events
+    producer:
+      client-id: notification-service-producer
+      retries: 3
+
+    # Consumer configuration for incoming notification requests
+    consumer:
+      group-id: notification-service-group
+      client-id: notification-service-consumer
+      max-poll-records: 50
+      properties:
+        max.poll.interval.ms: 600000 # 10 minutes for processing notifications
+
+    # Listener configuration
+    listener:
+      concurrency: 2
+      ack-mode: manual
+
 # Eureka Client Configuration
 eureka:
   client:
