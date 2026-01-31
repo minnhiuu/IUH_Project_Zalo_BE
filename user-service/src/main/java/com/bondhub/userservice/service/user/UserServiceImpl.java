@@ -4,13 +4,15 @@ import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.common.dto.client.userservice.user.response.UserSummaryResponse;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
-import com.bondhub.common.utils.ServiceSecurityUtils;
+import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.userservice.client.AuthServiceClient;
 import com.bondhub.userservice.dto.request.UserCreateRequest;
 import com.bondhub.userservice.dto.request.UserUpdateRequest;
 import com.bondhub.userservice.dto.response.AccountResponse;
 import com.bondhub.userservice.dto.response.UserResponse;
+import com.bondhub.userservice.dto.response.UserProfileResponse;
 import com.bondhub.userservice.mapper.UserMapper;
+import com.bondhub.userservice.mapper.UserProfileMapper;
 import com.bondhub.userservice.model.User;
 import com.bondhub.userservice.repository.UserRepository;
 import lombok.AccessLevel;
@@ -30,6 +32,8 @@ public class UserServiceImpl implements UserService {
     UserRepository userRepository;
     UserMapper userMapper;
     AuthServiceClient authServiceClient;
+    SecurityUtil securityUtil;
+    UserProfileMapper userProfileMapper;
 
     @Override
     public UserResponse createUser(UserCreateRequest request) {
@@ -65,27 +69,26 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
-    public UserResponse getMyUserWithAccountInfo() {
+    public UserProfileResponse getMyUserWithAccountInfo() {
+        String accountId = securityUtil.getCurrentAccountId();
+        log.info("Fetching detailed profile for account id: {}", accountId);
 
-        String accountId = ServiceSecurityUtils.getCurrentAccountId();
-
-        log.info("Fetching user with account id: {}", accountId);
         User user = userRepository.findByAccountId(accountId)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
 
-        UserResponse userResponse = userMapper.toUserResponse(user);
-
+        AccountResponse accountResponse = null;
         try {
             ApiResponse<AccountResponse> accountApiResponse = authServiceClient.getAccountById(accountId);
             if (accountApiResponse != null && accountApiResponse.data() != null) {
-                userResponse.setAccountInfo(accountApiResponse.data());
-                log.info("Account info fetched successfully for accountId: {}", accountId);
+                accountResponse = accountApiResponse.data();
+                log.info("Account info fetched successfully for profile: {}", accountId);
             }
         } catch (Exception e) {
-            log.warn("Failed to fetch account info for accountId: {}. Continuing without it.", accountId, e);
+            log.warn("Failed to fetch account info for profile: {}. Resulting profile will have missing contact info.",
+                    accountId, e);
         }
 
-        return userResponse;
+        return userProfileMapper.toUserProfileResponse(user, accountResponse);
     }
 
     @Override

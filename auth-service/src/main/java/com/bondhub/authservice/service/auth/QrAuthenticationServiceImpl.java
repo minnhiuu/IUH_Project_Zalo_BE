@@ -11,7 +11,7 @@ import com.bondhub.authservice.model.redis.QrSession;
 import com.bondhub.authservice.repository.AccountRepository;
 import com.bondhub.authservice.repository.redis.QrSessionRepository;
 import com.bondhub.authservice.service.token.TokenStoreService;
-import com.bondhub.authservice.util.SecurityUtil;
+import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.common.dto.client.userservice.user.response.UserSummaryResponse;
 import com.bondhub.common.exception.AppException;

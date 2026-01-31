@@ -2,7 +2,7 @@ package com.bondhub.authservice.service.auth;
 
 import com.bondhub.common.utils.JwtUtil;
 import com.bondhub.authservice.service.token.TokenStoreService;
-import com.bondhub.authservice.util.SecurityUtil;
+import com.bondhub.common.utils.SecurityUtil;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;

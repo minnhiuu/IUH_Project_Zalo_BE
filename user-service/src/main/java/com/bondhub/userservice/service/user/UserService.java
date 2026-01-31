@@ -3,6 +3,7 @@ package com.bondhub.userservice.service.user;
 import com.bondhub.common.dto.client.userservice.user.response.UserSummaryResponse;
 import com.bondhub.userservice.dto.request.UserCreateRequest;
 import com.bondhub.userservice.dto.request.UserUpdateRequest;
+import com.bondhub.userservice.dto.response.UserProfileResponse;
 import com.bondhub.userservice.dto.response.UserResponse;
 
 import java.util.List;
@@ -16,7 +17,7 @@ public interface UserService {
 
     UserSummaryResponse getUserSummaryByAccountId(String accountId);
 
-    UserResponse getMyUserWithAccountInfo();
+    UserProfileResponse getMyUserWithAccountInfo();
 
     List<UserResponse> getAllUsers();
 

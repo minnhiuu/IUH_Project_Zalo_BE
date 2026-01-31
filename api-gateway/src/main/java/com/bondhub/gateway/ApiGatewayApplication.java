@@ -7,7 +7,7 @@ import org.springframework.context.annotation.ComponentScan;
 import org.springframework.data.mongodb.repository.config.EnableMongoRepositories;
 
 @SpringBootApplication
-@ComponentScan(basePackages = { "com.bondhub.gateway", "com.bondhub.common"})
+@ComponentScan(basePackages = { "com.bondhub.gateway", "com.bondhub.common" })
 @EnableMongoRepositories(basePackages = "com.bondhub.common.repository")
 public class ApiGatewayApplication {
 
