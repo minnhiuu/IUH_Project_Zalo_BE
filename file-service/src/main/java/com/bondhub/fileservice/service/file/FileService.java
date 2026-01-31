@@ -1,6 +1,6 @@
 package com.bondhub.fileservice.service.file;
 
-import com.bondhub.fileservice.dto.response.file.FileUploadResponse;
+import com.bondhub.common.dto.client.fileservice.FileUploadResponse;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;

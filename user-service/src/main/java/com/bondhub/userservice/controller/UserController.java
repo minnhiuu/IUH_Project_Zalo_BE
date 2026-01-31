@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -40,15 +41,27 @@ public class UserController {
         return ResponseEntity.ok(ApiResponse.success(userService.getAllUsers()));
     }
 
-    @PutMapping("/{id}")
-    public ResponseEntity<ApiResponse<UserProfileResponse>> updateUser(@PathVariable String id,
-                                                                @RequestBody UserUpdateRequest request) {
-        return ResponseEntity.ok(ApiResponse.success(userService.updateUser(id, request)));
+    @PutMapping("/me")
+    public ResponseEntity<ApiResponse<UserProfileResponse>> updateUser(
+            @RequestBody UserUpdateRequest request) {
+        return ResponseEntity.ok(ApiResponse.success(userService.updateUser(request)));
     }
 
     @GetMapping("/me")
     public ResponseEntity<ApiResponse<UserProfileResponse>> getMyProfile() {
         return ResponseEntity.ok(ApiResponse.success(userService.getMyUserWithAccountInfo()));
+    }
+
+    @PatchMapping("/profile/avatar")
+    public ResponseEntity<ApiResponse<String>> updateAvatar(
+            @RequestParam("file") MultipartFile file) {
+        return ResponseEntity.ok(ApiResponse.success(userService.updateAvatar(file)));
+    }
+
+    @PatchMapping("/profile/background")
+    public ResponseEntity<ApiResponse<String>> updateBackground(
+            @RequestParam("file") MultipartFile file) {
+        return ResponseEntity.ok(ApiResponse.success(userService.updateBackground(file)));
     }
 
     @DeleteMapping("/{id}")

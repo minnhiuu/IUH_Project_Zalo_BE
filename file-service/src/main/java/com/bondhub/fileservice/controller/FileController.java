@@ -1,7 +1,7 @@
 package com.bondhub.fileservice.controller;
 
 import com.bondhub.common.dto.ApiResponse;
-import com.bondhub.fileservice.dto.response.file.FileUploadResponse;
+import com.bondhub.common.dto.client.fileservice.FileUploadResponse;
 import com.bondhub.fileservice.service.file.FileService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
@@ -19,7 +19,8 @@ public class FileController {
     private final FileService fileService;
 
     @PostMapping("/upload")
-    public ResponseEntity<ApiResponse<FileUploadResponse>> upload(@RequestParam("file") MultipartFile file) throws IOException {
+    public ResponseEntity<ApiResponse<FileUploadResponse>> upload(
+            @RequestParam("file") MultipartFile file) throws IOException {
         FileUploadResponse fileUploadResponse = fileService.uploadFile(file);
         return ResponseEntity.ok(ApiResponse.success(fileUploadResponse));
     }
