@@ -1,6 +1,7 @@
 package com.bondhub.userservice.service.user;
 
 import com.bondhub.common.dto.ApiResponse;
+import com.bondhub.common.dto.client.userservice.user.response.UserSummaryResponse;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
 import com.bondhub.common.utils.ServiceSecurityUtils;
@@ -19,7 +20,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -49,6 +49,22 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
+    public UserResponse getUserByAccountId(String accountId) {
+        log.info("Fetching user with accountId: {}", accountId);
+        User user = userRepository.findByAccountId(accountId)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+        return userMapper.toUserResponse(user);
+    }
+
+    @Override
+    public UserSummaryResponse getUserSummaryByAccountId(String accountId) {
+        log.info("Fetching user summary with accountId: {}", accountId);
+        User user = userRepository.findByAccountId(accountId)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+        return userMapper.toUserSummaryResponse(user);
+    }
+
+    @Override
     public UserResponse getMyUserWithAccountInfo() {
 
         String accountId = ServiceSecurityUtils.getCurrentAccountId();
@@ -59,7 +75,6 @@ public class UserServiceImpl implements UserService {
 
         UserResponse userResponse = userMapper.toUserResponse(user);
 
-        // Fetch account information from auth service
         try {
             ApiResponse<AccountResponse> accountApiResponse = authServiceClient.getAccountById(accountId);
             if (accountApiResponse != null && accountApiResponse.data() != null) {

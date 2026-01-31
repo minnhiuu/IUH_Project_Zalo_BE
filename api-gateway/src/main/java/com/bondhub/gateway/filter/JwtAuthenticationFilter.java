@@ -31,7 +31,7 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         ServerHttpRequest request = exchange.getRequest();
-        String path = request.getPath().toString();
+        String path = request.getPath().value();
 
         log.debug("Processing request: {} {}", request.getMethod(), path);
 

@@ -8,6 +8,12 @@ spring:
   # Cloud Gateway Configuration
   cloud:
     gateway:
+      httpclient:
+        server:
+          webflux:
+            httpclient:
+              connect-timeout: 5000
+              response-timeout: 45000
       server:
         webflux:
           discovery:
@@ -16,6 +22,20 @@ spring:
               lower-case-service-id: true
           routes:
             # Auth Service Routes (Public - no JWT required)
+            - id: auth-service-qr-wait
+              uri: lb://auth-service
+              predicates:
+                - Path=/api/auth/qr/wait/**
+              metadata:
+                response-timeout: 45000
+                connect-timeout: 5000
+              filters:
+                - RewritePath=/api/auth/(?<segment>.*), /auth/${segment}
+                - name: CircuitBreaker
+                  args:
+                    name: qrWaitServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/qr-wait
+
             - id: auth-service
               uri: lb://auth-service
               predicates:
@@ -148,6 +168,8 @@ resilience4j:
         base-config: default
       authServiceCircuitBreaker:
         base-config: default
+      qrWaitServiceCircuitBreaker:
+        base-config: default
       messageServiceCircuitBreaker:
         base-config: default
       notificationServiceCircuitBreaker:
@@ -164,6 +186,8 @@ resilience4j:
         base-config: default
       authServiceCircuitBreaker:
         base-config: default
+      qrWaitServiceCircuitBreaker:
+        timeout-duration: ${GATEWAY_QR_TIMEOUT_MS}ms
       messageServiceCircuitBreaker:
         base-config: default
       notificationServiceCircuitBreaker:

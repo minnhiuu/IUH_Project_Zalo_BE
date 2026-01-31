@@ -7,8 +7,6 @@ import com.bondhub.authservice.dto.auth.request.RefreshRequest;
 import com.bondhub.authservice.dto.auth.request.RegisterInitRequest;
 import com.bondhub.authservice.dto.auth.request.RegisterRequest;
 import com.bondhub.authservice.dto.auth.request.RegisterVerifyRequest;
-import com.bondhub.common.dto.ApiResponse;
-import com.bondhub.common.dto.client.userservice.user.request.UserCreateRequest;
 import com.bondhub.authservice.dto.auth.request.ResetPasswordRequest;
 import com.bondhub.authservice.dto.auth.response.ForgotPasswordResponse;
 import com.bondhub.authservice.dto.auth.response.RegisterInitResponse;
@@ -16,6 +14,9 @@ import com.bondhub.authservice.dto.auth.response.TokenResponse;
 import com.bondhub.authservice.enums.OtpPurpose;
 import com.bondhub.authservice.enums.DeviceType;
 import com.bondhub.authservice.model.Account;
+import com.bondhub.common.event.account.AccountRegisteredEvent;
+import com.bondhub.common.model.kafka.EventType;
+import com.bondhub.common.publisher.OutboxEventPublisher;
 import com.bondhub.authservice.model.redis.PendingRegistration;
 import com.bondhub.authservice.repository.AccountRepository;
 import com.bondhub.authservice.repository.redis.PendingRegistrationRepository;
@@ -23,7 +24,6 @@ import com.bondhub.authservice.service.mail.MailService;
 import com.bondhub.authservice.service.otp.OtpService;
 import com.bondhub.authservice.service.token.TokenStoreService;
 import com.bondhub.authservice.util.SecurityUtil;
-import com.bondhub.common.dto.client.userservice.user.response.UserResponse;
 import com.bondhub.common.enums.Role;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
@@ -55,6 +55,7 @@ public class AuthenticationServiceImpl implements AuthenticationService {
     MailService mailService;
     UserServiceClient userServiceClient;
     MessageSource messageSource;
+    OutboxEventPublisher outboxEventPublisher;
 
     @Override
     public TokenResponse login(LoginRequest request, String userAgent, String ipAddress) {
@@ -149,7 +150,7 @@ public class AuthenticationServiceImpl implements AuthenticationService {
         try {
             if (securityUtil.isAuthenticated()) {
                 String jti = securityUtil.getCurrentJwtId();
-                String userId = securityUtil.getCurrentUserId();
+                String userId = securityUtil.getCurrentAccountId();
                 String email = securityUtil.getCurrentEmail();
                 long ttl = securityUtil.getRemainingTtlSeconds();
 
@@ -218,6 +219,7 @@ public class AuthenticationServiceImpl implements AuthenticationService {
         String otp = otpService.generateAndStoreOtp(request.email(), OtpPurpose.REGISTRATION);
 
         long now = System.currentTimeMillis();
+
         PendingRegistration pendingReg = PendingRegistration.builder()
                 .email(request.email())
                 .passwordHash(passwordEncoder.encode(request.password()))
@@ -226,6 +228,7 @@ public class AuthenticationServiceImpl implements AuthenticationService {
                 .createdAt(now)
                 .ttl(300L)
                 .build();
+
         pendingRegistrationRepository.save(pendingReg);
 
         mailService.sendOtpEmail(request.email(), otp, "Registration Verification");
@@ -272,21 +275,28 @@ public class AuthenticationServiceImpl implements AuthenticationService {
 
         log.info("✅ Account created and verified for: {}", account.getEmail());
 
+        // Publish account registered event via outbox pattern
         try {
-            ApiResponse<UserResponse> user = userServiceClient.createUser(UserCreateRequest.builder()
+            AccountRegisteredEvent event = AccountRegisteredEvent.builder()
                     .accountId(account.getId())
+                    .email(account.getEmail())
                     .fullName(pendingReg.getFullName())
-                    .build());
+                    .phoneNumber(account.getPhoneNumber())
+                    .timestamp(System.currentTimeMillis())
+                    .build();
 
-            if (user != null && user.data() != null) {
-                log.info("✅ User profile created for account: {}", user.data().getAccountId());
-            } else {
-                log.warn("⚠️ User profile creation response was null or empty for account: {}", account.getId());
-            }
+            outboxEventPublisher.saveAndPublish(
+                    account.getId(),
+                    "Account",
+                    EventType.ACCOUNT_REGISTERED,
+                    event
+            );
+
+            log.info("✅ Account registered event published for accountId: {}", account.getId());
 
         } catch (Exception e) {
+            log.error("❌ Failed to publish account registered event for accountId: {}", account.getId(), e);
             log.error("❌ Failed to create user profile for account: {}", account.getId(), e);
-
         }
 
         return generateFullTokenResponse(

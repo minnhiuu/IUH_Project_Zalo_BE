@@ -11,7 +11,6 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 
-import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -36,7 +35,7 @@ public class SecurityUtil {
         throw new AppException(ErrorCode.AUTH_UNAUTHENTICATED);
     }
 
-    public String getCurrentUserId() {
+    public String getCurrentAccountId() {
         return getCurrentUserPrincipal().getUserId();
     }
 
@@ -97,7 +96,7 @@ public class SecurityUtil {
     }
 
     public Account getCurrentAccount() {
-        String userId = getCurrentUserId();
+        String userId = getCurrentAccountId();
         return accountRepository.findById(userId)
                 .orElseThrow(() -> new AppException(ErrorCode.ACC_ACCOUNT_NOT_FOUND));
     }
