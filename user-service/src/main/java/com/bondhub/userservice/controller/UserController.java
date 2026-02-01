@@ -6,6 +6,7 @@ import com.bondhub.userservice.dto.request.UserUpdateRequest;
 import com.bondhub.userservice.dto.response.UserProfileResponse;
 import com.bondhub.userservice.dto.response.UserResponse;
 import com.bondhub.userservice.service.user.UserService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -21,7 +22,7 @@ public class UserController {
     private final UserService userService;
 
     @PostMapping
-    public ResponseEntity<ApiResponse<UserResponse>> createUser(@RequestBody UserCreateRequest request) {
+    public ResponseEntity<ApiResponse<UserResponse>> createUser(@Valid @RequestBody UserCreateRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success(userService.createUser(request)));
     }
@@ -43,7 +44,7 @@ public class UserController {
 
     @PutMapping("/me")
     public ResponseEntity<ApiResponse<UserProfileResponse>> updateUser(
-            @RequestBody UserUpdateRequest request) {
+            @Valid @RequestBody UserUpdateRequest request) {
         return ResponseEntity.ok(ApiResponse.success(userService.updateUser(request)));
     }
 

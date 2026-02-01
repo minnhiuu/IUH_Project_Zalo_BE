@@ -5,6 +5,7 @@ import com.bondhub.common.dto.client.fileservice.FileUploadResponse;
 import com.bondhub.common.dto.client.userservice.user.response.UserSummaryResponse;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
+import com.bondhub.common.utils.S3Util;
 import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.userservice.client.AuthServiceClient;
 import com.bondhub.userservice.client.FileServiceClient;
@@ -18,25 +19,41 @@ import com.bondhub.userservice.mapper.UserProfileMapper;
 import com.bondhub.userservice.model.User;
 import com.bondhub.userservice.repository.UserRepository;
 import lombok.AccessLevel;
-import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
 @Service
-@RequiredArgsConstructor
 @Slf4j
-@FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
+@FieldDefaults(level = AccessLevel.PRIVATE)
 public class UserServiceImpl implements UserService {
+    final UserRepository userRepository;
+    final UserMapper userMapper;
+    final AuthServiceClient authServiceClient;
+    final SecurityUtil securityUtil;
+    final UserProfileMapper userProfileMapper;
+    final FileServiceClient fileServiceClient;
 
-    UserRepository userRepository;
-    UserMapper userMapper;
-    AuthServiceClient authServiceClient;
-    SecurityUtil securityUtil;
-    UserProfileMapper userProfileMapper;
-    FileServiceClient fileServiceClient;
+    @Value("${aws.s3.bucket.name}")
+    String bucketName;
+
+    @Value("${cloud.aws.region.static}")
+    String region;
+
+    public UserServiceImpl(UserRepository userRepository, UserMapper userMapper,
+            AuthServiceClient authServiceClient, SecurityUtil securityUtil,
+            UserProfileMapper userProfileMapper, FileServiceClient fileServiceClient) {
+        this.userRepository = userRepository;
+        this.userMapper = userMapper;
+        this.authServiceClient = authServiceClient;
+        this.securityUtil = securityUtil;
+        this.userProfileMapper = userProfileMapper;
+        this.fileServiceClient = fileServiceClient;
+    }
 
     @Override
     public UserResponse createUser(UserCreateRequest request) {
@@ -68,7 +85,12 @@ public class UserServiceImpl implements UserService {
         log.info("Fetching user summary with accountId: {}", accountId);
         User user = userRepository.findByAccountId(accountId)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
-        return userMapper.toUserSummaryResponse(user);
+
+        UserSummaryResponse response = userMapper.toUserSummaryResponse(user);
+        if (response.getAvatar() != null) {
+            response.setAvatar(S3Util.getS3BaseUrl(bucketName, region) + response.getAvatar());
+        }
+        return response;
     }
 
     @Override
@@ -91,7 +113,15 @@ public class UserServiceImpl implements UserService {
                     accountId, e);
         }
 
-        return userProfileMapper.toUserProfileResponse(user, accountResponse);
+        UserProfileResponse response = userProfileMapper.toUserProfileResponse(user, accountResponse);
+        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+        if (response.getAvatar() != null) {
+            response.setAvatar(baseUrl + response.getAvatar());
+        }
+        if (response.getBackground() != null) {
+            response.setBackground(baseUrl + response.getBackground());
+        }
+        return response;
     }
 
     @Override
@@ -124,11 +154,19 @@ public class UserServiceImpl implements UserService {
         }
 
         log.info("User profile updated successfully for account: {}", accountId);
-        return userProfileMapper.toUserProfileResponse(user, accountResponse);
+        UserProfileResponse response = userProfileMapper.toUserProfileResponse(user, accountResponse);
+        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+        if (response.getAvatar() != null) {
+            response.setAvatar(baseUrl + response.getAvatar());
+        }
+        if (response.getBackground() != null) {
+            response.setBackground(baseUrl + response.getBackground());
+        }
+        return response;
     }
 
     @Override
-    public String updateAvatar(org.springframework.web.multipart.MultipartFile file) {
+    public String updateAvatar(MultipartFile file) {
         String accountId = securityUtil.getCurrentAccountId();
         log.info("Updating avatar for user: {}", accountId);
 
@@ -149,7 +187,7 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
-    public String updateBackground(org.springframework.web.multipart.MultipartFile file) {
+    public String updateBackground(MultipartFile file) {
         String accountId = securityUtil.getCurrentAccountId();
         log.info("Updating background for user: {}", accountId);
 

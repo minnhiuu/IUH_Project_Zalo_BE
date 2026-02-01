@@ -4,6 +4,10 @@ server:
 spring:
   application:
     name: user-service
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
 
   messages:
     basename: i18n/messages, i18n/messages-user
@@ -61,8 +65,8 @@ management:
   endpoint:
     health:
       show-details: when-authorized
-      probes:
-        enabled: true
+    probes:
+      enabled: true
   metrics:
     export:
       prometheus:
@@ -122,3 +126,13 @@ bondhub:
       enabled: true
     public-endpoints:
       - /users
+
+# AWS S3 Configuration
+cloud:
+  aws:
+    region:
+      static: ${AWS_REGION}
+aws:
+  s3:
+    bucket:
+      name: ${AWS_S3_BUCKET_NAME}

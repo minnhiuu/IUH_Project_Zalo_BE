@@ -12,7 +12,6 @@ import org.springframework.data.annotation.LastModifiedDate;
 import java.time.LocalDateTime;
 
 @Data
-@Builder
 @FieldDefaults(level = AccessLevel.PRIVATE)
 public class BaseModel {
 
@@ -28,6 +27,5 @@ public class BaseModel {
     @LastModifiedBy
     String lastModifiedBy;
 
-    @Builder.Default
     boolean active = true;
 }
