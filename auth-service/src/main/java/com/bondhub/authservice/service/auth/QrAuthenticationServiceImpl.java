@@ -11,7 +11,7 @@ import com.bondhub.authservice.model.redis.QrSession;
 import com.bondhub.authservice.repository.AccountRepository;
 import com.bondhub.authservice.repository.redis.QrSessionRepository;
 import com.bondhub.authservice.service.token.TokenStoreService;
-import com.bondhub.authservice.util.SecurityUtil;
+import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.common.dto.client.userservice.user.response.UserSummaryResponse;
 import com.bondhub.common.exception.AppException;
@@ -88,8 +88,8 @@ public class QrAuthenticationServiceImpl implements QrAuthenticationService {
 
             if (response != null && response.data() != null) {
                 UserSummaryResponse userSummary = response.data();
-                session.setUserAvatar(userSummary.getAvatar());
-                session.setUserFullName(userSummary.getFullName());
+                session.setUserAvatar(userSummary.avatar());
+                session.setUserFullName(userSummary.fullName());
             }
         } catch (Exception e) {
             log.error("Error fetching user summary for account: {}", currentAccountId, e);

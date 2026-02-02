@@ -1,0 +1,107 @@
+server:
+  port: 8085
+
+spring:
+  application:
+    name: file-service
+
+    # MongoDB Configuration
+  data:
+    mongodb:
+      uri: ${MONGODB_URI_FILES}
+      auto-index-creation: true
+      uuid-representation: standard
+
+# Eureka Client Configuration
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_SERVER_URL}
+    register-with-eureka: true
+    fetch-registry: true
+    registry-fetch-interval-seconds: 30
+  instance:
+    prefer-ip-address: true
+    instance-id: ${spring.application.name}:${spring.application.instance_id:${random.value}}
+    lease-renewal-interval-in-seconds: 30
+    lease-expiration-duration-in-seconds: 90
+    metadata-map:
+      version: 0.0.1-SNAPSHOT
+      environment: ${spring.profiles.active:default}
+
+# Management and Monitoring
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,refresh,env
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: when-authorized
+      probes:
+        enabled: true
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+    tags:
+      application: ${spring.application.name}
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+
+# Logging Configuration
+logging:
+  level:
+    root: INFO
+    com.bondhub.authservice: DEBUG
+    org.springframework.web: INFO
+    org.springframework.security: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+  file:
+    name: logs/auth-service.log
+    max-size: 10MB
+    max-history: 30
+    total-size-cap: 1GB
+
+# Resilience4j Circuit Breaker (if needed)
+resilience4j:
+  circuitbreaker:
+    instances:
+      authService:
+        register-health-indicator: true
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        permitted-number-of-calls-in-half-open-state: 3
+        wait-duration-in-open-state: 30s
+        failure-rate-threshold: 50
+        slow-call-rate-threshold: 100
+        slow-call-duration-threshold: 3s
+
+  retry:
+    instances:
+      authService:
+        max-attempts: 3
+        wait-duration: 1s
+
+  timelimiter:
+    instances:
+      authService:
+        timeout-duration: 5s
+
+# AWS S3 Configuration
+cloud:
+  aws:
+    region:
+      static: ${AWS_REGION}
+    credentials:
+      access-key: ${AWS_ACCESS_KEY}
+      secret-key: ${AWS_SECRET_KEY}
+aws:
+  s3:
+    bucket:
+      name: ${AWS_S3_BUCKET_NAME}

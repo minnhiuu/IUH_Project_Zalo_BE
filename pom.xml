@@ -32,6 +32,7 @@
         <module>auth-service</module>
         <module>message-service</module>
         <module>notification-service</module>
+        <module>file-service</module>
     </modules>
 
     <dependencyManagement>

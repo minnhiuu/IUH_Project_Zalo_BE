@@ -53,25 +53,25 @@ public class AccountRegisteredListener {
             UserResponse userResponse = userService.createUser(request);
 
             log.info("✅ User created successfully for accountId: {}, userId: {}", 
-                    event.getAccountId(), userResponse.getId());
+                    event.getAccountId(), userResponse.id());
 
             // Publish USER_CREATED event back to complete the saga
             UserCreatedEvent userCreatedEvent = UserCreatedEvent.builder()
-                    .userId(userResponse.getId())
+                    .userId(userResponse.id())
                     .accountId(event.getAccountId())
-                    .fullName(userResponse.getFullName())
+                    .fullName(userResponse.fullName())
                     .timestamp(Instant.now().toEpochMilli())
                     .build();
 
             outboxEventPublisher.saveAndPublish(
-                    userResponse.getId(),
+                    userResponse.id(),
                     "User",
                     EventType.USER_CREATED,
                     userCreatedEvent
             );
 
             log.info("📤 Published USER_CREATED event for userId: {}, accountId: {}", 
-                    userResponse.getId(), event.getAccountId());
+                    userResponse.id(), event.getAccountId());
 
             // Manual acknowledgment
             if (acknowledgment != null) {
