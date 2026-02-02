@@ -1,8 +1,11 @@
 package com.bondhub.userservice.service.user;
 
 import com.bondhub.common.dto.client.userservice.user.response.UserSummaryResponse;
+import com.bondhub.userservice.dto.request.AvatarUpdateRequest;
+import com.bondhub.userservice.dto.request.BackgroundUpdateRequest;
 import com.bondhub.userservice.dto.request.UserCreateRequest;
 import com.bondhub.userservice.dto.request.UserUpdateRequest;
+import com.bondhub.userservice.dto.response.UserImageResponse;
 import com.bondhub.userservice.dto.response.UserProfileResponse;
 import com.bondhub.userservice.dto.response.UserResponse;
 import org.springframework.web.multipart.MultipartFile;
@@ -24,9 +27,9 @@ public interface UserService {
 
     UserProfileResponse updateUser(UserUpdateRequest request);
 
-    String updateAvatar(MultipartFile file);
+    UserImageResponse updateAvatar(AvatarUpdateRequest request);
 
-    String updateBackground(MultipartFile file);
+    UserImageResponse updateBackground(BackgroundUpdateRequest request);
 
     void deleteUser(String id);
 }

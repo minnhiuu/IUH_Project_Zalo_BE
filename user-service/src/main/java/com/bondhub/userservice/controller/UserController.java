@@ -3,6 +3,9 @@ package com.bondhub.userservice.controller;
 import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.userservice.dto.request.UserCreateRequest;
 import com.bondhub.userservice.dto.request.UserUpdateRequest;
+import com.bondhub.userservice.dto.request.AvatarUpdateRequest;
+import com.bondhub.userservice.dto.request.BackgroundUpdateRequest;
+import com.bondhub.userservice.dto.response.UserImageResponse;
 import com.bondhub.userservice.dto.response.UserProfileResponse;
 import com.bondhub.userservice.dto.response.UserResponse;
 import com.bondhub.userservice.service.user.UserService;
@@ -11,7 +14,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -54,15 +56,15 @@ public class UserController {
     }
 
     @PatchMapping("/profile/avatar")
-    public ResponseEntity<ApiResponse<String>> updateAvatar(
-            @RequestParam("file") MultipartFile file) {
-        return ResponseEntity.ok(ApiResponse.success(userService.updateAvatar(file)));
+    public ResponseEntity<ApiResponse<UserImageResponse>> updateAvatar(
+            @ModelAttribute AvatarUpdateRequest request) {
+        return ResponseEntity.ok(ApiResponse.success(userService.updateAvatar(request)));
     }
 
     @PatchMapping("/profile/background")
-    public ResponseEntity<ApiResponse<String>> updateBackground(
-            @RequestParam("file") MultipartFile file) {
-        return ResponseEntity.ok(ApiResponse.success(userService.updateBackground(file)));
+    public ResponseEntity<ApiResponse<UserImageResponse>> updateBackground(
+            @ModelAttribute BackgroundUpdateRequest request) {
+        return ResponseEntity.ok(ApiResponse.success(userService.updateBackground(request)));
     }
 
     @DeleteMapping("/{id}")

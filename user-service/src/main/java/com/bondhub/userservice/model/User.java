@@ -32,7 +32,10 @@ public class User extends BaseModel {
     Gender gender;
     String accountId;
     Set<String> pinnedConversations;
-    String background;
-    String avatar;
 
+    String avatar;
+    
+    String background;
+    Double backgroundY;
+    Double backgroundZoom;
 }
