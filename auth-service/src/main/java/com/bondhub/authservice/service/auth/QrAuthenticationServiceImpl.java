@@ -88,8 +88,8 @@ public class QrAuthenticationServiceImpl implements QrAuthenticationService {
 
             if (response != null && response.data() != null) {
                 UserSummaryResponse userSummary = response.data();
-                session.setUserAvatar(userSummary.getAvatar());
-                session.setUserFullName(userSummary.getFullName());
+                session.setUserAvatar(userSummary.avatar());
+                session.setUserFullName(userSummary.fullName());
             }
         } catch (Exception e) {
             log.error("Error fetching user summary for account: {}", currentAccountId, e);

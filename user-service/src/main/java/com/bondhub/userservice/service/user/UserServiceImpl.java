@@ -11,25 +11,29 @@ import com.bondhub.userservice.client.AuthServiceClient;
 import com.bondhub.userservice.client.FileServiceClient;
 import com.bondhub.userservice.dto.request.UserCreateRequest;
 import com.bondhub.userservice.dto.request.UserUpdateRequest;
+import com.bondhub.userservice.dto.request.AvatarUpdateRequest;
+import com.bondhub.userservice.dto.request.BackgroundUpdateRequest;
 import com.bondhub.userservice.dto.response.AccountResponse;
 import com.bondhub.userservice.dto.response.UserResponse;
 import com.bondhub.userservice.dto.response.UserProfileResponse;
+import com.bondhub.userservice.dto.response.UserImageResponse;
 import com.bondhub.userservice.mapper.UserMapper;
 import com.bondhub.userservice.mapper.UserProfileMapper;
 import com.bondhub.userservice.model.User;
 import com.bondhub.userservice.repository.UserRepository;
 import lombok.AccessLevel;
+import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
 @Service
 @Slf4j
 @FieldDefaults(level = AccessLevel.PRIVATE)
+@RequiredArgsConstructor
 public class UserServiceImpl implements UserService {
     final UserRepository userRepository;
     final UserMapper userMapper;
@@ -44,20 +48,9 @@ public class UserServiceImpl implements UserService {
     @Value("${cloud.aws.region.static}")
     String region;
 
-    public UserServiceImpl(UserRepository userRepository, UserMapper userMapper,
-            AuthServiceClient authServiceClient, SecurityUtil securityUtil,
-            UserProfileMapper userProfileMapper, FileServiceClient fileServiceClient) {
-        this.userRepository = userRepository;
-        this.userMapper = userMapper;
-        this.authServiceClient = authServiceClient;
-        this.securityUtil = securityUtil;
-        this.userProfileMapper = userProfileMapper;
-        this.fileServiceClient = fileServiceClient;
-    }
-
     @Override
     public UserResponse createUser(UserCreateRequest request) {
-        log.info("Creating user with accountId: {}", request.getAccountId());
+        log.info("Creating user with accountId: {}", request.accountId());
         User user = userMapper.toUser(request);
         user = userRepository.save(user);
         log.info("User created successfully with id: {}", user.getId());
@@ -87,8 +80,12 @@ public class UserServiceImpl implements UserService {
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
 
         UserSummaryResponse response = userMapper.toUserSummaryResponse(user);
-        if (response.getAvatar() != null) {
-            response.setAvatar(S3Util.getS3BaseUrl(bucketName, region) + response.getAvatar());
+        if (response.avatar() != null) {
+            return UserSummaryResponse.builder()
+                    .id(response.id())
+                    .fullName(response.fullName())
+                    .avatar(S3Util.getS3BaseUrl(bucketName, region) + response.avatar())
+                    .build();
         }
         return response;
     }
@@ -152,17 +149,24 @@ public class UserServiceImpl implements UserService {
     private UserProfileResponse getUserProfileResponseWithUrl(User user, AccountResponse accountResponse) {
         UserProfileResponse response = userProfileMapper.toUserProfileResponse(user, accountResponse);
         String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
-        if (response.getAvatar() != null) {
-            response.setAvatar(baseUrl + response.getAvatar());
-        }
-        if (response.getBackground() != null) {
-            response.setBackground(baseUrl + response.getBackground());
-        }
-        return response;
+        
+        return UserProfileResponse.builder()
+                .id(response.id())
+                .phoneNumber(response.phoneNumber())
+                .email(response.email())
+                .fullName(response.fullName())
+                .bio(response.bio())
+                .gender(response.gender())
+                .dob(response.dob())
+                .avatar(response.avatar() != null ? baseUrl + response.avatar() : null)
+                .background(response.background() != null ? baseUrl + response.background() : null)
+                .backgroundY(response.backgroundY())
+                .backgroundZoom(response.backgroundZoom())
+                .build();
     }
 
     @Override
-    public String updateAvatar(MultipartFile file) {
+    public UserImageResponse updateAvatar(AvatarUpdateRequest request) {
         String accountId = securityUtil.getCurrentAccountId();
         log.info("Updating avatar for user: {}", accountId);
 
@@ -172,9 +176,9 @@ public class UserServiceImpl implements UserService {
         String oldAvatarKey = user.getAvatar();
 
         ApiResponse<FileUploadResponse> response = fileServiceClient
-                .uploadFile(file);
+                .uploadFile(request.file());
         if (response != null && response.data() != null) {
-            String key = response.data().getKey();
+            String key = response.data().key();
             user.setAvatar(key);
             userRepository.save(user);
 
@@ -189,16 +193,16 @@ public class UserServiceImpl implements UserService {
 
             log.info("Avatar updated successfully for user: {}", accountId);
             String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
-            return baseUrl + key;
+            return userMapper.toAvatarResponse(user, baseUrl);
         }
 
         throw new RuntimeException("Failed to upload avatar");
     }
 
     @Override
-    public String updateBackground(MultipartFile file) {
+    public UserImageResponse updateBackground(BackgroundUpdateRequest request) {
         String accountId = securityUtil.getCurrentAccountId();
-        log.info("Updating background for user: {}", accountId);
+        log.info("Updating background for user: {} with y: {}", accountId, request.y());
 
         User user = userRepository.findByAccountId(accountId)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
@@ -206,10 +210,12 @@ public class UserServiceImpl implements UserService {
         String oldBackgroundKey = user.getBackground();
 
         ApiResponse<FileUploadResponse> response = fileServiceClient
-                .uploadFile(file);
+                .uploadFile(request.file());
         if (response != null && response.data() != null) {
-            String key = response.data().getKey();
+            String key = response.data().key();
             user.setBackground(key);
+            user.setBackgroundY(request.y());
+            user.setBackgroundZoom(request.zoom());
             userRepository.save(user);
 
             if (oldBackgroundKey != null && !oldBackgroundKey.isEmpty()) {
@@ -223,7 +229,7 @@ public class UserServiceImpl implements UserService {
 
             log.info("Background updated successfully for user: {}", accountId);
             String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
-            return baseUrl + key;
+            return userMapper.toBackgroundResponse(user, baseUrl);
         }
 
         throw new RuntimeException("Failed to upload background");
