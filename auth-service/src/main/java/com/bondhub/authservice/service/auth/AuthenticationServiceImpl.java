@@ -23,7 +23,7 @@ import com.bondhub.authservice.repository.redis.PendingRegistrationRepository;
 import com.bondhub.authservice.service.mail.MailService;
 import com.bondhub.authservice.service.otp.OtpService;
 import com.bondhub.authservice.service.token.TokenStoreService;
-import com.bondhub.authservice.util.SecurityUtil;
+import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.common.enums.Role;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;

@@ -9,6 +9,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.MongoId;
 
 import java.time.LocalDate;
+import java.util.Set;
 
 @Document("users")
 @Getter
@@ -30,8 +31,9 @@ public class User extends BaseModel {
 
     Gender gender;
     String accountId;
-//    Set<String> pinnedConversations;
-//    FileDocument background;
-//    FileDocument avatar;
+    Set<String> pinnedConversations;
 
+    String avatar;
+    String background;
+    Double backgroundY;
 }

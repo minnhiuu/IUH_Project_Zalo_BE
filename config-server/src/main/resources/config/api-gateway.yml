@@ -51,6 +51,18 @@ spring:
                     name: authServiceCircuitBreaker
                     fallbackUri: forward:/fallback/auth-service
 
+            # File Service Routes (Public - no JWT required)
+            - id: file-service
+              uri: lb://file-service
+              predicates:
+                - Path=/api/files/**
+              filters:
+                - RewritePath=/api/files/(?<segment>.*), /files/${segment}
+                - name: CircuitBreaker
+                  args:
+                    name: fileServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/file-service
+
             # User Service Routes (Protected - JWT required)
             - id: user-service
               uri: lb://user-service
@@ -180,6 +192,8 @@ resilience4j:
         base-config: default
       notificationServiceCircuitBreaker:
         base-config: default
+      fileServiceCircuitBreaker:
+        base-config: default
 
   timelimiter:
     configs:
@@ -196,6 +210,8 @@ resilience4j:
       messageServiceCircuitBreaker:
         base-config: default
       notificationServiceCircuitBreaker:
+        base-config: default
+      fileServiceCircuitBreaker:
         base-config: default
 
   # Retry Configuration
@@ -323,6 +339,8 @@ springdoc:
         url: http://localhost:8082/v3/api-docs
       - name: Notification Service
         url: http://localhost:8083/v3/api-docs
+      - name: File Service
+        url: http://localhost:8085/v3/api-docs
   api-docs:
     enabled: true
     # This is the path for the Gateway's OWN docs (if any)

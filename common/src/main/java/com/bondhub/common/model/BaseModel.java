@@ -1,6 +1,7 @@
 package com.bondhub.common.model;
 
 import lombok.AccessLevel;
+import lombok.Builder;
 import lombok.Data;
 import lombok.experimental.FieldDefaults;
 import org.springframework.data.annotation.CreatedBy;
@@ -26,5 +27,5 @@ public class BaseModel {
     @LastModifiedBy
     String lastModifiedBy;
 
-    boolean active;
+    boolean active = true;
 }

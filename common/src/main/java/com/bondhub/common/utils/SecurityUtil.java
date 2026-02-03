@@ -1,11 +1,12 @@
-package com.bondhub.authservice.util;
+package com.bondhub.common.utils;
 
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
 import com.bondhub.common.security.UserPrincipal;
-import com.bondhub.authservice.model.Account;
-import com.bondhub.authservice.repository.AccountRepository;
 import lombok.RequiredArgsConstructor;
+
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -16,9 +17,9 @@ import java.util.stream.Collectors;
 
 @Component
 @RequiredArgsConstructor
+@ConditionalOnClass(name = "org.springframework.security.core.context.SecurityContextHolder")
+@ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 public class SecurityUtil {
-
-    private final AccountRepository accountRepository;
 
     private UserPrincipal getCurrentUserPrincipal() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -93,11 +94,5 @@ public class SecurityUtil {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         return authentication != null
                 && authentication.isAuthenticated();
-    }
-
-    public Account getCurrentAccount() {
-        String userId = getCurrentAccountId();
-        return accountRepository.findById(userId)
-                .orElseThrow(() -> new AppException(ErrorCode.ACC_ACCOUNT_NOT_FOUND));
     }
 }

@@ -4,6 +4,10 @@ server:
 spring:
   application:
     name: user-service
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
 
   messages:
     basename: i18n/messages, i18n/messages-user
@@ -37,12 +41,17 @@ spring:
 # Service-specific logging overrides
 logging:
   level:
+    root: INFO
     com.bondhub.userservice: DEBUG
+    org.springframework.web: INFO
     org.springframework.security: DEBUG
     org.hibernate.SQL: DEBUG
     org.hibernate.type.descriptor.sql.BasicBinder: TRACE
   file:
     name: logs/user-service.log
+    max-size: 10MB
+    max-history: 30
+    total-size-cap: 1GB
 
 # Service-specific resilience4j overrides
 resilience4j:
@@ -66,3 +75,13 @@ bondhub:
   security:
     public-endpoints:
       - /users
+
+# AWS S3 Configuration
+cloud:
+  aws:
+    region:
+      static: ${AWS_REGION}
+aws:
+  s3:
+    bucket:
+      name: ${AWS_S3_BUCKET_NAME}
