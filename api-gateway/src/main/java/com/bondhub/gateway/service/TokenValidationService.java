@@ -1,7 +1,9 @@
 package com.bondhub.gateway.service;
 
 import com.bondhub.common.utils.JwtUtil;
+import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
+import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.ReactiveRedisTemplate;
 import org.springframework.stereotype.Service;
@@ -10,10 +12,11 @@ import reactor.core.publisher.Mono;
 @Service
 @RequiredArgsConstructor
 @Slf4j
+@FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public class TokenValidationService {
 
-    private final JwtUtil jwtUtil;
-    private final ReactiveRedisTemplate<String, String> reactiveRedisTemplate;
+    JwtUtil jwtUtil;
+    ReactiveRedisTemplate<String, String> reactiveRedisTemplate;
 
     public Mono<Boolean> validateToken(String token) {
         if (!jwtUtil.validateToken(token)) {

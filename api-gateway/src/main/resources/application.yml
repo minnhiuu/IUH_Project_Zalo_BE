@@ -15,6 +15,10 @@ spring:
         initial-interval: 1000
         max-interval: 2000
         multiplier: 1.1
+  messages:
+    basename: i18n/messages
+    encoding: UTF-8
+    fallback-to-system-locale: false
 
 # Fallback configuration if config-server unavailable
 server:

@@ -1,25 +1,21 @@
-package com.bondhub.common.config;
+package com.bondhub.gateway.config;
 
 import org.springframework.context.MessageSource;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.support.ResourceBundleMessageSource;
-import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
-import org.springframework.web.servlet.LocaleResolver;
-import org.springframework.web.servlet.i18n.AcceptHeaderLocaleResolver;
 
-import java.util.Locale;
-
+/**
+ * I18n Configuration for API Gateway (Reactive)
+ * Only configures MessageSource - no LocaleResolver needed for reactive apps
+ */
 @Configuration
 public class I18nConfig {
 
-    @Bean
-    public LocaleResolver localeResolver() {
-        AcceptHeaderLocaleResolver localeResolver = new AcceptHeaderLocaleResolver();
-        localeResolver.setDefaultLocale(new Locale("vi"));
-        return localeResolver;
-    }
-
+    /**
+     * Message source configuration
+     * Loads messages from i18n/messages properties files
+     */
     @Bean
     public MessageSource messageSource(
             @org.springframework.beans.factory.annotation.Value("${spring.messages.basename:i18n/messages}") String basename) {
@@ -32,12 +28,5 @@ public class I18nConfig {
         messageSource.setFallbackToSystemLocale(false);
         messageSource.setDefaultEncoding("UTF-8");
         return messageSource;
-    }
-
-    @Bean
-    public LocalValidatorFactoryBean validator(MessageSource messageSource) {
-        LocalValidatorFactoryBean bean = new LocalValidatorFactoryBean();
-        bean.setValidationMessageSource(messageSource);
-        return bean;
     }
 }

@@ -5,6 +5,10 @@ spring:
   application:
     name: api-gateway
 
+  # Disable Kafka Related For Gateway
+  kafka:
+    enabled: false
+
   # Cloud Gateway Configuration
   cloud:
     gateway:
@@ -21,6 +25,42 @@ spring:
               enabled: true
               lower-case-service-id: true
           routes:
+            # API Documentation Routes (for Swagger UI)
+            - id: auth-service-docs
+              uri: lb://auth-service
+              predicates:
+                - Path=/auth/v3/api-docs/**
+              filters:
+                - RewritePath=/auth/v3/api-docs, /v3/api-docs
+
+            - id: user-service-docs
+              uri: lb://user-service
+              predicates:
+                - Path=/user/v3/api-docs/**
+              filters:
+                - RewritePath=/user/v3/api-docs, /v3/api-docs
+
+            - id: message-service-docs
+              uri: lb://message-service
+              predicates:
+                - Path=/message/v3/api-docs/**
+              filters:
+                - RewritePath=/message/v3/api-docs, /v3/api-docs
+
+            - id: notification-service-docs
+              uri: lb://notification-service
+              predicates:
+                - Path=/notification/v3/api-docs/**
+              filters:
+                - RewritePath=/notification/v3/api-docs, /v3/api-docs
+
+            - id: file-service-docs
+              uri: lb://file-service
+              predicates:
+                - Path=/file/v3/api-docs/**
+              filters:
+                - RewritePath=/file/v3/api-docs, /v3/api-docs
+
             # Auth Service Routes (Public - no JWT required)
             - id: auth-service-qr-wait
               uri: lb://auth-service
@@ -96,7 +136,7 @@ spring:
                     fallbackUri: forward:/fallback/notification-service
 
           # Global CORS Configuration
-          globalcors:
+          globalCors:
             cors-configurations:
               "[/**]":
                 allowed-origins: ${CORS_ALLOWED_ORIGINS}
@@ -156,20 +196,34 @@ resilience4j:
     configs:
       default:
         register-health-indicator: true
+        sliding-window-type: COUNT_BASED
         sliding-window-size: 10
         minimum-number-of-calls: 5
         permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
         wait-duration-in-open-state: 30s
         failure-rate-threshold: 50
         slow-call-rate-threshold: 100
         slow-call-duration-threshold: 3s
+        record-exceptions:
+          - org.springframework.web.client.HttpServerErrorException
+          - java.io.IOException
+          - java.util.concurrent.TimeoutException
+        ignore-exceptions:
+          - org.springframework.web.client.HttpClientErrorException
     instances:
       userServiceCircuitBreaker:
         base-config: default
+        failure-rate-threshold: 60
+        wait-duration-in-open-state: 45s
       authServiceCircuitBreaker:
         base-config: default
+        failure-rate-threshold: 40
+        wait-duration-in-open-state: 20s
       qrWaitServiceCircuitBreaker:
         base-config: default
+        failure-rate-threshold: 70
+        wait-duration-in-open-state: 60s
       messageServiceCircuitBreaker:
         base-config: default
       notificationServiceCircuitBreaker:
@@ -181,6 +235,7 @@ resilience4j:
     configs:
       default:
         timeout-duration: 5s
+        cancel-running-future: true
     instances:
       userServiceCircuitBreaker:
         base-config: default
@@ -194,6 +249,74 @@ resilience4j:
         base-config: default
       fileServiceCircuitBreaker:
         base-config: default
+
+  # Retry Configuration
+  retry:
+    configs:
+      default:
+        max-attempts: 3
+        wait-duration: 500ms
+        enable-exponential-backoff: true
+        exponential-backoff-multiplier: 2
+        retry-exceptions:
+          - org.springframework.web.client.ResourceAccessException
+          - java.io.IOException
+          - java.util.concurrent.TimeoutException
+        ignore-exceptions:
+          - org.springframework.web.client.HttpClientErrorException
+    instances:
+      userServiceRetry:
+        base-config: default
+      authServiceRetry:
+        base-config: default
+        max-attempts: 2
+      messageServiceRetry:
+        base-config: default
+      notificationServiceRetry:
+        base-config: default
+        max-attempts: 2
+
+  # Rate Limiter Configuration
+  ratelimiter:
+    configs:
+      default:
+        register-health-indicator: true
+        limit-for-period: 100
+        limit-refresh-period: 1s
+        timeout-duration: 0s
+    instances:
+      userServiceRateLimiter:
+        base-config: default
+        limit-for-period: 50
+      authServiceRateLimiter:
+        base-config: default
+        limit-for-period: 200
+      messageServiceRateLimiter:
+        base-config: default
+        limit-for-period: 80
+      notificationServiceRateLimiter:
+        base-config: default
+        limit-for-period: 60
+
+  # Bulkhead Configuration
+  bulkhead:
+    configs:
+      default:
+        max-concurrent-calls: 25
+        max-wait-duration: 0ms
+    instances:
+      userServiceBulkhead:
+        base-config: default
+        max-concurrent-calls: 20
+      authServiceBulkhead:
+        base-config: default
+        max-concurrent-calls: 30
+      messageServiceBulkhead:
+        base-config: default
+        max-concurrent-calls: 15
+      notificationServiceBulkhead:
+        base-config: default
+        max-concurrent-calls: 15
 
 # Management and Monitoring
 management:
@@ -242,18 +365,21 @@ springdoc:
   swagger-ui:
     # This disables the default "petstore" url
     disable-swagger-default-url: true
-    # Aggregates the docs from your services via Eureka discovery
+    # Aggregates the docs from your services via Gateway routes (no CORS issues)
     urls:
       - name: Auth Service
-        url: http://localhost:8084/v3/api-docs
+        url: /auth/v3/api-docs
       - name: User Service
-        url: http://localhost:8081/v3/api-docs
+        url: /user/v3/api-docs
       - name: Message Service
-        url: http://localhost:8082/v3/api-docs
+        url: /message/v3/api-docs
       - name: Notification Service
-        url: http://localhost:8083/v3/api-docs
+        url: /notification/v3/api-docs
       - name: File Service
-        url: http://localhost:8085/v3/api-docs
+        url: /file/v3/api-docs
+    # Enable "Try it out" functionality
+    use-root-path: true
+    path: /swagger-ui.html
   api-docs:
     enabled: true
     # This is the path for the Gateway's OWN docs (if any)

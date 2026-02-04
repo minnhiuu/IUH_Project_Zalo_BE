@@ -1,29 +1,28 @@
-package com.bondhub.common.config;
+package com.bondhub.notificationservices.config;
 
+import com.bondhub.common.config.SecurityProperties;
 import com.bondhub.common.security.SecurityContextFilter;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 /**
- * Common Security Configuration
- * Provides security context setup for servlet-based services behind API Gateway
- * Enable this by setting: bondhub.security.gateway-auth.enabled=true
+ * Notification Service Security Configuration
+ * Custom configuration for Notification Service, replacing the CommonSecurityConfig
  */
 @Configuration
+@EnableWebSecurity
 @EnableMethodSecurity(prePostEnabled = true, securedEnabled = true)
 @RequiredArgsConstructor
-@ConditionalOnProperty(name = "bondhub.security.gateway-auth.enabled", havingValue = "true")
-@ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
-public class CommonSecurityConfig {
+public class SecurityConfig {
 
     private final SecurityContextFilter securityContextFilter;
     private final SecurityProperties securityProperties;
@@ -32,6 +31,8 @@ public class CommonSecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 .csrf(AbstractHttpConfigurer::disable)
+                .formLogin(AbstractHttpConfigurer::disable)
+                .httpBasic(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> {
                     // Permit internal service-to-service communication
@@ -40,6 +41,9 @@ public class CommonSecurityConfig {
                     // Permit base endpoints
                     auth.requestMatchers("/").permitAll();
                     auth.requestMatchers("/error", "/actuator/**").permitAll();
+
+                    // Permit Swagger/OpenAPI documentation endpoints
+                    auth.requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/api/v3/docs/**").permitAll();
 
                     // Permit configured public endpoints
                     if (securityProperties.getPublicEndpoints() != null
@@ -53,7 +57,7 @@ public class CommonSecurityConfig {
                 })
                 .exceptionHandling(exception -> exception
                         .authenticationEntryPoint((request, response, authException) -> {
-                            // Let @RestControllerAdvice handle exceptions, don't return 403
+                            response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Unauthorized");
                         }))
                 .addFilterBefore(securityContextFilter, UsernamePasswordAuthenticationFilter.class);
 

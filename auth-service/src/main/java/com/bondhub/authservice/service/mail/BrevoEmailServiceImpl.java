@@ -29,7 +29,7 @@ public class BrevoEmailServiceImpl implements MailService {
     @Value("${brevo.template.otp-verification-id}")
     Long otpTemplateId;
 
-    @Value("${spring.mail.email}")
+    @Value("${BREVO_MAIL}")
     String fromEmail;
 
     @Value("${brevo.sender.name:BondHub}")
