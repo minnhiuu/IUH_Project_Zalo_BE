@@ -20,12 +20,14 @@ import com.bondhub.userservice.dto.response.UserImageResponse;
 import com.bondhub.userservice.mapper.UserMapper;
 import com.bondhub.userservice.mapper.UserProfileMapper;
 import com.bondhub.userservice.model.User;
+import com.bondhub.userservice.model.elasticsearch.UserIndex;
 import com.bondhub.userservice.repository.UserRepository;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -41,6 +43,7 @@ public class UserServiceImpl implements UserService {
     final SecurityUtil securityUtil;
     final UserProfileMapper userProfileMapper;
     final FileServiceClient fileServiceClient;
+    final UserSearchService userSearchService;
 
     @Value("${aws.s3.bucket.name}")
     String bucketName;
@@ -54,6 +57,10 @@ public class UserServiceImpl implements UserService {
         User user = userMapper.toUser(request);
         user = userRepository.save(user);
         log.info("User created successfully with id: {}", user.getId());
+
+        // Sync to Elasticsearch
+        syncUserToIndex(user, null);
+
         return userMapper.toUserResponse(user);
     }
 
@@ -143,6 +150,10 @@ public class UserServiceImpl implements UserService {
         }
 
         log.info("User profile updated successfully for account: {}", accountId);
+
+        // Sync to Elasticsearch
+        syncUserToIndex(user, accountResponse != null ? accountResponse.phoneNumber() : null);
+
         return getUserProfileResponseWithUrl(user, accountResponse);
     }
 
@@ -191,6 +202,10 @@ public class UserServiceImpl implements UserService {
             }
 
             log.info("Avatar updated successfully for user: {}", accountId);
+
+            // Sync to Elasticsearch
+            syncUserToIndex(user, null);
+
             String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
             return userMapper.toAvatarResponse(user, baseUrl);
         }
@@ -261,5 +276,27 @@ public class UserServiceImpl implements UserService {
         }
         userRepository.deleteById(id);
         log.info("User deleted successfully with id: {}", id);
+
+        // Delete from Elasticsearch
+        try {
+            userSearchService.deleteFromIndex(id);
+        } catch (Exception e) {
+            log.error("Failed to delete user from Elasticsearch index: {}", id, e);
+        }
+    }
+
+    private void syncUserToIndex(User user, String phoneNumber) {
+        try {
+            UserIndex userIndex = UserIndex.builder()
+                    .id(user.getId())
+                    .fullName(user.getFullName())
+                    .phoneNumber(phoneNumber)
+                    .accountId(user.getAccountId())
+                    .avatar(user.getAvatar())
+                    .build();
+            userSearchService.saveToToIndex(userIndex);
+        } catch (Exception e) {
+            log.error("Failed to sync user to Elasticsearch index: {}", user.getId(), e);
+        }
     }
 }
