@@ -4,6 +4,7 @@ import com.bondhub.common.dto.client.userservice.user.response.UserSummaryRespon
 import com.bondhub.userservice.dto.request.AvatarUpdateRequest;
 import com.bondhub.userservice.dto.request.BackgroundUpdateRequest;
 import com.bondhub.userservice.dto.request.UserCreateRequest;
+import com.bondhub.userservice.dto.request.UserIndexRequest;
 import com.bondhub.userservice.dto.request.UserUpdateRequest;
 import com.bondhub.userservice.dto.response.UserImageResponse;
 import com.bondhub.userservice.dto.response.UserProfileResponse;
@@ -32,6 +33,8 @@ public interface UserService {
     UserImageResponse updateBackground(BackgroundUpdateRequest request);
 
     UserImageResponse updateBackgroundPosition(Double y);
+
+    void indexUserToElasticsearch(UserIndexRequest request);
 
     void deleteUser(String id);
 }
