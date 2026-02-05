@@ -1,18 +1,17 @@
-package com.bondhub.userservice.dto.response;
+package com.bondhub.userservice.dto.response.user;
 
 import com.bondhub.userservice.model.enums.Gender;
 import lombok.Builder;
 import java.time.LocalDate;
 
 @Builder
-public record UserProfileResponse(
+public record UserResponse(
     String id,
-    String phoneNumber,
-    String email,
     String fullName,
+    LocalDate dob,
     String bio,
     Gender gender,
-    LocalDate dob,
+    AccountResponse accountInfo,
     String avatar,
     String background,
     Double backgroundY

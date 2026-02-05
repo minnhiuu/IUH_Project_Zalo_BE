@@ -1,13 +1,13 @@
 package com.bondhub.userservice.controller;
 
 import com.bondhub.common.dto.ApiResponse;
-import com.bondhub.userservice.dto.request.UserCreateRequest;
-import com.bondhub.userservice.dto.request.UserUpdateRequest;
-import com.bondhub.userservice.dto.request.AvatarUpdateRequest;
-import com.bondhub.userservice.dto.request.BackgroundUpdateRequest;
-import com.bondhub.userservice.dto.response.UserImageResponse;
-import com.bondhub.userservice.dto.response.UserProfileResponse;
-import com.bondhub.userservice.dto.response.UserResponse;
+import com.bondhub.userservice.dto.request.user.UserCreateRequest;
+import com.bondhub.userservice.dto.request.user.UserUpdateRequest;
+import com.bondhub.userservice.dto.request.user.AvatarUpdateRequest;
+import com.bondhub.userservice.dto.request.user.BackgroundUpdateRequest;
+import com.bondhub.userservice.dto.response.user.UserImageResponse;
+import com.bondhub.userservice.dto.response.user.UserProfileResponse;
+import com.bondhub.userservice.dto.response.user.UserResponse;
 import com.bondhub.userservice.service.user.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;

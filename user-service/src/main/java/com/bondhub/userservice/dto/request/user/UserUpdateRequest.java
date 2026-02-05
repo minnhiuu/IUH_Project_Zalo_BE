@@ -1,4 +1,4 @@
-package com.bondhub.userservice.dto.request;
+package com.bondhub.userservice.dto.request.user;
 
 import com.bondhub.userservice.model.enums.Gender;
 import jakarta.validation.constraints.NotBlank;

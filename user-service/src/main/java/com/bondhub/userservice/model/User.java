@@ -2,13 +2,16 @@ package com.bondhub.userservice.model;
 
 import com.bondhub.common.model.BaseModel;
 import com.bondhub.userservice.model.enums.Gender;
+import com.bondhub.userservice.model.enums.PrivacyLevel;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
+import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.MongoId;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Set;
 
 @Document("users")
@@ -25,6 +28,8 @@ public class User extends BaseModel {
     @MongoId
     String id;
 
+    @Indexed(unique = true)
+    String userId;
     String fullName;
     LocalDate dob;
     String bio;
@@ -36,4 +41,7 @@ public class User extends BaseModel {
     String avatar;
     String background;
     Double backgroundY;
+
+    @Builder.Default
+    UserSetting userSetting = new UserSetting();
 }

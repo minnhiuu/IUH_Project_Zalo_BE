@@ -83,18 +83,15 @@ public class AuthController {
 
         try {
             RegisterInitResponse response = authenticationService.initiateRegistration(request);
-            log.info("🟢 Service response: {}", response);
-            
+
             ApiResponse<RegisterInitResponse> apiResponse = ApiResponse.success(response);
-            log.info("🟢 ApiResponse created: code={}, message={}, data={}", 
-                apiResponse.code(), apiResponse.message(), apiResponse.data());
 
             ResponseEntity<ApiResponse<RegisterInitResponse>> responseEntity = ResponseEntity.ok(apiResponse);
-            log.info("🟢 ResponseEntity created with status: {}", responseEntity.getStatusCode());
-            
+            log.info(" ResponseEntity created with status: {}", responseEntity.getStatusCode());
+
             return responseEntity;
         } catch (Exception e) {
-            log.error("🔴 ERROR in controller: ", e);
+            log.error("ERROR in controller: ", e);
             throw e;
         }
     }

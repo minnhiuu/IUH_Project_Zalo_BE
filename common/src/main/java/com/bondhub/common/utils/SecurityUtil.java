@@ -37,7 +37,7 @@ public class SecurityUtil {
     }
 
     public String getCurrentAccountId() {
-        return getCurrentUserPrincipal().getUserId();
+        return getCurrentUserPrincipal().getAccountId();
     }
 
     public String getCurrentEmail() {

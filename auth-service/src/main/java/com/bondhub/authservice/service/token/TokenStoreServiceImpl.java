@@ -5,14 +5,11 @@ import com.bondhub.authservice.model.redis.BlacklistedAccessToken;
 import com.bondhub.authservice.model.redis.RefreshTokenSession;
 import com.bondhub.authservice.repository.redis.BlacklistedAccessTokenRepository;
 import com.bondhub.authservice.repository.redis.RefreshTokenSessionRepository;
+import com.bondhub.common.utils.HashUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.HexFormat;
 import java.util.List;
 import java.util.Optional;
 
@@ -25,7 +22,7 @@ public class TokenStoreServiceImpl implements TokenStoreService {
     private final RefreshTokenSessionRepository refreshSessionRepository;
 
     @Override
-    public void blacklistAccessToken(String jti, String userId, String phoneNumber, long ttlSeconds, String reason) {
+    public void blacklistAccessToken(String jti, String accountId, String phoneNumber, long ttlSeconds, String reason) {
         if (ttlSeconds <= 0) {
             log.debug("Skipping blacklist for expired token jti={}", jti);
             return;
@@ -33,7 +30,7 @@ public class TokenStoreServiceImpl implements TokenStoreService {
 
         BlacklistedAccessToken blacklisted = BlacklistedAccessToken.builder()
                 .jti(jti)
-                .userId(userId)
+                .userId(accountId)
                 .phoneNumber(phoneNumber)
                 .reason(reason)
                 .blacklistedAt(System.currentTimeMillis())
@@ -41,7 +38,7 @@ public class TokenStoreServiceImpl implements TokenStoreService {
                 .build();
 
         blacklistRepository.save(blacklisted);
-        log.info("Access token blacklisted: jti={}, userId={}, reason={}", jti, userId, reason);
+        log.info("Access token blacklisted: jti={}, accountId={}, reason={}", jti, accountId, reason);
     }
 
     @Override
@@ -52,7 +49,7 @@ public class TokenStoreServiceImpl implements TokenStoreService {
     @Override
     public void createRefreshSession(
             String sessionId,
-            String userId,
+            String accountId,
             String phoneNumber,
             String deviceId,
             DeviceType deviceType,
@@ -61,7 +58,7 @@ public class TokenStoreServiceImpl implements TokenStoreService {
             String ipAddress,
             long ttlSeconds) {
         List<RefreshTokenSession> oldSessions = refreshSessionRepository
-                .findByUserIdAndDeviceType(userId, deviceType);
+                .findByAccountIdAndDeviceType(accountId, deviceType);
 
         for (RefreshTokenSession oldSession : oldSessions) {
             if (!deviceId.equals(oldSession.getDeviceId())) {
@@ -80,13 +77,11 @@ public class TokenStoreServiceImpl implements TokenStoreService {
 
         RefreshTokenSession session = RefreshTokenSession.builder()
                 .sessionId(sessionId)
-                .userId(userId)
-                .phoneNumber(phoneNumber)
+                .accountId(accountId)
                 .deviceId(deviceId)
                 .deviceType(deviceType)
                 .refreshTokenHash(hashSha256(refreshToken))
                 .userAgentHash(userAgent != null ? hashSha256(userAgent) : null)
-                .ipHash(ipAddress != null ? hashSha256(ipAddress) : null)
                 .issuedAt(now)
                 .expiresAt(expiresAt)
                 .revoked(false)
@@ -94,8 +89,8 @@ public class TokenStoreServiceImpl implements TokenStoreService {
                 .build();
 
         refreshSessionRepository.save(session);
-        log.info("Refresh session created: sessionId={}, userId={}, deviceType={}, deviceId={}",
-                sessionId, userId, deviceType, deviceId);
+        log.info("Refresh session created: sessionId={}, accountId={}, deviceType={}, deviceId={}",
+                sessionId, accountId, deviceType, deviceId);
     }
 
     @Override
@@ -185,19 +180,19 @@ public class TokenStoreServiceImpl implements TokenStoreService {
         refreshSessionRepository.findById(sessionId).ifPresent(session -> {
             session.setRevoked(true);
             refreshSessionRepository.save(session);
-            log.info("Refresh session revoked: sessionId={}, userId={}", sessionId, session.getUserId());
+            log.info("Refresh session revoked: sessionId={}, accountId={}", sessionId, session.getAccountId());
         });
     }
 
     @Override
-    public int revokeAllUserRefreshSessions(String userId) {
-        List<RefreshTokenSession> sessions = refreshSessionRepository.findByUserId(userId);
+    public int revokeAllUserRefreshSessions(String accountId) {
+        List<RefreshTokenSession> sessions = refreshSessionRepository.findByAccountId(accountId);
         int count = sessions.size();
 
         if (count > 0) {
             sessions.forEach(session -> session.setRevoked(true));
             refreshSessionRepository.saveAll(sessions);
-            log.info("Revoked {} refresh sessions for userId={}", count, userId);
+            log.info("Revoked {} refresh sessions for accountId={}", count, accountId);
         }
 
         return count;
@@ -205,15 +200,6 @@ public class TokenStoreServiceImpl implements TokenStoreService {
 
     @Override
     public String hashSha256(String input) {
-        if (input == null) {
-            return null;
-        }
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(input.getBytes(StandardCharsets.UTF_8));
-            return HexFormat.of().formatHex(hash);
-        } catch (NoSuchAlgorithmException e) {
-            throw new RuntimeException("SHA-256 algorithm not available", e);
-        }
+        return HashUtil.hashSha256(input);
     }
 }

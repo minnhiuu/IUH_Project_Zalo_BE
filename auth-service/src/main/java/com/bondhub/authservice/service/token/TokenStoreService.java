@@ -11,12 +11,12 @@ public interface TokenStoreService {
          * Blacklist an access token (JTI)
          *
          * @param jti         JWT ID
-         * @param userId      User ID associated with the token
+         * @param accountId   Account ID associated with the token
          * @param phoneNumber User phone number (for tracking)
          * @param ttlSeconds  Time to live in seconds (remaining validity of the token)
          * @param reason      Reason for blacklisting (e.g., "Logout", "Security Alert")
          */
-        void blacklistAccessToken(String jti, String userId, String phoneNumber, long ttlSeconds, String reason);
+        void blacklistAccessToken(String jti, String accountId, String phoneNumber, long ttlSeconds, String reason);
 
         /**
          * Check if an access token is blacklisted
@@ -30,7 +30,7 @@ public interface TokenStoreService {
          * Create a new refresh token session
          *
          * @param sessionId    Unique session ID
-         * @param userId       User ID
+         * @param accountId    Account ID
          * @param phoneNumber  User phone number
          * @param deviceId     Device ID (from client)
          * @param deviceType   Device type (WEB, MOBILE, etc.)
@@ -41,7 +41,7 @@ public interface TokenStoreService {
          */
         void createRefreshSession(
                         String sessionId,
-                        String userId,
+                        String accountId,
                         String phoneNumber,
                         String deviceId,
                         DeviceType deviceType,
@@ -94,10 +94,10 @@ public interface TokenStoreService {
         /**
          * Revoke all refresh sessions for a user (e.g., "Logout all devices")
          *
-         * @param userId User ID
+         * @param accountId Account ID
          * @return Number of sessions revoked
          */
-        int revokeAllUserRefreshSessions(String userId);
+        int revokeAllUserRefreshSessions(String accountId);
 
         /**
          * Hash a string using SHA-256
