@@ -33,5 +33,7 @@ public interface UserService {
 
     UserImageResponse updateBackgroundPosition(Double y);
 
+    void indexUserToElasticsearch(String userId, String phoneNumber);
+
     void deleteUser(String id);
 }

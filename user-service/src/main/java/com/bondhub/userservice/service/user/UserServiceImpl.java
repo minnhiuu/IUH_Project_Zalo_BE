@@ -285,6 +285,14 @@ public class UserServiceImpl implements UserService {
         }
     }
 
+    @Override
+    public void indexUserToElasticsearch(String userId, String phoneNumber) {
+        log.info("Indexing user to Elasticsearch: userId={}, phoneNumber={}", userId, phoneNumber);
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+        syncUserToIndex(user, phoneNumber);
+    }
+
     private void syncUserToIndex(User user, String phoneNumber) {
         try {
             UserIndex userIndex = UserIndex.builder()

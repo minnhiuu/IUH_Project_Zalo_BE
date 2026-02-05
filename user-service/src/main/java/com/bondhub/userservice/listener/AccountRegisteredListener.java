@@ -55,6 +55,9 @@ public class AccountRegisteredListener {
             log.info("✅ User created successfully for accountId: {}, userId: {}", 
                     event.getAccountId(), userResponse.id());
 
+            // Index to Elasticsearch with phoneNumber from event
+            userService.indexUserToElasticsearch(userResponse.id(), event.getPhoneNumber());
+
             // Publish USER_CREATED event back to complete the saga
             UserCreatedEvent userCreatedEvent = UserCreatedEvent.builder()
                     .userId(userResponse.id())
