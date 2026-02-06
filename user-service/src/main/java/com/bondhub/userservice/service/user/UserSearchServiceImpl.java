@@ -5,17 +5,23 @@ import com.bondhub.common.dto.client.userservice.user.response.UserSummaryRespon
 import com.bondhub.common.enums.Role;
 import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.userservice.mapper.UserMapper;
+import com.bondhub.userservice.model.User;
 import com.bondhub.userservice.model.elasticsearch.UserIndex;
 import com.bondhub.userservice.repository.UserSearchRepository;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import com.bondhub.common.dto.SearchRequest;
 import com.bondhub.common.utils.EsQueryBuilder;
 import org.springframework.data.elasticsearch.client.elc.NativeQuery;
 import org.springframework.data.elasticsearch.core.*;
+import com.bondhub.common.exception.AppException;
+import com.bondhub.common.exception.ErrorCode;
+import com.bondhub.userservice.dto.request.UserIndexRequest;
 import com.bondhub.userservice.repository.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -83,6 +89,35 @@ public class UserSearchServiceImpl implements UserSearchService {
     }
 
     @Override
+    public void indexUserToElasticsearch(UserIndexRequest request) {
+        log.info("Indexing user to Elasticsearch: userId={}, phoneNumber={}, role={}",
+                request.userId(), request.phoneNumber(), request.role());
+        User user = userRepository.findById(request.userId())
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+        syncUserToIndex(user, request.phoneNumber(), request.role());
+    }
+
+    private void syncUserToIndex(User user, String phoneNumber, Role role) {
+        try {
+            UserIndex userIndex = userMapper.toUserIndex(user);
+
+            if (phoneNumber != null) {
+                userIndex.setPhoneNumber(phoneNumber);
+            }
+
+            if (role != null) {
+                userIndex.setRole(role.name());
+            } else if (userIndex.getRole() == null) {
+                userIndex.setRole(Role.USER.name());
+            }
+
+            saveToToIndex(userIndex);
+        } catch (Exception e) {
+            log.error("Failed to sync user to Elasticsearch index: {}", user.getId(), e);
+        }
+    }
+
+    @Override
     @Transactional
     public long reIndexAll() {
         log.info("Starting full search re-index process for Users...");
@@ -109,19 +144,33 @@ public class UserSearchServiceImpl implements UserSearchService {
 
     @Override
     public long syncAllFromMongo() {
-        log.info("Syncing all users from MongoDB to Elasticsearch...");
+        log.info("Syncing all users from MongoDB to Elasticsearch using batch processing...");
+
+        long totalSynced = 0;
+        int pageSize = 500;
+        int pageNumber = 0;
         
-        List<UserIndex> userIndices = userRepository.findAll().stream()
-                .map(userMapper::toUserIndex)
-                .collect(Collectors.toList());
-        
-        if (!userIndices.isEmpty()) {
-            userSearchRepository.saveAll(userIndices);
-            log.info("Successfully synced {} users.", userIndices.size());
-            return userIndices.size();
-        } else {
-            log.info("No users found in MongoDB to sync.");
-            return 0;
-        }
+        Page<User> userPage;
+
+        do {
+            userPage = userRepository.findAll(PageRequest.of(pageNumber, pageSize));
+
+            List<UserIndex> batch = userPage.getContent().stream()
+                    .map(userMapper::toUserIndex)
+                    .collect(Collectors.toList());
+
+            if (!batch.isEmpty()) {
+                userSearchRepository.saveAll(batch);
+                totalSynced += batch.size();
+                log.info("Synced batch {}: {} users. Total so far: {}", pageNumber + 1, batch.size(), totalSynced);
+            }
+
+            pageNumber++;
+        } while (userPage.hasNext());
+
+        log.info("Full sync completed. Total users synced: {}", totalSynced);
+        return totalSynced;
     }
+
+
 }

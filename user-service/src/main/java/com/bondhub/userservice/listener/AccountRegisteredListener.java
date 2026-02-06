@@ -9,6 +9,7 @@ import com.bondhub.common.event.user.UserCreatedEvent;
 import com.bondhub.userservice.dto.request.UserCreateRequest;
 import com.bondhub.userservice.dto.request.UserIndexRequest;
 import com.bondhub.userservice.dto.response.UserResponse;
+import com.bondhub.userservice.service.user.UserSearchService;
 import com.bondhub.userservice.service.user.UserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -27,6 +28,7 @@ import java.time.Instant;
 public class AccountRegisteredListener {
 
     private final UserService userService;
+    private final UserSearchService userSearchService;
     private final KafkaTopicProperties kafkaTopicProperties;
     private final OutboxEventPublisher outboxEventPublisher;
 
@@ -63,7 +65,7 @@ public class AccountRegisteredListener {
                     .phoneNumber(event.getPhoneNumber())
                     .role(Role.USER)
                     .build();
-            userService.indexUserToElasticsearch(indexRequest);
+            userSearchService.indexUserToElasticsearch(indexRequest);
 
             // Publish USER_CREATED event back to complete the saga
             UserCreatedEvent userCreatedEvent = UserCreatedEvent.builder()

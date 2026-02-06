@@ -22,7 +22,6 @@ import com.bondhub.userservice.dto.response.UserImageResponse;
 import com.bondhub.userservice.mapper.UserMapper;
 import com.bondhub.userservice.mapper.UserProfileMapper;
 import com.bondhub.userservice.model.User;
-import com.bondhub.userservice.model.elasticsearch.UserIndex;
 import com.bondhub.userservice.repository.UserRepository;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
@@ -60,7 +59,9 @@ public class UserServiceImpl implements UserService {
         user = userRepository.save(user);
         log.info("User created successfully with id: {}", user.getId());
 
-        syncUserToIndex(user, null, null);
+        userSearchService.indexUserToElasticsearch(UserIndexRequest.builder()
+                .userId(user.getId())
+                .build());
 
         return userMapper.toUserResponse(user);
     }
@@ -152,7 +153,10 @@ public class UserServiceImpl implements UserService {
 
         log.info("User profile updated successfully for account: {}", accountId);
 
-        syncUserToIndex(user, accountResponse != null ? accountResponse.phoneNumber() : null, null);
+        userSearchService.indexUserToElasticsearch(UserIndexRequest.builder()
+                .userId(user.getId())
+                .phoneNumber(accountResponse != null ? accountResponse.phoneNumber() : null)
+                .build());
 
         return getUserProfileResponseWithUrl(user, accountResponse);
     }
@@ -203,7 +207,9 @@ public class UserServiceImpl implements UserService {
 
             log.info("Avatar updated successfully for user: {}", accountId);
 
-            syncUserToIndex(user, null, null);
+            userSearchService.indexUserToElasticsearch(UserIndexRequest.builder()
+                    .userId(user.getId())
+                    .build());
 
             String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
             return userMapper.toAvatarResponse(user, baseUrl);
@@ -284,29 +290,4 @@ public class UserServiceImpl implements UserService {
         }
     }
 
-    @Override
-    public void indexUserToElasticsearch(UserIndexRequest request) {
-        log.info("Indexing user to Elasticsearch: userId={}, phoneNumber={}, role={}", 
-                request.userId(), request.phoneNumber(), request.role());
-        User user = userRepository.findById(request.userId())
-                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
-        syncUserToIndex(user, request.phoneNumber(), request.role());
-    }
-
-    private void syncUserToIndex(User user, String phoneNumber, Role role) {
-        try {
-            UserIndex userIndex = UserIndex.builder()
-                    .id(user.getId())
-                    .fullName(user.getFullName())
-                    .phoneNumber(phoneNumber)
-                    .accountId(user.getAccountId())
-                    .role(role != null ? role.name() : Role.USER.name())
-                    .avatar(user.getAvatar())
-                    .createdAt(user.getCreatedAt())
-                    .build();
-            userSearchService.saveToToIndex(userIndex);
-        } catch (Exception e) {
-            log.error("Failed to sync user to Elasticsearch index: {}", user.getId(), e);
-        }
-    }
 }

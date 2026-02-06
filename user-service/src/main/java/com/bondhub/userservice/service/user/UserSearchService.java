@@ -2,6 +2,7 @@ package com.bondhub.userservice.service.user;
 
 import com.bondhub.common.dto.PageResponse;
 import com.bondhub.common.dto.client.userservice.user.response.UserSummaryResponse;
+import com.bondhub.userservice.dto.request.UserIndexRequest;
 import com.bondhub.userservice.model.elasticsearch.UserIndex;
 import org.springframework.data.domain.Pageable;
 
@@ -11,6 +12,7 @@ public interface UserSearchService {
     PageResponse<List<UserSummaryResponse>> searchUsers(String keyword, Pageable pageable);
     void saveToToIndex(UserIndex userIndex);
     void deleteFromIndex(String userId);
+    void indexUserToElasticsearch(UserIndexRequest request);
     long reIndexAll();
     void reCreateIndex();
     long syncAllFromMongo();
