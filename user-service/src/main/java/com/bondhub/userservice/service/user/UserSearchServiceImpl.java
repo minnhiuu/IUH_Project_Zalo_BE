@@ -11,19 +11,17 @@ import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import com.bondhub.common.dto.SearchRequest;
 import com.bondhub.common.utils.EsQueryBuilder;
 import org.springframework.data.elasticsearch.client.elc.NativeQuery;
-import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
-import org.springframework.data.elasticsearch.core.SearchHitSupport;
-import org.springframework.data.elasticsearch.core.SearchPage;
-import org.springframework.data.elasticsearch.core.SearchHits;
+import org.springframework.data.elasticsearch.core.*;
+import com.bondhub.userservice.repository.UserRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -34,6 +32,7 @@ public class UserSearchServiceImpl implements UserSearchService {
     ElasticsearchOperations elasticsearchOperations;
     UserMapper userMapper;
     UserSearchRepository userSearchRepository;
+    UserRepository userRepository;
     SecurityUtil securityUtil;
 
     @Override
@@ -81,5 +80,48 @@ public class UserSearchServiceImpl implements UserSearchService {
     public void deleteFromIndex(String userId) {
         log.info("Deleting user from Elasticsearch index: {}", userId);
         userSearchRepository.deleteById(userId);
+    }
+
+    @Override
+    @Transactional
+    public long reIndexAll() {
+        log.info("Starting full search re-index process for Users...");
+        reCreateIndex();
+        long count = syncAllFromMongo();
+        log.info("Full search re-index process completed successfully. Total: {}", count);
+        return count;
+    }
+
+    @Override
+    public void reCreateIndex() {
+        log.info("Re-creating Elasticsearch index for Users...");
+        IndexOperations indexOps = elasticsearchOperations.indexOps(UserIndex.class);
+        
+        if (indexOps.exists()) {
+            indexOps.delete();
+            log.info("Index deleted.");
+        }
+        
+        indexOps.create();
+        indexOps.putMapping(indexOps.createMapping(UserIndex.class));
+        log.info("Index created with latest mappings.");
+    }
+
+    @Override
+    public long syncAllFromMongo() {
+        log.info("Syncing all users from MongoDB to Elasticsearch...");
+        
+        List<UserIndex> userIndices = userRepository.findAll().stream()
+                .map(userMapper::toUserIndex)
+                .collect(Collectors.toList());
+        
+        if (!userIndices.isEmpty()) {
+            userSearchRepository.saveAll(userIndices);
+            log.info("Successfully synced {} users.", userIndices.size());
+            return userIndices.size();
+        } else {
+            log.info("No users found in MongoDB to sync.");
+            return 0;
+        }
     }
 }

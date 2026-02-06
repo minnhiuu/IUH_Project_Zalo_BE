@@ -29,5 +29,7 @@ public interface UserMapper {
     @Mapping(target = "y", source = "user.backgroundY")
     UserImageResponse toBackgroundResponse(User user, String baseUrl);
 
+    UserIndex toUserIndex(User user);
+
     void updateUserFromRequest(@MappingTarget User user, UserUpdateRequest request);
 }

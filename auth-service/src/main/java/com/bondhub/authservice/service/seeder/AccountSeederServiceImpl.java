@@ -149,9 +149,8 @@ public class AccountSeederServiceImpl implements AccountSeederService {
         result.put("created", created);
         result.put("skipped", skipped);
         result.put("total", count);
-        result.put("message", String.format("Seed completed! Created: %d, Skipped: %d (including 1 admin)", created, skipped));
+        result.put("message", String.format("Seed completed! Created: %d, Skipped: %d", created, skipped));
         result.put("fuzzy_test_info", "100+ diverse Vietnamese names for comprehensive search testing");
-        result.put("admin_credentials", "Email: admin@bondhub.com | Password: Admin@123");
         result.put("test_accounts_password", "Test@123");
         result.put("next_start_index", startIndex + count);
 

@@ -11,4 +11,7 @@ public interface UserSearchService {
     PageResponse<List<UserSummaryResponse>> searchUsers(String keyword, Pageable pageable);
     void saveToToIndex(UserIndex userIndex);
     void deleteFromIndex(String userId);
+    long reIndexAll();
+    void reCreateIndex();
+    long syncAllFromMongo();
 }
