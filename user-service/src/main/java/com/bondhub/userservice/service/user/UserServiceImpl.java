@@ -60,6 +60,8 @@ public class UserServiceImpl implements UserService {
         user = userRepository.save(user);
         log.info("User created successfully with id: {}", user.getId());
 
+        syncUserToIndex(user, null, null);
+
         return userMapper.toUserResponse(user);
     }
 
@@ -150,6 +152,8 @@ public class UserServiceImpl implements UserService {
 
         log.info("User profile updated successfully for account: {}", accountId);
 
+        syncUserToIndex(user, accountResponse != null ? accountResponse.phoneNumber() : null, null);
+
         return getUserProfileResponseWithUrl(user, accountResponse);
     }
 
@@ -198,6 +202,8 @@ public class UserServiceImpl implements UserService {
             }
 
             log.info("Avatar updated successfully for user: {}", accountId);
+
+            syncUserToIndex(user, null, null);
 
             String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
             return userMapper.toAvatarResponse(user, baseUrl);
