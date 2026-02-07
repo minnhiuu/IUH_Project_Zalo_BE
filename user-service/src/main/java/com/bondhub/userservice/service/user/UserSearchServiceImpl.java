@@ -12,7 +12,6 @@ import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import com.bondhub.common.dto.SearchRequest;
@@ -23,10 +22,14 @@ import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
 import com.bondhub.userservice.dto.request.UserIndexRequest;
 import com.bondhub.userservice.repository.UserRepository;
+import org.springframework.data.elasticsearch.core.query.IndexQuery;
+import org.springframework.data.elasticsearch.core.query.IndexQueryBuilder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -35,11 +38,17 @@ import java.util.stream.Collectors;
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public class UserSearchServiceImpl implements UserSearchService {
 
+    private static final int BATCH_SIZE = 500;
+    private static final int MAX_RETRY = 3;
+    private static final int PARALLELISM = Math.max(2, Runtime.getRuntime().availableProcessors());
+
     ElasticsearchOperations elasticsearchOperations;
     UserMapper userMapper;
     UserSearchRepository userSearchRepository;
     UserRepository userRepository;
     SecurityUtil securityUtil;
+    
+    ExecutorService indexExecutor = Executors.newFixedThreadPool(PARALLELISM);
 
     @Override
     public PageResponse<List<UserSummaryResponse>> searchUsers(String keyword, Pageable pageable) {
@@ -144,33 +153,92 @@ public class UserSearchServiceImpl implements UserSearchService {
 
     @Override
     public long syncAllFromMongo() {
-        log.info("Syncing all users from MongoDB to Elasticsearch using batch processing...");
+        log.info("Starting optimized full sync MongoDB -> Elasticsearch (parallel cursor-based)");
 
         long totalSynced = 0;
-        int pageSize = 500;
-        int pageNumber = 0;
+        String lastId = null;
+        List<CompletableFuture<Void>> futures = new ArrayList<>();
         
-        Page<User> userPage;
+        while (true) {
+            List<User> users;
+            if (lastId == null) {
+                users = userRepository.findAllByOrderByIdAsc(PageRequest.of(0, BATCH_SIZE));
+            } else {
+                users = userRepository.findByIdGreaterThanOrderByIdAsc(lastId, PageRequest.of(0, BATCH_SIZE));
+            }
 
-        do {
-            userPage = userRepository.findAll(PageRequest.of(pageNumber, pageSize));
+            if (users.isEmpty()) {
+                break;
+            }
 
-            List<UserIndex> batch = userPage.getContent().stream()
+            List<UserIndex> batch = users.stream()
                     .map(userMapper::toUserIndex)
                     .collect(Collectors.toList());
 
-            if (!batch.isEmpty()) {
-                userSearchRepository.saveAll(batch);
-                totalSynced += batch.size();
-                log.info("Synced batch {}: {} users. Total so far: {}", pageNumber + 1, batch.size(), totalSynced);
+            CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
+                boolean success = bulkIndexWithRetry(batch);
+                if (!success) {
+                    log.error("Failed to index batch ending with ID: {}", users.get(users.size() - 1).getId());
+                }
+            }, indexExecutor);
+            
+            futures.add(future);
+            
+            totalSynced += users.size();
+            lastId = users.getLast().getId();
+            
+            log.info("Queued batch: size={}, totalProcessed={}", users.size(), totalSynced);
+
+            if (futures.size() >= PARALLELISM * 2) {
+                waitForSome(futures);
             }
+        }
 
-            pageNumber++;
-        } while (userPage.hasNext());
-
-        log.info("Full sync completed. Total users synced: {}", totalSynced);
+        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+        log.info("Parallel full sync completed. Total users processed: {}", totalSynced);
+        
         return totalSynced;
     }
 
+    private void waitForSome(List<CompletableFuture<Void>> futures) {
+        futures.removeIf(CompletableFuture::isDone);
+        if (futures.size() >= PARALLELISM * 2) {
+            try {
+                futures.getFirst().get(1, TimeUnit.MINUTES);
+            } catch (Exception e) {
+                log.warn("Error while waiting for indexing task in back-pressure control", e);
+            }
+        }
+    }
 
+    private boolean bulkIndexWithRetry(List<UserIndex> batch) {
+        int attempt = 0;
+        while (attempt < MAX_RETRY) {
+            try {
+                bulkIndex(batch);
+                return true;
+            } catch (Exception e) {
+                attempt++;
+                log.warn("Bulk index failed (attempt {}/{}). Retrying...", attempt, MAX_RETRY, e);
+                try { 
+                    TimeUnit.MILLISECONDS.sleep(200L * attempt); 
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    return false;
+                }
+            }
+        }
+        return false;
+    }
+
+    private void bulkIndex(List<UserIndex> users) {
+        List<IndexQuery> queries = users.stream()
+                .map(user -> new IndexQueryBuilder()
+                        .withId(user.getId())
+                        .withObject(user)
+                        .build())
+                .collect(Collectors.toList());
+
+        elasticsearchOperations.bulkIndex(queries, elasticsearchOperations.getIndexCoordinatesFor(UserIndex.class));
+    }
 }
