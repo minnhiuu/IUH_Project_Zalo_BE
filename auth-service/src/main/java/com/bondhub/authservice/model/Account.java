@@ -6,6 +6,7 @@ import com.bondhub.common.enums.Role;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
 import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.mapping.FieldType;
 import org.springframework.data.mongodb.core.mapping.MongoId;
 
 @Document("accounts")
@@ -19,7 +20,7 @@ import org.springframework.data.mongodb.core.mapping.MongoId;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class Account extends BaseModel {
     @EqualsAndHashCode.Include
-    @MongoId
+    @MongoId(FieldType.OBJECT_ID)
     String id;
 
     String email;

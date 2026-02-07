@@ -1,5 +1,7 @@
 package com.bondhub.userservice.repository;
 
+import org.bson.types.ObjectId;
+
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
 import com.bondhub.userservice.model.UserSetting;
@@ -13,8 +15,10 @@ import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.stereotype.Repository;
 
 /**
- * Custom repository for UserSetting operations using MongoTemplate with dot notation.
- * This approach prevents loading the entire User document into memory when updating settings.
+ * Custom repository for UserSetting operations using MongoTemplate with dot
+ * notation.
+ * This approach prevents loading the entire User document into memory when
+ * updating settings.
  */
 @Repository
 @RequiredArgsConstructor
@@ -30,27 +34,28 @@ public class UserSettingRepository {
      */
     public UserSetting getUserSettingByUserId(String userId) {
         log.info("Fetching UserSetting for userId: {}", userId);
-        Query query = new Query(Criteria.where("userId").is(userId));
+        Query query = new Query(Criteria.where("_id").is(new ObjectId(userId)));
         query.fields().include(USER_SETTING_FIELD);
-        
+
         var user = mongoTemplate.findOne(query, org.bson.Document.class, USER_COLLECTION);
         if (user == null) {
             log.error("User not found with userId: {}", userId);
             throw new AppException(ErrorCode.USER_NOT_FOUND);
         }
-        
+
         log.debug("Retrieved document: {}", user);
-        
+
         Object settingsObj = user.get(USER_SETTING_FIELD);
         if (settingsObj == null) {
             log.warn("UserSetting field is null for userId: {}, returning default settings", userId);
             return new UserSetting();
         }
-        
+
         log.debug("UserSetting object type: {}, value: {}", settingsObj.getClass().getName(), settingsObj);
-        
+
         try {
-            UserSetting userSetting = mongoTemplate.getConverter().read(UserSetting.class, (org.bson.Document) settingsObj);
+            UserSetting userSetting = mongoTemplate.getConverter().read(UserSetting.class,
+                    (org.bson.Document) settingsObj);
             log.info("Successfully converted UserSetting for userId: {}", userId);
             return userSetting;
         } catch (Exception e) {
@@ -64,9 +69,9 @@ public class UserSettingRepository {
      */
     public boolean updateUserSetting(String userId, UserSetting userSetting) {
         log.info("Updating entire UserSetting for userId: {}", userId);
-        Query query = new Query(Criteria.where("userId").is(userId));
+        Query query = new Query(Criteria.where("_id").is(new ObjectId(userId)));
         Update update = new Update().set(USER_SETTING_FIELD, userSetting);
-        
+
         UpdateResult result = mongoTemplate.updateFirst(query, update, USER_COLLECTION);
         return result.getModifiedCount() > 0;
     }
@@ -132,9 +137,9 @@ public class UserSettingRepository {
      */
     private boolean updateNestedSetting(String userId, String settingName, Object settingValue) {
         log.info("Updating {} for userId: {}", settingName, userId);
-        Query query = new Query(Criteria.where("userId").is(userId));
+        Query query = new Query(Criteria.where("_id").is(new ObjectId(userId)));
         Update update = new Update().set(USER_SETTING_FIELD + "." + settingName, settingValue);
-        
+
         UpdateResult result = mongoTemplate.updateFirst(query, update, USER_COLLECTION);
         if (result.getMatchedCount() == 0) {
             throw new AppException(ErrorCode.USER_NOT_FOUND);
@@ -147,9 +152,9 @@ public class UserSettingRepository {
      */
     public boolean updateSpecificField(String userId, String fieldPath, Object value) {
         log.info("Updating field {} for userId: {}", fieldPath, userId);
-        Query query = new Query(Criteria.where("userId").is(userId));
+        Query query = new Query(Criteria.where("_id").is(new ObjectId(userId)));
         Update update = new Update().set(USER_SETTING_FIELD + "." + fieldPath, value);
-        
+
         UpdateResult result = mongoTemplate.updateFirst(query, update, USER_COLLECTION);
         if (result.getMatchedCount() == 0) {
             throw new AppException(ErrorCode.USER_NOT_FOUND);
@@ -162,24 +167,24 @@ public class UserSettingRepository {
      */
     public <T> T getNestedSetting(String userId, String settingName, Class<T> settingClass) {
         log.info("Fetching {} for userId: {}", settingName, userId);
-        Query query = new Query(Criteria.where("userId").is(userId));
+        Query query = new Query(Criteria.where("_id").is(new ObjectId(userId)));
         query.fields().include(USER_SETTING_FIELD + "." + settingName);
-        
+
         var user = mongoTemplate.findOne(query, org.bson.Document.class, USER_COLLECTION);
         if (user == null) {
             throw new AppException(ErrorCode.USER_NOT_FOUND);
         }
-        
+
         org.bson.Document userSetting = (org.bson.Document) user.get(USER_SETTING_FIELD);
         if (userSetting == null) {
             return null;
         }
-        
+
         Object settingObj = userSetting.get(settingName);
         if (settingObj == null) {
             return null;
         }
-        
+
         return mongoTemplate.getConverter().read(settingClass, (org.bson.Document) settingObj);
     }
 

@@ -6,6 +6,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
 import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.mapping.FieldType;
 import org.springframework.data.mongodb.core.mapping.MongoId;
 import org.springframework.data.redis.core.index.Indexed;
 
@@ -21,7 +22,8 @@ import java.time.LocalDateTime;
 @EqualsAndHashCode(onlyExplicitlyIncluded = true, callSuper = false)
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class Device extends BaseModel {
-    @MongoId
+    @EqualsAndHashCode.Include
+    @MongoId(FieldType.OBJECT_ID)
     String id;
 
     @Indexed

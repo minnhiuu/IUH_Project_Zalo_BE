@@ -50,16 +50,16 @@ public class UserSettingServiceImpl implements UserSettingService {
     public UserSettingResponse updateGeneralSettings(GeneralSettingsUpdateRequest request) {
         String userId = getCurrentUserId();
         log.info("Updating general settings for userId: {}", userId);
-        
+
         UserSetting.GeneralSettings settings = new UserSetting.GeneralSettings();
         settings.setShowAllFriends(request.showAllFriends());
         settings.setLanguageEn(request.languageEn());
-        
+
         boolean updated = userSettingRepository.updateGeneralSettings(userId, settings);
         if (!updated) {
             log.warn("No changes were made to general settings for userId: {}", userId);
         }
-        
+
         return getMySettings();
     }
 
@@ -68,10 +68,10 @@ public class UserSettingServiceImpl implements UserSettingService {
     public UserSettingResponse updateSecuritySettings(SecuritySettingsUpdateRequest request) {
         String userId = getCurrentUserId();
         log.info("Updating security settings for userId: {}", userId);
-        
+
         UserSetting.SecuritySettings settings = new UserSetting.SecuritySettings();
         settings.setTwoFactorEnabled(request.twoFactorEnabled());
-        
+
         userSettingRepository.updateSecuritySettings(userId, settings);
         return getMySettings();
     }
@@ -81,7 +81,7 @@ public class UserSettingServiceImpl implements UserSettingService {
     public UserSettingResponse updatePrivacySettings(PrivacySettingsUpdateRequest request) {
         String userId = getCurrentUserId();
         log.info("Updating privacy settings for userId: {}", userId);
-        
+
         UserSetting.PrivacySettings settings = new UserSetting.PrivacySettings();
         settings.setShowDob(request.showDob());
         settings.setShowActiveStatus(request.showActiveStatus());
@@ -91,7 +91,7 @@ public class UserSettingServiceImpl implements UserSettingService {
         settings.setShowPosts(request.showPosts());
         settings.setShowPostAfter(request.showPostAfter());
         settings.setAllowSearchOnPhoneNumber(request.allowSearchOnPhoneNumber());
-        
+
         userSettingRepository.updatePrivacySettings(userId, settings);
         return getMySettings();
     }
@@ -101,11 +101,11 @@ public class UserSettingServiceImpl implements UserSettingService {
     public UserSettingResponse updateSyncSettings(SyncSettingsUpdateRequest request) {
         String userId = getCurrentUserId();
         log.info("Updating sync settings for userId: {}", userId);
-        
+
         UserSetting.SyncSettings settings = new UserSetting.SyncSettings();
         settings.setSyncSuggestion(request.syncSuggestion());
         settings.setShowSyncProgress(request.showSyncProgress());
-        
+
         userSettingRepository.updateSyncSettings(userId, settings);
         return getMySettings();
     }
@@ -115,10 +115,10 @@ public class UserSettingServiceImpl implements UserSettingService {
     public UserSettingResponse updateAppearanceSettings(AppearanceSettingsUpdateRequest request) {
         String userId = getCurrentUserId();
         log.info("Updating appearance settings for userId: {}", userId);
-        
+
         UserSetting.AppearanceSettings settings = new UserSetting.AppearanceSettings();
         settings.setTheme(request.theme());
-        
+
         userSettingRepository.updateAppearanceSettings(userId, settings);
         return getMySettings();
     }
@@ -128,12 +128,12 @@ public class UserSettingServiceImpl implements UserSettingService {
     public UserSettingResponse updateMessageSettings(MessageSettingsUpdateRequest request) {
         String userId = getCurrentUserId();
         log.info("Updating message settings for userId: {}", userId);
-        
+
         UserSetting.MessageSettings settings = new UserSetting.MessageSettings();
         settings.setQuickResponseEnable(request.quickResponseEnable());
         settings.setSeparatePriorityAndOtherEnable(request.separatePriorityAndOtherEnable());
         settings.setShowTypingStatus(request.showTypingStatus());
-        
+
         userSettingRepository.updateMessageSettings(userId, settings);
         return getMySettings();
     }
@@ -143,7 +143,7 @@ public class UserSettingServiceImpl implements UserSettingService {
     public UserSettingResponse updateNotificationSettings(NotificationSettingsUpdateRequest request) {
         String userId = getCurrentUserId();
         log.info("Updating notification settings for userId: {}", userId);
-        
+
         UserSetting.NotificationSettings settings = new UserSetting.NotificationSettings();
         settings.setNotifyNewMessageFromDirect(request.notifyNewMessageFromDirect());
         settings.setPreviewNewMessageFromDirect(request.previewNewMessageFromDirect());
@@ -154,7 +154,7 @@ public class UserSettingServiceImpl implements UserSettingService {
         settings.setNotifyNewMessage(request.notifyNewMessage());
         settings.setShakeOnNewMessage(request.shakeOnNewMessage());
         settings.setPreviewNewMessage(request.previewNewMessage());
-        
+
         userSettingRepository.updateNotificationSettings(userId, settings);
         return getMySettings();
     }
@@ -164,10 +164,10 @@ public class UserSettingServiceImpl implements UserSettingService {
     public UserSettingResponse updateUtilitiesSettings(UtilitiesSettingsUpdateRequest request) {
         String userId = getCurrentUserId();
         log.info("Updating utilities settings for userId: {}", userId);
-        
+
         UserSetting.UtilitiesSettings settings = new UserSetting.UtilitiesSettings();
         settings.setStickerSuggestion(request.stickerSuggestion());
-        
+
         userSettingRepository.updateUtilitiesSettings(userId, settings);
         return getMySettings();
     }
@@ -190,7 +190,8 @@ public class UserSettingServiceImpl implements UserSettingService {
     public UserSetting.NotificationSettings getNotificationSettings() {
         String userId = getCurrentUserId();
         log.info("Fetching notification settings for userId: {}", userId);
-        return userSettingRepository.getNestedSetting(userId, "notificationSettings", UserSetting.NotificationSettings.class);
+        return userSettingRepository.getNestedSetting(userId, "notificationSettings",
+                UserSetting.NotificationSettings.class);
     }
 
     @Override
@@ -198,10 +199,10 @@ public class UserSettingServiceImpl implements UserSettingService {
     public UserSettingResponse resetToDefaults() {
         String userId = getCurrentUserId();
         log.info("Resetting all settings to defaults for userId: {}", userId);
-        
+
         UserSetting defaultSettings = new UserSetting();
         userSettingRepository.updateUserSetting(userId, defaultSettings);
-        
+
         return UserSettingResponse.fromUserSetting(defaultSettings);
     }
 
@@ -213,7 +214,7 @@ public class UserSettingServiceImpl implements UserSettingService {
         User user = userRepository.findByAccountId(accountId)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
 
-        String userId = user.getUserId();
+        String userId = user.getId();
 
         return userId;
     }
