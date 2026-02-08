@@ -3,7 +3,6 @@ package com.bondhub.userservice.service.user;
 import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.common.dto.client.fileservice.FileUploadResponse;
 import com.bondhub.common.dto.client.userservice.user.response.UserSummaryResponse;
-import com.bondhub.common.enums.Role;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
 import com.bondhub.common.utils.S3Util;
@@ -23,12 +22,12 @@ import com.bondhub.userservice.mapper.UserMapper;
 import com.bondhub.userservice.mapper.UserProfileMapper;
 import com.bondhub.userservice.model.User;
 import com.bondhub.userservice.repository.UserRepository;
+import com.bondhub.userservice.service.elasticsearch.UserIndexService;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -44,7 +43,7 @@ public class UserServiceImpl implements UserService {
     final SecurityUtil securityUtil;
     final UserProfileMapper userProfileMapper;
     final FileServiceClient fileServiceClient;
-    final UserSearchService userSearchService;
+    final UserIndexService userIndexService;
 
     @Value("${aws.s3.bucket.name}")
     String bucketName;
@@ -59,7 +58,7 @@ public class UserServiceImpl implements UserService {
         user = userRepository.save(user);
         log.info("User created successfully with id: {}", user.getId());
 
-        userSearchService.indexUserToElasticsearch(UserIndexRequest.builder()
+        userIndexService.indexUser(UserIndexRequest.builder()
                 .userId(user.getId())
                 .build());
 
@@ -153,7 +152,7 @@ public class UserServiceImpl implements UserService {
 
         log.info("User profile updated successfully for account: {}", accountId);
 
-        userSearchService.indexUserToElasticsearch(UserIndexRequest.builder()
+        userIndexService.indexUser(UserIndexRequest.builder()
                 .userId(user.getId())
                 .phoneNumber(accountResponse != null ? accountResponse.phoneNumber() : null)
                 .build());
@@ -164,7 +163,7 @@ public class UserServiceImpl implements UserService {
     private UserProfileResponse getUserProfileResponseWithUrl(User user, AccountResponse accountResponse) {
         UserProfileResponse response = userProfileMapper.toUserProfileResponse(user, accountResponse);
         String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
-        
+
         return UserProfileResponse.builder()
                 .id(response.id())
                 .phoneNumber(response.phoneNumber())
@@ -176,6 +175,7 @@ public class UserServiceImpl implements UserService {
                 .avatar(response.avatar() != null ? baseUrl + response.avatar() : null)
                 .background(response.background() != null ? baseUrl + response.background() : null)
                 .backgroundY(response.backgroundY())
+                .role(accountResponse != null ? accountResponse.role() : null)
                 .build();
     }
 
@@ -207,7 +207,7 @@ public class UserServiceImpl implements UserService {
 
             log.info("Avatar updated successfully for user: {}", accountId);
 
-            userSearchService.indexUserToElasticsearch(UserIndexRequest.builder()
+            userIndexService.indexUser(UserIndexRequest.builder()
                     .userId(user.getId())
                     .build());
 
@@ -282,9 +282,8 @@ public class UserServiceImpl implements UserService {
         userRepository.deleteById(id);
         log.info("User deleted successfully with id: {}", id);
 
-        // Delete from Elasticsearch
         try {
-            userSearchService.deleteFromIndex(id);
+            userIndexService.deleteByUserId(id);
         } catch (Exception e) {
             log.error("Failed to delete user from Elasticsearch index: {}", id, e);
         }
