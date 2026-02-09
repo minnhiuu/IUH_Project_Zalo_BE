@@ -21,6 +21,26 @@ public class KafkaTopicConfig {
         return createTopic(topicProperties.getAccountEvents().getRegistered());
     }
 
+    @Bean
+    public NewTopic userIndexRequested() {
+        return createTopic(topicProperties.getUserEvents().getIndexRequested());
+    }
+
+    @Bean
+    public NewTopic userIndexDeleted() {
+        return createTopic(topicProperties.getUserEvents().getIndexDeleted());
+    }
+
+    @Bean
+    public NewTopic userIndexRequestedDLQ() {
+        return createTopic(topicProperties.getUserEvents().getIndexRequested() + ".dlq");
+    }
+
+    @Bean
+    public NewTopic userIndexDeletedDLQ() {
+        return createTopic(topicProperties.getUserEvents().getIndexDeleted() + ".dlq");
+    }
+
     private NewTopic createTopic(String topicName) {
         log.info("Creating Kafka topic: {}", topicName);
         return TopicBuilder.name(topicName)

@@ -1,37 +1,31 @@
 package com.bondhub.userservice.service.elasticsearch;
 
+import com.bondhub.common.config.kafka.KafkaTopicProperties;
 import com.bondhub.common.dto.ApiResponse;
+import com.bondhub.common.enums.Role;
 import com.bondhub.userservice.client.AuthServiceClient;
 import com.bondhub.userservice.config.ElasticsearchProperties;
+import com.bondhub.userservice.dto.request.UserIndexRequest;
 import com.bondhub.userservice.dto.response.AccountResponse;
-import com.bondhub.userservice.mapper.UserMapper;
 import com.bondhub.userservice.model.User;
 import com.bondhub.userservice.model.elasticsearch.UserIndex;
+import com.bondhub.userservice.publisher.UserIndexEventPublisher;
 import com.bondhub.userservice.repository.UserRepository;
-import jakarta.annotation.PostConstruct;
-import jakarta.annotation.PreDestroy;
+import com.bondhub.userservice.service.kafka.KafkaConsumerMonitorService;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
-import lombok.experimental.NonFinal;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
 import org.springframework.data.elasticsearch.core.IndexOperations;
-import org.springframework.data.elasticsearch.core.IndexedObjectInformation;
 import org.springframework.data.elasticsearch.core.index.*;
 import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
-import org.springframework.data.elasticsearch.core.query.IndexQuery;
-import org.springframework.data.elasticsearch.core.query.IndexQueryBuilder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.stream.Collectors;
 import java.util.stream.Collectors;
 
 @Service
@@ -42,51 +36,17 @@ public class UserSyncServiceImpl implements UserSyncService {
 
     ElasticsearchOperations esOps;
     UserRepository userRepository;
-    UserMapper userMapper;
     ElasticsearchProperties esProperties;
     AuthServiceClient authServiceClient;
-
-    @NonFinal
-    ExecutorService reindexExecutor;
-
-    @PostConstruct
-    void init() {
-        int parallelism = esProperties.getSync().getParallelism();
-        int threads = (parallelism == 0) 
-            ? Math.max(2, Runtime.getRuntime().availableProcessors())
-            : parallelism;
-        
-        reindexExecutor = Executors.newFixedThreadPool(threads);
-        log.info("Initialized reindex executor with {} threads", threads);
-    }
-
-    @PreDestroy
-    void shutdown() {
-        log.info("Shutting down reindex executor...");
-        reindexExecutor.shutdown();
-        try {
-            if (!reindexExecutor.awaitTermination(60, java.util.concurrent.TimeUnit.SECONDS)) {
-                log.warn("Reindex executor did not terminate in 60s, forcing shutdown");
-                reindexExecutor.shutdownNow();
-                if (!reindexExecutor.awaitTermination(10, java.util.concurrent.TimeUnit.SECONDS)) {
-                    log.error("Reindex executor did not terminate after forced shutdown");
-                }
-            } else {
-                log.info("Reindex executor shut down gracefully");
-            }
-        } catch (InterruptedException e) {
-            log.error("Shutdown interrupted", e);
-            reindexExecutor.shutdownNow();
-            Thread.currentThread().interrupt();
-        }
-    }
+    UserIndexEventPublisher userIndexEventPublisher;
+    KafkaConsumerMonitorService kafkaMonitorService;
+    KafkaTopicProperties kafkaTopicProperties;
 
     @Override
     @Transactional
     public long reindexAll() {
-        log.info("Starting complete reindex process...");
+        log.info("Starting complete reindex process via Kafka...");
         
-        // Clean up any conflicting physical index with the alias name
         deletePhysicalIndexIfConflict();
         
         LocalDateTime startedAt = LocalDateTime.now();
@@ -96,7 +56,7 @@ public class UserSyncServiceImpl implements UserSyncService {
         log.info("Created new physical index: {}", newIndex);
 
         long total = fullSyncToIndex(newIndex);
-        log.info("Synced {} documents to new index", total);
+        log.info("Published {} events to Kafka for indexing", total);
 
         LocalDateTime cursor = startedAt;
         long replayed = 0;
@@ -106,33 +66,55 @@ public class UserSyncServiceImpl implements UserSyncService {
             replayed += roundReplayed;
             cursor = LocalDateTime.now();
             replayRounds++;
-            log.info("Replay round {}: {} documents", replayRounds, roundReplayed);
-        } while (replayed > 0);
+            if (roundReplayed > 0) {
+                log.info("Replay round {}: {} documents published", replayRounds, roundReplayed);
+            }
+        } while (replayed > 0 && replayRounds < 10);
 
+        long totalPublished = total + replayed;
+        log.info("📤 Published {} total events to Kafka", totalPublished);
+        
+        String consumerGroup = "user-search-indexer-group";
+        String topic = kafkaTopicProperties.getUserEvents().getIndexRequested();
+        int maxWaitSeconds = 300;
+        
+        boolean success = kafkaMonitorService.waitForLagZero(consumerGroup, topic, maxWaitSeconds);
+        
+        if (!success) {
+            long remainingLag = kafkaMonitorService.getConsumerLag(consumerGroup, topic);
+            log.error("❌ Reindex timeout! Consumer lag still: {} messages", remainingLag);
+            log.error("New index '{}' created but alias NOT switched. Manual intervention required.", newIndex);
+            log.info("After consumers finish, manually call: switchAliasToLatestIndex()");
+            throw new RuntimeException("Reindex timeout: consumers did not finish processing within " + maxWaitSeconds + " seconds");
+        }
+        
+        log.info("✅ All {} events processed by consumers. Switching alias...", totalPublished);
         switchAlias(newIndex);
-        log.info("Switched alias to new index: {}", newIndex);
-
-        long totalIndexed = total + replayed;
-        log.info("Reindex completed: {} total documents indexed", totalIndexed);
-        return totalIndexed;
+        log.info("🎉 Reindex completed successfully! Alias '{}' now points to '{}'", 
+                esProperties.getUserAlias(), newIndex);
+        
+        return totalPublished;
     }
 
-    @Override
-    public void recreateIndex() {
-        String newIndex = esProperties.getUserAlias() + "_" + System.currentTimeMillis();
-        createPhysicalIndex(newIndex);
-        switchAlias(newIndex);
-    }
-
-    @Override
-    public long syncAllFromMongo() {
-        log.info("Starting full sync from MongoDB...");
-        String newIndex = esProperties.getUserAlias() + "_" + System.currentTimeMillis();
-        createPhysicalIndex(newIndex);
-        long total = fullSyncToIndex(newIndex);
-        switchAlias(newIndex);
-        log.info("Sync completed: {} documents", total);
-        return total;
+    public void switchAliasToLatestIndex() {
+        String alias = esProperties.getUserAlias();
+        try {
+            var existingAliases = esOps.indexOps(IndexCoordinates.of(alias)).getAliases();
+            String latestIndex = existingAliases.keySet().stream()
+                    .filter(idx -> idx.startsWith(alias + "_"))
+                    .max(Comparator.naturalOrder())
+                    .orElse(null);
+            
+            if (latestIndex != null) {
+                log.info("Switching alias '{}' to latest index '{}'", alias, latestIndex);
+                switchAlias(latestIndex);
+            } else {
+                log.warn("No index found with pattern {}_, cannot switch alias", alias);
+            }
+        } catch (Exception e) {
+            log.error("Failed to switch alias: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to switch alias", e);
+        }
     }
 
     private void createPhysicalIndex(String indexName) {
@@ -144,7 +126,8 @@ public class UserSyncServiceImpl implements UserSyncService {
     private long fullSyncToIndex(String indexName) {
         String lastId = null;
         long total = 0;
-        List<CompletableFuture<Void>> tasks = new ArrayList<>();
+
+        log.info("Starting full sync from MongoDB to Kafka (target index: {})", indexName);
 
         while (true) {
             List<User> users = lastId == null
@@ -157,29 +140,29 @@ public class UserSyncServiceImpl implements UserSyncService {
             List<String> accountIds = users.stream()
                     .map(User::getAccountId)
                     .toList();
-            
             Map<String, AccountResponse> accountMap = fetchAccountsBatch(accountIds);
 
-            List<UserIndex> batch = users.stream()
-                    .map(user -> toUserIndexWithAccount(user, accountMap.get(user.getAccountId())))
-                    .toList();
+            for (User user : users) {
+                AccountResponse account = accountMap.get(user.getAccountId());
 
-            String nextLastId = users.getLast().getId();
+                UserIndexRequest request = UserIndexRequest.builder()
+                        .userId(user.getId())
+                        .phoneNumber(account != null ? account.phoneNumber() : null)
+                        .role(account != null ? Enum.valueOf(Role.class, account.role()) : null)
+                        .build();
 
-            tasks.add(CompletableFuture.runAsync(
-                    () -> bulkIndexWithRetry(batch, indexName),
-                    reindexExecutor
-            ));
+                userIndexEventPublisher.publishIndexRequestBatch(request);
+            }
 
-            lastId = nextLastId;
+            lastId = users.getLast().getId();
             total += users.size();
 
             if (total % 5000 == 0) {
-                log.info("Progress: {} documents queued for indexing", total);
+                log.info("Progress: {} users published to Kafka", total);
             }
         }
 
-        CompletableFuture.allOf(tasks.toArray(new CompletableFuture[0])).join();
+        log.info("Full sync completed: {} users published to Kafka", total);
         return total;
     }
 
@@ -187,18 +170,25 @@ public class UserSyncServiceImpl implements UserSyncService {
         List<User> changed = userRepository.findByLastModifiedAtAfter(since);
         if (changed.isEmpty()) return 0;
 
+        log.info("Replaying {} changes since {}", changed.size(), since);
+
         List<String> accountIds = changed.stream()
                 .map(User::getAccountId)
                 .toList();
-        
         Map<String, AccountResponse> accountMap = fetchAccountsBatch(accountIds);
 
-        bulkIndexWithRetry(
-                changed.stream()
-                        .map(user -> toUserIndexWithAccount(user, accountMap.get(user.getAccountId())))
-                        .toList(),
-                indexName
-        );
+        for (User user : changed) {
+            AccountResponse account = accountMap.get(user.getAccountId());
+
+            UserIndexRequest request = UserIndexRequest.builder()
+                    .userId(user.getId())
+                    .phoneNumber(account != null ? account.phoneNumber() : null)
+                    .role(account != null ? Enum.valueOf(Role.class, account.role()) : null)
+                    .build();
+
+            userIndexEventPublisher.publishIndexRequestBatch(request);
+        }
+
         return changed.size();
     }
 
@@ -213,64 +203,6 @@ public class UserSyncServiceImpl implements UserSyncService {
             log.warn("Failed to fetch accounts batch: {}", e.getMessage());
         }
         return Map.of();
-    }
-
-    private UserIndex toUserIndexWithAccount(User user, AccountResponse account) {
-        UserIndex userIndex = userMapper.toUserIndex(user);
-        
-        if (account != null) {
-            userIndex.setRole(account.role());
-            userIndex.setPhoneNumber(account.phoneNumber());
-        } else {
-            log.warn("No account found for user {}, using defaults", user.getId());
-            userIndex.setRole("USER");
-            userIndex.setPhoneNumber(null);
-        }
-        
-        return userIndex;
-    }
-
-    private void bulkIndexWithRetry(List<UserIndex> docs, String indexName) {
-        List<UserIndex> remaining = docs;
-
-        int maxRetry = esProperties.getSync().getMaxRetry();
-        for (int attempt = 1; attempt <= maxRetry && !remaining.isEmpty(); attempt++) {
-            if (attempt > 1) {
-                log.warn("Retry attempt {} for {} documents", attempt, remaining.size());
-            }
-            remaining = bulkIndexOnce(remaining, indexName);
-        }
-
-        if (!remaining.isEmpty()) {
-            log.error("Permanent bulk failures after {} attempts: {} documents",
-                    maxRetry, remaining.size());
-        }
-    }
-
-    private List<UserIndex> bulkIndexOnce(List<UserIndex> docs, String indexName) {
-        List<IndexQuery> queries = docs.stream()
-                .map(d -> new IndexQueryBuilder()
-                        .withId(d.getId())
-                        .withObject(d)
-                        .build())
-                .toList();
-
-        IndexCoordinates coords = IndexCoordinates.of(
-                indexName != null
-                        ? indexName
-                        : esProperties.getUserAlias()
-        );
-
-        List<IndexedObjectInformation> result =
-                esOps.bulkIndex(queries, coords);
-
-        Set<String> successIds = result.stream()
-                .map(IndexedObjectInformation::id)
-                .collect(Collectors.toSet());
-
-        return docs.stream()
-                .filter(d -> !successIds.contains(d.getId()))
-                .toList();
     }
 
     private void deletePhysicalIndexIfConflict() {

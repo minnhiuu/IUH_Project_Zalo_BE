@@ -21,8 +21,8 @@ import com.bondhub.userservice.dto.response.UserImageResponse;
 import com.bondhub.userservice.mapper.UserMapper;
 import com.bondhub.userservice.mapper.UserProfileMapper;
 import com.bondhub.userservice.model.User;
+import com.bondhub.userservice.publisher.UserIndexEventPublisher;
 import com.bondhub.userservice.repository.UserRepository;
-import com.bondhub.userservice.service.elasticsearch.UserIndexService;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
@@ -43,7 +43,7 @@ public class UserServiceImpl implements UserService {
     final SecurityUtil securityUtil;
     final UserProfileMapper userProfileMapper;
     final FileServiceClient fileServiceClient;
-    final UserIndexService userIndexService;
+    final UserIndexEventPublisher userIndexEventPublisher;
 
     @Value("${aws.s3.bucket.name}")
     String bucketName;
@@ -58,7 +58,7 @@ public class UserServiceImpl implements UserService {
         user = userRepository.save(user);
         log.info("User created successfully with id: {}", user.getId());
 
-        userIndexService.indexUser(UserIndexRequest.builder()
+        userIndexEventPublisher.publishIndexRequest(UserIndexRequest.builder()
                 .userId(user.getId())
                 .build());
 
@@ -152,7 +152,7 @@ public class UserServiceImpl implements UserService {
 
         log.info("User profile updated successfully for account: {}", accountId);
 
-        userIndexService.indexUser(UserIndexRequest.builder()
+        userIndexEventPublisher.publishIndexRequest(UserIndexRequest.builder()
                 .userId(user.getId())
                 .phoneNumber(accountResponse != null ? accountResponse.phoneNumber() : null)
                 .build());
@@ -207,7 +207,7 @@ public class UserServiceImpl implements UserService {
 
             log.info("Avatar updated successfully for user: {}", accountId);
 
-            userIndexService.indexUser(UserIndexRequest.builder()
+            userIndexEventPublisher.publishIndexRequest(UserIndexRequest.builder()
                     .userId(user.getId())
                     .build());
 
@@ -283,7 +283,7 @@ public class UserServiceImpl implements UserService {
         log.info("User deleted successfully with id: {}", id);
 
         try {
-            userIndexService.deleteByUserId(id);
+            userIndexEventPublisher.publishDeleteRequest(id);
         } catch (Exception e) {
             log.error("Failed to delete user from Elasticsearch index: {}", id, e);
         }

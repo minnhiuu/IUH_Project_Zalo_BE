@@ -2,6 +2,8 @@ package com.bondhub.common.publisher;
 
 import com.bondhub.common.config.kafka.KafkaTopicProperties;
 import com.bondhub.common.event.account.AccountRegisteredEvent;
+import com.bondhub.common.event.user.UserIndexDeletedEvent;
+import com.bondhub.common.event.user.UserIndexRequestedEvent;
 import com.bondhub.common.model.kafka.EventType;
 import com.bondhub.common.model.kafka.OutboxEvent;
 import com.bondhub.common.repository.OutboxEventRepository;
@@ -36,7 +38,7 @@ public class OutboxEventPublisher {
     public OutboxEvent saveToOutbox(String aggregateId, String aggregateType, EventType eventType, Object eventPayload) {
         try {
             String payloadJson = objectMapper.writeValueAsString(eventPayload);
-            
+
             OutboxEvent outboxEvent = OutboxEvent.builder()
                     .aggregateId(aggregateId)
                     .aggregateType(aggregateType)
@@ -47,13 +49,13 @@ public class OutboxEventPublisher {
                     .build();
 
             outboxEvent = outboxEventRepository.save(outboxEvent);
-            log.info("✅ Event saved to outbox: eventType={}, aggregateId={}, id={}", 
+            log.info("✅ Event saved to outbox: eventType={}, aggregateId={}, id={}",
                     eventType, aggregateId, outboxEvent.getId());
-            
+
             return outboxEvent;
-            
+
         } catch (Exception e) {
-            log.error("❌ Failed to save event to outbox: eventType={}, aggregateId={}", 
+            log.error("❌ Failed to save event to outbox: eventType={}, aggregateId={}",
                     eventType, aggregateId, e);
             throw new RuntimeException("Failed to save event to outbox", e);
         }
@@ -68,14 +70,14 @@ public class OutboxEventPublisher {
             outboxEventRepository.save(outboxEvent);
 
             String topic = getTopicForEventType(outboxEvent.getEventType());
-            
+
             // Deserialize to the appropriate event type based on EventType
             Class<?> eventClass = getEventClassForType(outboxEvent.getEventType());
             Object payload = objectMapper.readValue(outboxEvent.getPayload(), eventClass);
 
             CompletableFuture<SendResult<String, Object>> future = kafkaTemplate.send(
-                    topic, 
-                    outboxEvent.getAggregateId(), 
+                    topic,
+                    outboxEvent.getAggregateId(),
                     payload
             );
 
@@ -84,8 +86,8 @@ public class OutboxEventPublisher {
                     outboxEvent.setStatus(OutboxEvent.OutboxEventStatus.PUBLISHED);
                     outboxEvent.setProcessedAt(Instant.now());
                     outboxEventRepository.save(outboxEvent);
-                    log.info("✅ Event published to Kafka: topic={}, eventId={}, partition={}, offset={}", 
-                            topic, outboxEvent.getId(), 
+                    log.info("✅ Event published to Kafka: topic={}, eventId={}, partition={}, offset={}",
+                            topic, outboxEvent.getId(),
                             result.getRecordMetadata().partition(),
                             result.getRecordMetadata().offset());
                 } else {
@@ -112,7 +114,7 @@ public class OutboxEventPublisher {
         outboxEvent.setRetryCount(outboxEvent.getRetryCount() == null ? 1 : outboxEvent.getRetryCount() + 1);
         outboxEvent.setErrorMessage(ex.getMessage());
         outboxEventRepository.save(outboxEvent);
-        log.error("❌ Failed to publish event to Kafka: eventId={}, retryCount={}", 
+        log.error("❌ Failed to publish event to Kafka: eventId={}, retryCount={}",
                 outboxEvent.getId(), outboxEvent.getRetryCount(), ex);
     }
 
@@ -127,14 +129,18 @@ public class OutboxEventPublisher {
             case USER_CREATED -> kafkaTopicProperties.getUserEvents().getCreated();
             case USER_UPDATED -> kafkaTopicProperties.getUserEvents().getUpdated();
             case USER_DELETED -> kafkaTopicProperties.getUserEvents().getDeleted();
+            case USER_INDEX_REQUESTED -> kafkaTopicProperties.getUserEvents().getIndexRequested();
+            case USER_INDEX_DELETED -> kafkaTopicProperties.getUserEvents().getIndexDeleted();
         };
     }
 
     private Class<?> getEventClassForType(EventType eventType) {
         return switch (eventType) {
-            case ACCOUNT_REGISTERED, ACCOUNT_UPDATED, ACCOUNT_DELETED, 
+            case ACCOUNT_REGISTERED, ACCOUNT_UPDATED, ACCOUNT_DELETED,
                  ACCOUNT_VERIFIED, ACCOUNT_ENABLED, ACCOUNT_DISABLED -> AccountRegisteredEvent.class;
             case USER_CREATED, USER_UPDATED, USER_DELETED -> UserCreatedEvent.class;
+            case USER_INDEX_REQUESTED ->  UserIndexRequestedEvent.class;
+            case USER_INDEX_DELETED -> UserIndexDeletedEvent.class;
         };
     }
 }

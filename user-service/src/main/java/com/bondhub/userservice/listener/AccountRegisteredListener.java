@@ -9,7 +9,7 @@ import com.bondhub.common.event.user.UserCreatedEvent;
 import com.bondhub.userservice.dto.request.UserCreateRequest;
 import com.bondhub.userservice.dto.request.UserIndexRequest;
 import com.bondhub.userservice.dto.response.UserResponse;
-import com.bondhub.userservice.service.elasticsearch.UserIndexService;
+import com.bondhub.userservice.publisher.UserIndexEventPublisher;
 import com.bondhub.userservice.service.user.UserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -28,9 +28,9 @@ import java.time.Instant;
 public class AccountRegisteredListener {
 
     private final UserService userService;
-    private final UserIndexService userIndexService;
     private final KafkaTopicProperties kafkaTopicProperties;
     private final OutboxEventPublisher outboxEventPublisher;
+    private final UserIndexEventPublisher  userIndexEventPublisher;
 
     @KafkaListener(
             topics = "#{kafkaTopicProperties.accountEvents.registered}",
@@ -59,13 +59,11 @@ public class AccountRegisteredListener {
             log.info("✅ User created successfully for accountId: {}, userId: {}", 
                     event.getAccountId(), userResponse.id());
 
-            // Index to Elasticsearch with phoneNumber from event and role=USER
-            UserIndexRequest indexRequest = UserIndexRequest.builder()
+            userIndexEventPublisher.publishIndexRequestBatch(UserIndexRequest.builder()
                     .userId(userResponse.id())
                     .phoneNumber(event.getPhoneNumber())
                     .role(Role.USER)
-                    .build();
-            userIndexService.indexUser(indexRequest);
+                    .build());
 
             // Publish USER_CREATED event back to complete the saga
             UserCreatedEvent userCreatedEvent = UserCreatedEvent.builder()
