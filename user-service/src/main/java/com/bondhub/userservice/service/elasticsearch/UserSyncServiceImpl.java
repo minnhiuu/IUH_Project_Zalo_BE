@@ -1,17 +1,13 @@
 package com.bondhub.userservice.service.elasticsearch;
 
-import com.bondhub.common.config.kafka.KafkaTopicProperties;
 import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.common.enums.Role;
 import com.bondhub.userservice.client.AuthServiceClient;
 import com.bondhub.userservice.config.ElasticsearchProperties;
-import com.bondhub.userservice.dto.request.UserIndexRequest;
 import com.bondhub.userservice.dto.response.AccountResponse;
 import com.bondhub.userservice.model.User;
 import com.bondhub.userservice.model.elasticsearch.UserIndex;
-import com.bondhub.userservice.publisher.UserIndexEventPublisher;
 import com.bondhub.userservice.repository.UserRepository;
-import com.bondhub.userservice.service.kafka.KafkaConsumerMonitorService;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
@@ -21,11 +17,14 @@ import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
 import org.springframework.data.elasticsearch.core.IndexOperations;
 import org.springframework.data.elasticsearch.core.index.*;
 import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
+import org.springframework.data.elasticsearch.core.query.IndexQuery;
+import org.springframework.data.elasticsearch.core.query.IndexQueryBuilder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 @Service
@@ -33,88 +32,31 @@ import java.util.stream.Collectors;
 @Slf4j
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public class UserSyncServiceImpl implements UserSyncService {
-
     ElasticsearchOperations esOps;
     UserRepository userRepository;
     ElasticsearchProperties esProperties;
     AuthServiceClient authServiceClient;
-    UserIndexEventPublisher userIndexEventPublisher;
-    KafkaConsumerMonitorService kafkaMonitorService;
-    KafkaTopicProperties kafkaTopicProperties;
 
     @Override
     @Transactional
     public long reindexAll() {
-        log.info("Starting complete reindex process via Kafka...");
+        log.info("Starting complete reindex process with bulk indexing...");
         
         deletePhysicalIndexIfConflict();
         
-        LocalDateTime startedAt = LocalDateTime.now();
         String newIndex = esProperties.getUserAlias() + "_" + System.currentTimeMillis();
-
         createPhysicalIndex(newIndex);
         log.info("Created new physical index: {}", newIndex);
 
         long total = fullSyncToIndex(newIndex);
-        log.info("Published {} events to Kafka for indexing", total);
-
-        LocalDateTime cursor = startedAt;
-        long replayed = 0;
-        int replayRounds = 0;
-        do {
-            long roundReplayed = replayChanges(newIndex, cursor);
-            replayed += roundReplayed;
-            cursor = LocalDateTime.now();
-            replayRounds++;
-            if (roundReplayed > 0) {
-                log.info("Replay round {}: {} documents published", replayRounds, roundReplayed);
-            }
-        } while (replayed > 0 && replayRounds < 10);
-
-        long totalPublished = total + replayed;
-        log.info("📤 Published {} total events to Kafka", totalPublished);
+        log.info("Indexed {} documents to Elasticsearch", total);
         
-        String consumerGroup = "user-search-indexer-group";
-        String topic = kafkaTopicProperties.getUserEvents().getIndexRequested();
-        int maxWaitSeconds = 300;
-        
-        boolean success = kafkaMonitorService.waitForLagZero(consumerGroup, topic, maxWaitSeconds);
-        
-        if (!success) {
-            long remainingLag = kafkaMonitorService.getConsumerLag(consumerGroup, topic);
-            log.error("❌ Reindex timeout! Consumer lag still: {} messages", remainingLag);
-            log.error("New index '{}' created but alias NOT switched. Manual intervention required.", newIndex);
-            log.info("After consumers finish, manually call: switchAliasToLatestIndex()");
-            throw new RuntimeException("Reindex timeout: consumers did not finish processing within " + maxWaitSeconds + " seconds");
-        }
-        
-        log.info("✅ All {} events processed by consumers. Switching alias...", totalPublished);
-        switchAlias(newIndex);
-        log.info("🎉 Reindex completed successfully! Alias '{}' now points to '{}'", 
+        List<String> oldIndexes = switchAlias(newIndex);
+        log.info("Reindex completed successfully! Alias '{}' now points to '{}'",
                 esProperties.getUserAlias(), newIndex);
         
-        return totalPublished;
-    }
-
-    public void switchAliasToLatestIndex() {
-        String alias = esProperties.getUserAlias();
-        try {
-            var existingAliases = esOps.indexOps(IndexCoordinates.of(alias)).getAliases();
-            String latestIndex = existingAliases.keySet().stream()
-                    .filter(idx -> idx.startsWith(alias + "_"))
-                    .max(Comparator.naturalOrder())
-                    .orElse(null);
-            
-            if (latestIndex != null) {
-                log.info("Switching alias '{}' to latest index '{}'", alias, latestIndex);
-                switchAlias(latestIndex);
-            } else {
-                log.warn("No index found with pattern {}_, cannot switch alias", alias);
-            }
-        } catch (Exception e) {
-            log.error("Failed to switch alias: {}", e.getMessage(), e);
-            throw new RuntimeException("Failed to switch alias", e);
-        }
+        deleteOldIndexes(oldIndexes, newIndex);
+        return total;
     }
 
     private void createPhysicalIndex(String indexName) {
@@ -127,7 +69,7 @@ public class UserSyncServiceImpl implements UserSyncService {
         String lastId = null;
         long total = 0;
 
-        log.info("Starting full sync from MongoDB to Kafka (target index: {})", indexName);
+        log.info("Starting full sync from MongoDB to Elasticsearch (target index: {})", indexName);
 
         while (true) {
             List<User> users = lastId == null
@@ -142,54 +84,47 @@ public class UserSyncServiceImpl implements UserSyncService {
                     .toList();
             Map<String, AccountResponse> accountMap = fetchAccountsBatch(accountIds);
 
-            for (User user : users) {
-                AccountResponse account = accountMap.get(user.getAccountId());
+            List<UserIndex> docs = users.stream()
+                    .map(user -> {
+                        AccountResponse account = accountMap.get(user.getAccountId());
+                        return UserIndex.builder()
+                                .id(user.getId())
+                                .accountId(user.getAccountId())
+                                .fullName(user.getFullName())
+                                .avatar(user.getAvatar())
+                                .phoneNumber(account != null ? account.phoneNumber() : null)
+                                .role(account != null ? account.role() : null)
+                                .createdAt(LocalDateTime.now())
+                                .build();
+                    })
+                    .toList();
 
-                UserIndexRequest request = UserIndexRequest.builder()
-                        .userId(user.getId())
-                        .phoneNumber(account != null ? account.phoneNumber() : null)
-                        .role(account != null ? Enum.valueOf(Role.class, account.role()) : null)
-                        .build();
-
-                userIndexEventPublisher.publishIndexRequestBatch(request);
-            }
+            bulkIndex(docs, indexName);
 
             lastId = users.getLast().getId();
             total += users.size();
 
             if (total % 5000 == 0) {
-                log.info("Progress: {} users published to Kafka", total);
+                log.info("Progress: {} users indexed", total);
             }
         }
 
-        log.info("Full sync completed: {} users published to Kafka", total);
+        log.info("Full sync completed: {} users indexed to Elasticsearch", total);
         return total;
     }
 
-    private long replayChanges(String indexName, LocalDateTime since) {
-        List<User> changed = userRepository.findByLastModifiedAtAfter(since);
-        if (changed.isEmpty()) return 0;
+    private void bulkIndex(List<UserIndex> docs, String indexName) {
+        if (docs.isEmpty()) return;
 
-        log.info("Replaying {} changes since {}", changed.size(), since);
-
-        List<String> accountIds = changed.stream()
-                .map(User::getAccountId)
+        List<IndexQuery> queries = docs.stream()
+                .map(doc -> new IndexQueryBuilder()
+                        .withId(doc.getId())
+                        .withObject(doc)
+                        .build())
                 .toList();
-        Map<String, AccountResponse> accountMap = fetchAccountsBatch(accountIds);
 
-        for (User user : changed) {
-            AccountResponse account = accountMap.get(user.getAccountId());
-
-            UserIndexRequest request = UserIndexRequest.builder()
-                    .userId(user.getId())
-                    .phoneNumber(account != null ? account.phoneNumber() : null)
-                    .role(account != null ? Enum.valueOf(Role.class, account.role()) : null)
-                    .build();
-
-            userIndexEventPublisher.publishIndexRequestBatch(request);
-        }
-
-        return changed.size();
+        esOps.bulkIndex(queries, IndexCoordinates.of(indexName));
+        log.debug("Bulk indexed {} documents to {}", docs.size(), indexName);
     }
 
     private Map<String, AccountResponse> fetchAccountsBatch(List<String> accountIds) {
@@ -230,44 +165,90 @@ public class UserSyncServiceImpl implements UserSyncService {
         }
     }
 
-    private void switchAlias(String newIndex) {
+    private List<String> switchAlias(String newIndex) {
         String alias = esProperties.getUserAlias();
-        AliasActions actions = new AliasActions();
-
+        IndexOperations newIndexOps = esOps.indexOps(IndexCoordinates.of(newIndex));
+        List<String> oldIndexes = new ArrayList<>();
+        
         try {
-            var existingAliases = esOps.indexOps(IndexCoordinates.of(alias)).getAliases();
+            IndexOperations aliasOps = esOps.indexOps(IndexCoordinates.of(alias));
+            Map<String, Set<AliasData>> existingAliases = aliasOps.getAliases();
             
-            existingAliases.entrySet().stream()
-                    .filter(entry -> {
-                        String indexName = entry.getKey();
-                        boolean hasAlias = entry.getValue().contains(alias);
-                        boolean isUserIndex = indexName.startsWith(alias + "_");
-                        boolean notSystemIndex = !indexName.startsWith(".");
-                        
-                        return hasAlias && (isUserIndex || notSystemIndex);
-                    })
-                    .forEach(entry -> {
-                        String oldIndex = entry.getKey();
-                        log.info("Removing alias '{}' from index '{}'", alias, oldIndex);
-                        actions.add(new AliasAction.Remove(
-                                AliasActionParameters.builder()
-                                        .withIndices(oldIndex)
-                                        .withAliases(alias)
-                                        .build()
-                        ));
-                    });
+            if (!existingAliases.isEmpty()) {
+                oldIndexes.addAll(existingAliases.keySet());
+                AliasActions removeActions = new AliasActions();
+                existingAliases.keySet().forEach(indexName -> {
+                    log.info("Removing alias '{}' from index '{}'", alias, indexName);
+                    removeActions.add(new AliasAction.Remove(
+                            AliasActionParameters.builder()
+                                    .withIndices(indexName)
+                                    .withAliases(alias)
+                                    .build()
+                    ));
+                });
+                esOps.indexOps(IndexCoordinates.of(alias)).alias(removeActions);
+                log.info("Removed alias '{}' from {} indices", alias, existingAliases.size());
+            }
         } catch (Exception e) {
-            log.debug("No existing aliases found for '{}': {}", alias, e.getMessage());
+            log.warn("Failed to remove existing aliases (might not exist): {}", e.getMessage());
         }
 
-        actions.add(new AliasAction.Add(
+        AliasActions addAction = new AliasActions();
+        addAction.add(new AliasAction.Add(
                 AliasActionParameters.builder()
                         .withIndices(newIndex)
                         .withAliases(alias)
                         .build()
         ));
-
-        esOps.indexOps(IndexCoordinates.of(newIndex)).alias(actions);
+        newIndexOps.alias(addAction);
+        
         log.info("Successfully switched alias '{}' to index '{}'", alias, newIndex);
+        return oldIndexes;
+    }
+
+    private void deleteOldIndexes(List<String> oldIndexes, String currentIndex) {
+        try {
+            if (oldIndexes.isEmpty()) {
+                log.debug("No old indexes found to clean up");
+                return;
+            }
+            
+            String indexPrefix = esProperties.getUserAlias() + "_";
+            
+            List<String> sortedIndexes = oldIndexes.stream()
+                    .filter(idx -> idx.startsWith(indexPrefix) && !idx.equals(currentIndex))
+                    .sorted(Comparator.comparing((String idx) -> {
+                        try {
+                            String timestamp = idx.substring(indexPrefix.length());
+                            return Long.parseLong(timestamp);
+                        } catch (Exception e) {
+                            return 0L;
+                        }
+                    }).reversed())
+                    .toList();
+            
+            int retainCount = esProperties.getIndex().getRetainIndexCount();
+            List<String> indexesToDelete = sortedIndexes.stream()
+                    .skip(retainCount)
+                    .toList();
+            
+            if (indexesToDelete.isEmpty()) {
+                log.info("No old indexes to delete. Current count: {}, retain: {}",
+                        sortedIndexes.size(), retainCount);
+                return;
+            }
+            
+            for (String indexName : indexesToDelete) {
+                IndexOperations ops = esOps.indexOps(IndexCoordinates.of(indexName));
+                ops.delete();
+                log.info("Deleted old index: {}", indexName);
+            }
+            
+            log.info("Cleanup completed. Deleted {} old indexes, retained {} recent indexes",
+                    indexesToDelete.size(), Math.min(retainCount, sortedIndexes.size()));
+                    
+        } catch (Exception e) {
+            log.warn("Failed to cleanup old indexes: {}", e.getMessage(), e);
+        }
     }
 }

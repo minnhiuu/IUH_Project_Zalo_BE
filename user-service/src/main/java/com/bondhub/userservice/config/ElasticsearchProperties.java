@@ -25,6 +25,7 @@ public class ElasticsearchProperties {
     public static class IndexConfig {
         private int realtimeThreads = 2;
         private int asyncTimeoutSeconds = 30;
+        private int retainIndexCount = 1; // Number of old indexes to keep after reindex
     }
 
     @Data

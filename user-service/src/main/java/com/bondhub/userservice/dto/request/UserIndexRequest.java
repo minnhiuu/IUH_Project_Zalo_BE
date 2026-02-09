@@ -6,6 +6,9 @@ import lombok.Builder;
 @Builder
 public record UserIndexRequest(
         String userId,
+        String accountId,
+        String fullName,
+        String avatar,
         String phoneNumber,
         Role role
 ) {

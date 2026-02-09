@@ -3,6 +3,7 @@ package com.bondhub.userservice.service.user;
 import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.common.dto.client.fileservice.FileUploadResponse;
 import com.bondhub.common.dto.client.userservice.user.response.UserSummaryResponse;
+import com.bondhub.common.enums.Role;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
 import com.bondhub.common.utils.S3Util;
@@ -58,9 +59,7 @@ public class UserServiceImpl implements UserService {
         user = userRepository.save(user);
         log.info("User created successfully with id: {}", user.getId());
 
-        userIndexEventPublisher.publishIndexRequest(UserIndexRequest.builder()
-                .userId(user.getId())
-                .build());
+        publishUserIndexEvent(user, null);
 
         return userMapper.toUserResponse(user);
     }
@@ -152,10 +151,7 @@ public class UserServiceImpl implements UserService {
 
         log.info("User profile updated successfully for account: {}", accountId);
 
-        userIndexEventPublisher.publishIndexRequest(UserIndexRequest.builder()
-                .userId(user.getId())
-                .phoneNumber(accountResponse != null ? accountResponse.phoneNumber() : null)
-                .build());
+        publishUserIndexEvent(user, accountResponse);
 
         return getUserProfileResponseWithUrl(user, accountResponse);
     }
@@ -207,9 +203,7 @@ public class UserServiceImpl implements UserService {
 
             log.info("Avatar updated successfully for user: {}", accountId);
 
-            userIndexEventPublisher.publishIndexRequest(UserIndexRequest.builder()
-                    .userId(user.getId())
-                    .build());
+            publishUserIndexEvent(user, null);
 
             String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
             return userMapper.toAvatarResponse(user, baseUrl);
@@ -246,6 +240,9 @@ public class UserServiceImpl implements UserService {
             }
 
             log.info("Background updated successfully for user: {}", accountId);
+            
+            publishUserIndexEvent(user, null);
+            
             String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
             return userMapper.toBackgroundResponse(user, baseUrl);
         }
@@ -287,6 +284,17 @@ public class UserServiceImpl implements UserService {
         } catch (Exception e) {
             log.error("Failed to delete user from Elasticsearch index: {}", id, e);
         }
+    }
+
+    private void publishUserIndexEvent(User user, AccountResponse accountResponse) {
+        userIndexEventPublisher.publishIndexRequest(UserIndexRequest.builder()
+                .userId(user.getId())
+                .accountId(user.getAccountId())
+                .fullName(user.getFullName())
+                .avatar(user.getAvatar())
+                .phoneNumber(accountResponse != null ? accountResponse.phoneNumber() : null)
+                .role(accountResponse != null ? Role.valueOf(accountResponse.role()) : null)
+                .build());
     }
 
 }

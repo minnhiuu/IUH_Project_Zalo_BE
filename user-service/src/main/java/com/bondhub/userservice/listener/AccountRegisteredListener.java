@@ -59,12 +59,6 @@ public class AccountRegisteredListener {
             log.info("✅ User created successfully for accountId: {}, userId: {}", 
                     event.getAccountId(), userResponse.id());
 
-            userIndexEventPublisher.publishIndexRequestBatch(UserIndexRequest.builder()
-                    .userId(userResponse.id())
-                    .phoneNumber(event.getPhoneNumber())
-                    .role(Role.USER)
-                    .build());
-
             // Publish USER_CREATED event back to complete the saga
             UserCreatedEvent userCreatedEvent = UserCreatedEvent.builder()
                     .userId(userResponse.id())
