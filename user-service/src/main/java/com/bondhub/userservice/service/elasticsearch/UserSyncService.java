@@ -1,6 +1,8 @@
 package com.bondhub.userservice.service.elasticsearch;
 
+import com.bondhub.userservice.dto.response.elasticsearch.ReindexStatusResponse;
 
 public interface UserSyncService {
-    long reindexAll();
+    String reindexAll();
+    ReindexStatusResponse getReindexStatus(String taskId);
 }

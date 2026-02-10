@@ -2,9 +2,13 @@ package com.bondhub.userservice.service.elasticsearch;
 
 import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.common.enums.Role;
+import com.bondhub.common.utils.LocalizationUtil;
 import com.bondhub.userservice.client.AuthServiceClient;
 import com.bondhub.userservice.config.ElasticsearchProperties;
 import com.bondhub.userservice.dto.response.AccountResponse;
+import com.bondhub.userservice.dto.response.elasticsearch.ReindexStatusResponse;
+import com.bondhub.userservice.enums.ReindexStep;
+import com.bondhub.userservice.enums.ReindexTaskStatus;
 import com.bondhub.userservice.model.User;
 import com.bondhub.userservice.model.elasticsearch.UserIndex;
 import com.bondhub.userservice.repository.UserRepository;
@@ -20,9 +24,7 @@ import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
 import org.springframework.data.elasticsearch.core.query.IndexQuery;
 import org.springframework.data.elasticsearch.core.query.IndexQueryBuilder;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
@@ -36,27 +38,66 @@ public class UserSyncServiceImpl implements UserSyncService {
     UserRepository userRepository;
     ElasticsearchProperties esProperties;
     AuthServiceClient authServiceClient;
+    ReindexTaskTracker taskTracker;
+    LocalizationUtil localizationUtil;
 
     @Override
-    @Transactional
-    public long reindexAll() {
-        log.info("Starting complete reindex process with bulk indexing...");
+    public String reindexAll() {
+        String taskId = UUID.randomUUID().toString();
+        long totalDocs = userRepository.count();
         
-        deletePhysicalIndexIfConflict();
-        
-        String newIndex = esProperties.getUserAlias() + "_" + System.currentTimeMillis();
-        createPhysicalIndex(newIndex);
-        log.info("Created new physical index: {}", newIndex);
+        updateTaskStatus(taskId, ReindexTaskStatus.RUNNING, ReindexStep.INITIALIZING, totalDocs, 0);
 
-        long total = fullSyncToIndex(newIndex);
-        log.info("Indexed {} documents to Elasticsearch", total);
+        CompletableFuture.runAsync(() -> performAsyncReindex(taskId, totalDocs));
         
-        List<String> oldIndexes = switchAlias(newIndex);
-        log.info("Reindex completed successfully! Alias '{}' now points to '{}'",
-                esProperties.getUserAlias(), newIndex);
-        
-        deleteOldIndexes(oldIndexes, newIndex);
-        return total;
+        return taskId;
+    }
+
+    private void updateTaskStatus(String taskId, ReindexTaskStatus status, ReindexStep step, long total, long processed) {
+        taskTracker.updateStatus(taskId, ReindexStatusResponse.builder()
+                .taskId(taskId)
+                .status(status)
+                .total(total)
+                .processed(processed)
+                .percentage(step.getPercentage())
+                .message(localizationUtil.getMessage(step.getMessageKey()))
+                .build());
+    }
+
+    @Override
+    public ReindexStatusResponse getReindexStatus(String taskId) {
+        return taskTracker.getStatus(taskId);
+    }
+
+    private void performAsyncReindex(String taskId, long totalDocs) {
+        try {
+            log.info("Starting async reindex for task: {}", taskId);
+            
+            deletePhysicalIndexIfConflict();
+            
+            String newIndex = esProperties.getUserAlias() + "_" + System.currentTimeMillis();
+            createPhysicalIndex(newIndex);
+            
+            fullSyncToIndex(newIndex, taskId, totalDocs);
+            
+            updateTaskStatus(taskId, ReindexTaskStatus.RUNNING, ReindexStep.SWITCHING_ALIAS, totalDocs, totalDocs);
+            List<String> oldIndexes = switchAlias(newIndex);
+            
+            updateTaskStatus(taskId, ReindexTaskStatus.RUNNING, ReindexStep.CLEANING_UP, totalDocs, totalDocs);
+            deleteOldIndexes(oldIndexes, newIndex);
+            
+            updateTaskStatus(taskId, ReindexTaskStatus.RUNNING, ReindexStep.FINALIZING, totalDocs, totalDocs);
+
+            updateTaskStatus(taskId, ReindexTaskStatus.COMPLETED, ReindexStep.COMPLETED, totalDocs, totalDocs);
+            
+        } catch (Exception e) {
+            log.error("Reindex failed for task {}: {}", taskId, e.getMessage());
+            taskTracker.updateStatus(taskId, ReindexStatusResponse.builder()
+                    .taskId(taskId)
+                    .status(ReindexTaskStatus.FAILED)
+                    .message(localizationUtil.getMessage("search.re-index.step.failed", e.getMessage()))
+                    .build());
+        }
     }
 
     private void createPhysicalIndex(String indexName) {
@@ -65,11 +106,11 @@ public class UserSyncServiceImpl implements UserSyncService {
         ops.putMapping(ops.createMapping(UserIndex.class));
     }
 
-    private long fullSyncToIndex(String indexName) {
+    private void fullSyncToIndex(String indexName, String taskId, long totalDocs) {
         String lastId = null;
-        long total = 0;
+        long processed = 0;
 
-        log.info("Starting full sync from MongoDB to Elasticsearch (target index: {})", indexName);
+        log.info("Starting full sync for task {} to index {}", taskId, indexName);
 
         while (true) {
             List<User> users = lastId == null
@@ -94,7 +135,7 @@ public class UserSyncServiceImpl implements UserSyncService {
                                 .avatar(user.getAvatar())
                                 .phoneNumber(account != null ? account.phoneNumber() : null)
                                 .role(account != null ? account.role() : null)
-                                .createdAt(LocalDateTime.now())
+                                .createdAt(user.getCreatedAt())
                                 .build();
                     })
                     .toList();
@@ -102,15 +143,21 @@ public class UserSyncServiceImpl implements UserSyncService {
             bulkIndex(docs, indexName);
 
             lastId = users.getLast().getId();
-            total += users.size();
+            processed += users.size();
 
-            if (total % 5000 == 0) {
-                log.info("Progress: {} users indexed", total);
+            ReindexStep currentStep = ReindexStep.SYNCING_START;
+            if (totalDocs > 0) {
+                double currentRatio = (double) processed / totalDocs;
+                if (currentRatio > 0.8) currentStep = ReindexStep.DATA_COMPLETE;
+                else if (currentRatio > 0.4) currentStep = ReindexStep.SYNCING_MID;
+            }
+
+            updateTaskStatus(taskId, ReindexTaskStatus.RUNNING, currentStep, totalDocs, processed);
+
+            if (processed % 5000 == 0) {
+                log.info("Task {}: Progress {}/{}", taskId, processed, totalDocs);
             }
         }
-
-        log.info("Full sync completed: {} users indexed to Elasticsearch", total);
-        return total;
     }
 
     private void bulkIndex(List<UserIndex> docs, String indexName) {
