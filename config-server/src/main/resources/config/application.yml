@@ -1,5 +1,19 @@
-# Common Kafka Configuration for All Services
+# ==============================================
+# COMMON CONFIGURATION FOR ALL SERVICES
+# ==============================================
+# This file contains shared configuration that applies to all microservices
+# Individual services can override these settings in their specific config files
+
+# ==================== SPRING BOOT CONFIGURATION ====================
 spring:
+  main:
+    allow-bean-definition-overriding: true
+
+  # ==================== ELASTICSEARCH CONFIGURATION ====================
+  elasticsearch:
+    uris: ${ELASTICSEARCH_URIS}
+
+  # ==================== KAFKA CONFIGURATION ====================
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
 
@@ -37,19 +51,127 @@ spring:
     # Admin Configuration
     admin:
       properties:
-        bootstrap.servers: ${KAFKA_BOOTSTRAP_SERVERS}
+        bootstrap.servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+  data:
+    mongodb:
+      auto-index-creation: true
+      uuid-representation: standard
 
-# Kafka Topics Configuration (managed by KafkaTopicConfig class)
+# Kafka Topics Configuration
 kafka:
   topics:
-    account-events:
-      registered: account.registered
-      updated: account.updated
-      deleted: account.deleted
-      verified: account.verified
-      enabled: account.enabled
-      disabled: account.disabled
-    user-events:
-      created: user.created
-      updated: user.updated
-      deleted: user.deleted
+    # Authentication & User Events
+    user-registered: user.registered
+    user-updated: user.updated
+    user-deleted: user.deleted
+    user-login: user.login
+    user-logout: user.logout
+    password-reset: user.password-reset
+
+    # Message Events
+    message-sent: message.sent
+    message-delivered: message.delivered
+    message-read: message.read
+    message-deleted: message.deleted
+
+    # Notification Events
+    notification-created: notification.created
+    notification-sent: notification.sent
+    notification-failed: notification.failed
+    notification-delivered: notification.delivered
+
+    # System Events
+    system-alert: system.alert
+    audit-log: audit.log
+
+# ==================== EUREKA CLIENT CONFIGURATION ====================
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_SERVER_URL}
+    register-with-eureka: true
+    fetch-registry: true
+    registry-fetch-interval-seconds: 30
+  instance:
+    prefer-ip-address: true
+    instance-id: ${spring.application.name}:${spring.application.instance_id:${random.value}}
+    lease-renewal-interval-in-seconds: 30
+    lease-expiration-duration-in-seconds: 90
+    metadata-map:
+      version: 0.0.1-SNAPSHOT
+      environment: ${spring.profiles.active:default}
+
+# ==================== MANAGEMENT & MONITORING ====================
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,refresh,env
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: when-authorized
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+
+# ==================== LOGGING CONFIGURATION ====================
+logging:
+  level:
+    root: INFO
+    org.springframework.web: INFO
+    org.springframework.data.mongodb: DEBUG
+  logback:
+    rollingpolicy:
+      max-file-size: 10MB
+      max-history: 30
+      total-size-cap: 1GB
+
+# ==================== RESILIENCE4J DEFAULT CONFIGURATION ====================
+resilience4j:
+  # Circuit Breaker Default Configuration
+  circuitbreaker:
+    configs:
+      default:
+        register-health-indicator: true
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        wait-duration-in-open-state: 30s
+        failure-rate-threshold: 50
+        slow-call-rate-threshold: 100
+        slow-call-duration-threshold: 3s
+
+  # Retry Default Configuration
+  retry:
+    configs:
+      default:
+        max-attempts: 3
+        wait-duration: 1s
+        enable-exponential-backoff: true
+        exponential-backoff-multiplier: 2
+
+  # Time Limiter Default Configuration
+  timelimiter:
+    configs:
+      default:
+        timeout-duration: 5s
+        cancel-running-future: true
+
+bondhub:
+  security:
+    gateway-auth:
+      enabled: false

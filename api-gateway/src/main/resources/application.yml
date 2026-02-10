@@ -15,13 +15,10 @@ spring:
         initial-interval: 1000
         max-interval: 2000
         multiplier: 1.1
-  # Redis Configuration for token blacklist checking
-  data:
-    redis:
-      host: ${REDIS_HOST:localhost}
-      port: ${REDIS_PORT:6379}
-      password: ${REDIS_PASSWORD:redis123}
-      timeout: 5000ms
+  messages:
+    basename: i18n/messages
+    encoding: UTF-8
+    fallback-to-system-locale: false
 
 # Fallback configuration if config-server unavailable
 server:

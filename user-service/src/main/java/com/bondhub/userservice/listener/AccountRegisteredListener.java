@@ -1,11 +1,13 @@
 package com.bondhub.userservice.listener;
 
 import com.bondhub.common.config.kafka.KafkaTopicProperties;
+import com.bondhub.common.enums.Role;
 import com.bondhub.common.event.account.AccountRegisteredEvent;
 import com.bondhub.common.model.kafka.EventType;
 import com.bondhub.common.publisher.OutboxEventPublisher;
 import com.bondhub.common.event.user.UserCreatedEvent;
 import com.bondhub.userservice.dto.request.UserCreateRequest;
+import com.bondhub.userservice.dto.request.UserIndexRequest;
 import com.bondhub.userservice.dto.response.UserResponse;
 import com.bondhub.userservice.service.user.UserService;
 import lombok.RequiredArgsConstructor;
@@ -53,25 +55,33 @@ public class AccountRegisteredListener {
             UserResponse userResponse = userService.createUser(request);
 
             log.info("✅ User created successfully for accountId: {}, userId: {}", 
-                    event.getAccountId(), userResponse.getId());
+                    event.getAccountId(), userResponse.id());
+
+            // Index to Elasticsearch with phoneNumber from event and role=USER
+            UserIndexRequest indexRequest = UserIndexRequest.builder()
+                    .userId(userResponse.id())
+                    .phoneNumber(event.getPhoneNumber())
+                    .role(Role.USER)
+                    .build();
+            userService.indexUserToElasticsearch(indexRequest);
 
             // Publish USER_CREATED event back to complete the saga
             UserCreatedEvent userCreatedEvent = UserCreatedEvent.builder()
-                    .userId(userResponse.getId())
+                    .userId(userResponse.id())
                     .accountId(event.getAccountId())
-                    .fullName(userResponse.getFullName())
+                    .fullName(userResponse.fullName())
                     .timestamp(Instant.now().toEpochMilli())
                     .build();
 
             outboxEventPublisher.saveAndPublish(
-                    userResponse.getId(),
+                    userResponse.id(),
                     "User",
                     EventType.USER_CREATED,
                     userCreatedEvent
             );
 
             log.info("📤 Published USER_CREATED event for userId: {}, accountId: {}", 
-                    userResponse.getId(), event.getAccountId());
+                    userResponse.id(), event.getAccountId());
 
             // Manual acknowledgment
             if (acknowledgment != null) {

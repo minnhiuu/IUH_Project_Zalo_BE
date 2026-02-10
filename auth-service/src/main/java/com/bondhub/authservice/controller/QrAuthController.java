@@ -76,11 +76,13 @@ public class QrAuthController {
         });
 
         wrapper.onTimeout(() -> {
-            log.warn("QR wait timeout for qrId: {}", extractedQrId);
-            wrapper.setErrorResult(
-                    ResponseEntity.status(HttpStatus.REQUEST_TIMEOUT)
-                            .body(ApiResponse.error(408, "Request Timeout", null))
-            );
+             log.info("Long polling timeout (graceful) for qrId: {}", extractedQrId);
+
+            QrStatusResponse pendingResponse = QrStatusResponse.builder()
+                    .status(QrSessionStatus.PENDING)
+                    .build();
+
+            wrapper.setResult(ApiResponse.success(pendingResponse));
         });
 
         return wrapper;

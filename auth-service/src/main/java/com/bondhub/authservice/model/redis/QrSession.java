@@ -8,6 +8,7 @@ import org.springframework.data.redis.core.RedisHash;
 import org.springframework.data.redis.core.TimeToLive;
 
 import java.io.Serializable;
+import java.time.LocalDateTime;
 
 @RedisHash(value = "qr_sessions")
 @Data
@@ -28,6 +29,8 @@ public class QrSession implements Serializable {
     String ipAddress;
     String userAgent;
     String deviceId;
+    
+    LocalDateTime expiresAt;
 
     @TimeToLive
     Long ttl;

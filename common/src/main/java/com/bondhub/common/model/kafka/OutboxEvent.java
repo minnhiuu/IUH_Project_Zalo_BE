@@ -1,11 +1,13 @@
 package com.bondhub.common.model.kafka;
 
+import com.bondhub.common.model.BaseModel;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.MongoId;
+import java.time.Instant;
 
 import java.time.Instant;
 
@@ -17,7 +19,7 @@ import java.time.Instant;
 @Builder
 @FieldDefaults(level = AccessLevel.PRIVATE)
 @JsonInclude(JsonInclude.Include.NON_NULL)
-public class OutboxEvent {
+public class OutboxEvent extends BaseModel {
     
     @MongoId
     String id;
@@ -36,10 +38,6 @@ public class OutboxEvent {
     @Indexed
     @Builder.Default
     OutboxEventStatus status = OutboxEventStatus.PENDING;
-    
-    @Indexed
-    @Builder.Default
-    Instant createdAt = Instant.now();
     
     Instant processedAt;
     

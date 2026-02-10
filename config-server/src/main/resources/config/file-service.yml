@@ -1,0 +1,61 @@
+server:
+  port: 8085
+
+spring:
+  application:
+    name: file-service
+
+    # MongoDB Configuration
+  data:
+    mongodb:
+      uri: ${MONGODB_URI_FILES}
+      auto-index-creation: true
+      uuid-representation: standard
+
+# Resilience4j Circuit Breaker (if needed)
+resilience4j:
+  circuitbreaker:
+    instances:
+      authService:
+        register-health-indicator: true
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        permitted-number-of-calls-in-half-open-state: 3
+        wait-duration-in-open-state: 30s
+        failure-rate-threshold: 50
+        slow-call-rate-threshold: 100
+        slow-call-duration-threshold: 3s
+
+  retry:
+    instances:
+      authService:
+        max-attempts: 3
+        wait-duration: 1s
+
+  timelimiter:
+    instances:
+      authService:
+        timeout-duration: 5s
+
+# AWS S3 Configuration
+cloud:
+  aws:
+    region:
+      static: ${AWS_REGION}
+    credentials:
+      access-key: ${AWS_ACCESS_KEY}
+      secret-key: ${AWS_SECRET_KEY}
+aws:
+  s3:
+    bucket:
+      name: ${AWS_S3_BUCKET_NAME}
+
+# SpringDoc OpenAPI Configuration
+springdoc:
+  api-docs:
+    enabled: true
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html
+  show-actuator: false

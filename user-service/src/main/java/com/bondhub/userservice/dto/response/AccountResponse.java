@@ -1,12 +1,11 @@
 package com.bondhub.userservice.dto.response;
 
-import lombok.Data;
-import java.time.LocalDateTime;
+import lombok.Builder;
 
-@Data
-public class AccountResponse {
-    private String id;
-    private String phoneNumber;
-    private String email;
-    private String role;
-}
+@Builder
+public record AccountResponse(
+    String id,
+    String phoneNumber,
+    String email,
+    String role
+) {}
