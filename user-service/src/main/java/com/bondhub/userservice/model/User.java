@@ -6,6 +6,8 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
 import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.mapping.Field;
+import org.springframework.data.mongodb.core.mapping.FieldType;
 import org.springframework.data.mongodb.core.mapping.MongoId;
 
 import java.time.LocalDate;
@@ -22,7 +24,7 @@ import java.util.Set;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class User extends BaseModel {
     @EqualsAndHashCode.Include
-    @MongoId
+    @MongoId(FieldType.OBJECT_ID)
     String id;
 
     String fullName;
@@ -30,6 +32,8 @@ public class User extends BaseModel {
     String bio;
 
     Gender gender;
+
+    @Field(targetType = FieldType.OBJECT_ID)
     String accountId;
     Set<String> pinnedConversations;
 

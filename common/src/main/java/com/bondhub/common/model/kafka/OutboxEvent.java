@@ -6,6 +6,7 @@ import lombok.*;
 import lombok.experimental.FieldDefaults;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.mapping.FieldType;
 import org.springframework.data.mongodb.core.mapping.MongoId;
 import java.time.Instant;
 
@@ -20,8 +21,8 @@ import java.time.Instant;
 @FieldDefaults(level = AccessLevel.PRIVATE)
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class OutboxEvent extends BaseModel {
-    
-    @MongoId
+
+    @MongoId(FieldType.OBJECT_ID)
     String id;
     
     @Indexed
