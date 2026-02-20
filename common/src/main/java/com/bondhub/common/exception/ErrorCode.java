@@ -58,6 +58,7 @@ public enum ErrorCode {
 
         //  NOTIFICATION_TEMPLATE (23xx)
         NOTIFICATION_TEMPLATE_NOT_FOUND(HttpStatus.NOT_FOUND, 2300, "error.notification.template.not.found"),
+        NOTIFICATION_STRATEGY_NOT_FOUND(HttpStatus.INTERNAL_SERVER_ERROR, 2301, "error.notification.strategy.not.found"),
         ;
 
         private final HttpStatus httpStatus;

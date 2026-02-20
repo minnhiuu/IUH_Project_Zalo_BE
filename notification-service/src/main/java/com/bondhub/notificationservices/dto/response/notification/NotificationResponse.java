@@ -1,4 +1,4 @@
-package com.bondhub.notificationservices.dto.response;
+package com.bondhub.notificationservices.dto.response.notification;
 
 import com.bondhub.notificationservices.enums.NotificationType;
 
@@ -9,9 +9,8 @@ public record NotificationResponse(
         String id,
         String userId,
         NotificationType type,
+        String referenceId,
         String title,
         String body,
-        Map<String, Object> data,
-        boolean isRead,
-        LocalDateTime createdAt
+        boolean isRead
 ) {}

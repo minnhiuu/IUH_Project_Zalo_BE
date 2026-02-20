@@ -14,19 +14,21 @@ import org.springframework.data.mongodb.core.mapping.MongoId;
 import java.time.LocalDateTime;
 import java.util.Map;
 
+@EqualsAndHashCode(callSuper = true)
 @Document("notifications")
 @CompoundIndexes({
         @CompoundIndex(name = "user_created_idx",
                 def = "{'userId': 1, 'createdAt': -1}"),
         @CompoundIndex(name = "user_unread_idx",
-                def = "{'userId': 1, 'isRead': 1}")
+                def = "{'userId': 1, 'isRead': 1}"),
+        @CompoundIndex(name = "user_type_reference_unique",
+                def = "{'userId': 1, 'type': 1, 'referenceId': 1}",
+                unique = true)
 })
-@Getter
-@Setter
-@Builder
-@NoArgsConstructor
+@Data
 @AllArgsConstructor
-@FieldDefaults(level = AccessLevel.PRIVATE)
+@NoArgsConstructor
+@Builder
 public class Notification extends BaseModel {
 
     @MongoId(FieldType.OBJECT_ID)
@@ -36,6 +38,8 @@ public class Notification extends BaseModel {
     String userId;
 
     NotificationType type;
+
+    String referenceId;
 
     String title;
 

@@ -1,8 +1,8 @@
 package com.bondhub.notificationservices.controller;
 
 import com.bondhub.common.dto.ApiResponse;
-import com.bondhub.notificationservices.dto.request.CreateFriendRequestNotificationRequest;
-import com.bondhub.notificationservices.dto.response.NotificationResponse;
+import com.bondhub.notificationservices.dto.request.notification.CreateFriendRequestNotificationRequest;
+import com.bondhub.notificationservices.dto.response.notification.NotificationResponse;
 import com.bondhub.notificationservices.service.notification.NotificationService;
 import jakarta.validation.Valid;
 import lombok.AccessLevel;
