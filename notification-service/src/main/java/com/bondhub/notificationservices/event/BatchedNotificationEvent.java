@@ -26,9 +26,6 @@ public class BatchedNotificationEvent {
     int othersCount;
     String locale;
 
-    String renderedTitle;
-    String renderedBody;
-
     List<Map<String, Object>> rawPayloads;
 
     LocalDateTime batchedAt;

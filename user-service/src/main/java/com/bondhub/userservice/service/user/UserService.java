@@ -34,4 +34,6 @@ public interface UserService {
     UserImageResponse updateBackgroundPosition(Double y);
 
     void deleteUser(String id);
+
+    boolean existsById(String userId);
 }

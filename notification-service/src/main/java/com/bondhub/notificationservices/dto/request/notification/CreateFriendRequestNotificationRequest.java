@@ -12,9 +12,8 @@ public record CreateFriendRequestNotificationRequest(
         @NotBlank(message = "validation.sender.name.required")
         String senderName,
 
-        @NotBlank(message = "validation.request.id.required")
-        String requestId,
+        String senderAvatar,
 
-        @NotBlank(message = "validation.notification.locale.required")
-        String locale
+        @NotBlank(message = "validation.request.id.required")
+        String requestId
 ) {}

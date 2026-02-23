@@ -1,6 +1,7 @@
-package com.bondhub.notificationservices.service.batch;
+package com.bondhub.notificationservices.batch;
 
 import com.bondhub.notificationservices.enums.BatchWindowConfig;
+import com.bondhub.notificationservices.enums.NotificationType;
 import com.bondhub.notificationservices.event.RawNotificationEvent;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -37,26 +38,35 @@ public class BatcherServiceImpl implements BatcherService {
 
         if (!cfg.isBatchable()) return false;
 
-        String batchKey = buildBatchKey(event);
-        String lockKey  = LOCK_PREFIX + batchKey;
-        String listKey  = LIST_PREFIX + batchKey;
+        try {
+            String batchKey = buildBatchKey(event);
+            String lockKey  = LOCK_PREFIX + batchKey;
+            String listKey  = LIST_PREFIX + batchKey;
 
-        Boolean isNewBatch = stringRedisTemplate.opsForValue()
-                .setIfAbsent(lockKey, "1", Duration.ofSeconds(cfg.getWindowSeconds()));
+            Boolean isNewBatch = stringRedisTemplate.opsForValue()
+                    .setIfAbsent(lockKey, "1", Duration.ofSeconds(cfg.getWindowSeconds()));
 
-        if (Boolean.TRUE.equals(isNewBatch)) {
-            log.debug("New batch window opened: key={}, window={}s", batchKey, cfg.getWindowSeconds());
-            batchScheduler.scheduleFlush(batchKey, cfg.getWindowSeconds());
+            if (Boolean.TRUE.equals(isNewBatch)) {
+                log.debug("New batch window opened: key={}, window={}s", batchKey, cfg.getWindowSeconds());
+                batchScheduler.scheduleFlush(batchKey, cfg.getWindowSeconds());
+            }
+
+            String serialized = serialize(event);
+            if (serialized != null) {
+                stringRedisTemplate.opsForList().rightPush(listKey, serialized);
+            }
+
+            return true;
+        } catch (Exception e) {
+            log.error("Redis unavailable, falling back to direct delivery for type={}", event.getType(), e);
+            return false;
         }
-
-        String serialized = serialize(event);
-        if (serialized != null) {
-            stringRedisTemplate.opsForList().rightPush(listKey, serialized);
-        }
-
-        return Boolean.TRUE.equals(isNewBatch);
     }
 
+    @Override
+    public boolean isBatchableType(NotificationType type) {
+        return BatchWindowConfig.of(type).isBatchable();
+    }
 
     public static String buildBatchKey(RawNotificationEvent event) {
         return event.getType().name() + ":" + event.getRecipientId();
@@ -70,6 +80,4 @@ public class BatcherServiceImpl implements BatcherService {
             return null;
         }
     }
-
-
 }

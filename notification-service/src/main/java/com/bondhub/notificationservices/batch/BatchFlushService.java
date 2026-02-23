@@ -1,5 +1,6 @@
-package com.bondhub.notificationservices.service.batch;
+package com.bondhub.notificationservices.batch;
 
 public interface BatchFlushService {
+
     void flush(String batchKey);
 }

@@ -32,9 +32,3 @@ spring:
 app:
   firebase:
     config-path: ${FIREBASE_CONFIG_PATH}
-  kafka:
-    topics:
-      raw-notifications: raw-notifications
-      delivery-queue: notification-delivery
-  batch:
-    recovery-on-startup: true

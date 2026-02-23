@@ -1,4 +1,4 @@
-package com.bondhub.notificationservices.service.batch;
+package com.bondhub.notificationservices.batch;
 
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
@@ -32,5 +32,4 @@ public class BatchScheduler {
                 }, executeAt
         );
     }
-
 }

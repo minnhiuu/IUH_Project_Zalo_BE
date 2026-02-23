@@ -18,4 +18,9 @@ public class InternalUserController {
         return ResponseEntity.ok(ApiResponse.success(userService.getUserSummaryByAccountId(accountId)));
     }
 
+    @GetMapping("/exists/{userId}")
+    public ResponseEntity<ApiResponse<Boolean>> existsById(@PathVariable String userId) {
+        return ResponseEntity.ok(ApiResponse.success(userService.existsById(userId)));
+    }
+
 }
