@@ -12,6 +12,17 @@ spring:
         initial-interval: 1000
         max-interval: 2000
         multiplier: 1.1
+  data:
+    redis:
+      host: ${REDIS_HOST:}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
 
   messages:
     basename: i18n/messages,i18n/messages-notification
@@ -21,3 +32,9 @@ spring:
 app:
   firebase:
     config-path: ${FIREBASE_CONFIG_PATH}
+  kafka:
+    topics:
+      raw-notifications: raw-notifications
+      delivery-queue: notification-delivery
+  batch:
+    recovery-on-startup: true
