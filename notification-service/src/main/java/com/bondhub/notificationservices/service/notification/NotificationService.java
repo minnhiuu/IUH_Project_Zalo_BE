@@ -1,8 +1,9 @@
 package com.bondhub.notificationservices.service.notification;
 
 import com.bondhub.notificationservices.dto.request.notification.CreateFriendRequestNotificationRequest;
+import com.bondhub.notificationservices.dto.response.notification.NotificationAcceptedResponse;
 
 public interface NotificationService {
 
-    void createFriendRequestNotification(CreateFriendRequestNotificationRequest request);
+    NotificationAcceptedResponse createFriendRequestNotification(CreateFriendRequestNotificationRequest request);
 }

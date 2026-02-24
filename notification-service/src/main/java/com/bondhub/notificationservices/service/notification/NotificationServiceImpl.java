@@ -1,6 +1,7 @@
 package com.bondhub.notificationservices.service.notification;
 
 import com.bondhub.notificationservices.dto.request.notification.CreateFriendRequestNotificationRequest;
+import com.bondhub.notificationservices.dto.response.notification.NotificationAcceptedResponse;
 import com.bondhub.notificationservices.enums.NotificationType;
 import com.bondhub.notificationservices.event.BatchedNotificationEvent;
 import com.bondhub.notificationservices.event.RawNotificationEvent;
@@ -36,19 +37,20 @@ public class NotificationServiceImpl implements NotificationService {
     UserPreferenceService userPreferenceService;
 
     @Override
-    public void createFriendRequestNotification(CreateFriendRequestNotificationRequest request) {
-        process(NotificationType.FRIEND_REQUEST, request);
+    public NotificationAcceptedResponse createFriendRequestNotification(CreateFriendRequestNotificationRequest request) {
+        return process(NotificationType.FRIEND_REQUEST, request);
     }
 
-    private void process(NotificationType type, Object request) {
+    private NotificationAcceptedResponse process(NotificationType type, Object request) {
         RawNotificationEvent event = assemblerResolver.get(type).build(request);
         log.info("Processing notification: type={}, recipient={}", type, event.getRecipientId());
 
-        if (!userValidatorStep.process(event)) return;
-        if (!notificationBatcherStep.process(event)) return;
-        if (!userPreferenceCheckerStep.process(event)) return;
+        if (!userValidatorStep.process(event)) return NotificationAcceptedResponse.queued();
+        if (!notificationBatcherStep.process(event)) return NotificationAcceptedResponse.queued();
+        if (!userPreferenceCheckerStep.process(event)) return NotificationAcceptedResponse.queued();
 
         deliveryService.deliver(toImmediate(event));
+        return NotificationAcceptedResponse.immediate();
     }
 
     private BatchedNotificationEvent toImmediate(RawNotificationEvent event) {

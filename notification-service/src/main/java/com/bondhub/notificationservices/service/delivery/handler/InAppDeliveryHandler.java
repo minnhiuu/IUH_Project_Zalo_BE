@@ -12,6 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @Component
@@ -30,23 +31,26 @@ public class InAppDeliveryHandler implements DeliveryHandler {
 
     @Override
     public void deliver(BatchedNotificationEvent event) {
-        Map<String, Object> data = buildTemplateData(event);
+        Map<String, Object> templateData = buildTemplateData(event);
+        String title = renderSafe(event, templateData, "title");
+        String body  = renderSafe(event, templateData, "body");
 
-        String title = renderSafe(event, data, "title");
-        String body  = renderSafe(event, data, "body");
+        List<String> actorIds = event.getActorIds() != null ? event.getActorIds() : List.of();
 
         Notification notification = Notification.builder()
                 .userId(event.getRecipientId())
                 .type(event.getType())
-                .referenceId(resolveReferenceId(event))
+                .referenceId(null)
                 .title(title)
                 .body(body)
+                .actorIds(actorIds)
                 .data(buildData(event))
                 .isRead(false)
                 .build();
 
         notificationRepository.save(notification);
-        log.info("IN_APP saved: recipientId={}, type={}", event.getRecipientId(), event.getType());
+        log.info("IN_APP saved: recipientId={}, type={}, actorCount={}",
+                event.getRecipientId(), event.getType(), event.getActorCount());
 
         // TODO: push realtime to client via WebSocket (if online)
     }
@@ -78,13 +82,5 @@ public class InAppDeliveryHandler implements DeliveryHandler {
             log.warn("IN_APP template not found for type={} locale={}, using fallback", event.getType(), event.getLocale());
             return "title".equals(field) ? event.getActorCount() + " new notifications" : "";
         }
-    }
-
-    private String resolveReferenceId(BatchedNotificationEvent event) {
-        if (event.getRawPayloads() != null && !event.getRawPayloads().isEmpty()) {
-            Object ref = event.getRawPayloads().getFirst().get("referenceId");
-            if (ref != null) return ref.toString();
-        }
-        return null;
     }
 }

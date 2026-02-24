@@ -4,6 +4,7 @@ import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.notificationservices.dto.request.notificationtemplate.CreateTemplateRequest;
 import com.bondhub.notificationservices.dto.request.notificationtemplate.UpdateTemplateRequest;
 import com.bondhub.notificationservices.dto.response.notificationtemplate.NotificationTemplateResponse;
+import com.bondhub.notificationservices.enums.NotificationChannel;
 import com.bondhub.notificationservices.enums.NotificationType;
 import com.bondhub.notificationservices.service.notificationtemplate.NotificationTemplateService;
 import jakarta.validation.Valid;
@@ -33,8 +34,8 @@ public class NotificationTemplateController {
     }
 
     @GetMapping
-    public ResponseEntity<ApiResponse<NotificationTemplateResponse>> get(@RequestParam NotificationType type, @RequestParam String locale) {
+    public ResponseEntity<ApiResponse<NotificationTemplateResponse>> get(@RequestParam NotificationType type, @RequestParam NotificationChannel channel, @RequestParam String locale) {
         log.debug("API - Get template type={} locale={}", type, locale);
-        return ResponseEntity.ok(ApiResponse.success(service.getTemplate(type, locale)));
+        return ResponseEntity.ok(ApiResponse.success(service.getTemplate(type, channel, locale)));
     }
 }
