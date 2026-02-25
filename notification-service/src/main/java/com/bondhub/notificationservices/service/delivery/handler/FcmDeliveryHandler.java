@@ -11,6 +11,8 @@ import com.google.firebase.messaging.FirebaseMessagingException;
 import com.google.firebase.messaging.Message;
 import com.google.firebase.messaging.MessagingErrorCode;
 import com.google.firebase.messaging.Notification;
+import com.google.firebase.messaging.AndroidConfig;
+import com.google.firebase.messaging.AndroidNotification;
 import com.google.firebase.messaging.WebpushConfig;
 import com.google.firebase.messaging.WebpushNotification;
 import org.springframework.retry.support.RetryTemplate;
@@ -75,13 +77,22 @@ public class FcmDeliveryHandler implements DeliveryHandler {
     }
 
     private void sendToDevice(UserDevice device, Notification fcmNotification, BatchedNotificationEvent event) {
+        String collapseKey = event.getType().name() + "_" + event.getRecipientId();
+
         Message message = Message.builder()
                 .setToken(device.getFcmToken())
                 .setNotification(fcmNotification)
+                .setAndroidConfig(AndroidConfig.builder()
+                        .setCollapseKey(collapseKey)
+                        .setNotification(AndroidNotification.builder()
+                                .setTag(collapseKey)
+                                .build())
+                        .build())
                 .setWebpushConfig(WebpushConfig.builder()
                         .setNotification(WebpushNotification.builder()
                                 .setIcon(event.getFirstActorAvatar() != null ? event.getFirstActorAvatar() : "/images/logo.png")
                                 .setBadge("/images/logo.png")
+                                .setTag(collapseKey) 
                                 .build())
                         .build())
                 .putData("type",        event.getType().name())

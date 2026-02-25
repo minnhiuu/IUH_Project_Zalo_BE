@@ -9,11 +9,14 @@ import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.mongodb.core.FindAndModifyOptions;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.stereotype.Component;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 @Component
 @Slf4j
@@ -23,6 +26,7 @@ public class InAppDeliveryHandler implements DeliveryHandler {
 
     NotificationRepository notificationRepository;
     NotificationTemplateService templateService;
+    MongoTemplate mongoTemplate;
 
     @Override
     public NotificationChannel getChannel() {
@@ -31,40 +35,42 @@ public class InAppDeliveryHandler implements DeliveryHandler {
 
     @Override
     public void deliver(BatchedNotificationEvent event) {
-        Map<String, Object> templateData = buildTemplateData(event);
-        String title = renderSafe(event, templateData, "title");
-        String body  = renderSafe(event, templateData, "body");
-
         List<String> actorIds = event.getActorIds() != null ? event.getActorIds() : List.of();
 
-        notificationRepository.findByUserIdAndTypeAndReferenceId(event.getRecipientId(), event.getType(), null)
-                .ifPresentOrElse(
-                        existing -> {
-                            existing.setTitle(title);
-                            existing.setBody(body);
-                            existing.setActorIds(actorIds);
-                            existing.setData(buildData(event));
-                            existing.setRead(false);
-                            notificationRepository.save(existing);
-                            log.info("IN_APP updated: recipientId={}, type={}, actorCount={}",
-                                    event.getRecipientId(), event.getType(), event.getActorCount());
-                        },
-                        () -> {
-                            Notification notification = Notification.builder()
-                                    .userId(event.getRecipientId())
-                                    .type(event.getType())
-                                    .referenceId(null)
-                                    .title(title)
-                                    .body(body)
-                                    .actorIds(actorIds)
-                                    .data(buildData(event))
-                                    .isRead(false)
-                                    .build();
-                            notificationRepository.save(notification);
-                            log.info("IN_APP created: recipientId={}, type={}, actorCount={}",
-                                    event.getRecipientId(), event.getType(), event.getActorCount());
-                        }
-                );
+        Query query = new Query(Criteria.where("userId").is(event.getRecipientId())
+                .and("type").is(event.getType())
+                .and("referenceId").is(null));
+
+        Update update = new Update()
+                .push("actorIds").atPosition(Update.Position.FIRST).each(actorIds.toArray())
+                .set("isRead", false)
+                .set("lastModifiedAt", java.time.LocalDateTime.now());
+
+        Notification existing = mongoTemplate.findAndModify(
+                query,
+                update,
+                FindAndModifyOptions.options().returnNew(true).upsert(true),
+                Notification.class
+        );
+
+        if (existing != null) {
+            Set<String> uniqueActors = new LinkedHashSet<>(existing.getActorIds());
+            List<String> finalActors = new ArrayList<>(uniqueActors);
+            existing.setActorIds(finalActors);
+
+            Map<String, Object> dynamicData = new HashMap<>();
+            dynamicData.put("firstName", event.getFirstActorName() != null ? event.getFirstActorName() : event.getFirstActorId());
+            dynamicData.put("count", finalActors.size());
+            dynamicData.put("othersCount", finalActors.size() - 1);
+
+            existing.setTitle(templateService.renderTitle(event.getType(), NotificationChannel.IN_APP, event.getLocale(), dynamicData));
+            existing.setBody(templateService.renderBody(event.getType(), NotificationChannel.IN_APP, event.getLocale(), dynamicData));
+            existing.setData(buildDataFromCount(event, finalActors.size()));
+
+            notificationRepository.save(existing);
+            log.info("IN_APP atomic delivery: recipientId={}, totalActors={}",
+                    event.getRecipientId(), finalActors.size());
+        }
 
         // TODO: push realtime to client via WebSocket (if online)
     }
@@ -78,12 +84,16 @@ public class InAppDeliveryHandler implements DeliveryHandler {
     }
 
     private Map<String, Object> buildData(BatchedNotificationEvent event) {
+        return buildDataFromCount(event, event.getActorCount());
+    }
+
+    private Map<String, Object> buildDataFromCount(BatchedNotificationEvent event, int totalCount) {
         Map<String, Object> data = new HashMap<>();
         data.put("actorId",     event.getFirstActorId());
         data.put("actorName",   event.getFirstActorName());
         data.put("actorAvatar", event.getFirstActorAvatar());
-        data.put("actorCount",  event.getActorCount());
-        data.put("othersCount", event.getOthersCount());
+        data.put("actorCount",  totalCount);
+        data.put("othersCount", totalCount - 1);
         return data;
     }
 
