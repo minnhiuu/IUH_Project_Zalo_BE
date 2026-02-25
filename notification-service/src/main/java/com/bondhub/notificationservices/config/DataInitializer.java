@@ -20,17 +20,17 @@ public class DataInitializer {
     @EventListener(ApplicationReadyEvent.class)
     public void seedTemplates() {
         seedIfAbsent(NotificationType.FRIEND_REQUEST, NotificationChannel.IN_APP, "vi",
-                "{{firstName}} da gui loi moi ket ban",
-                "Ban co {{count}} loi moi ket ban moi");
+                "Lời mời kết bạn",
+                "{{firstName}}{{#othersCount}} và {{othersCount}} người khác{{/othersCount}} đã gửi lời mời kết bạn cho bạn");
         seedIfAbsent(NotificationType.FRIEND_REQUEST, NotificationChannel.FCM, "vi",
-                "{{firstName}} da gui loi moi ket ban",
-                "Ban co {{count}} loi moi ket ban moi");
+                "Lời mời kết bạn",
+                "{{firstName}}{{#othersCount}} và {{othersCount}} người khác{{/othersCount}} đã gửi lời mời kết bạn cho bạn");
         seedIfAbsent(NotificationType.FRIEND_REQUEST, NotificationChannel.IN_APP, "en",
-                "{{firstName}} sent you a friend request",
-                "You have {{count}} new friend request(s)");
+                "Friend Request",
+                "{{firstName}}{{#othersCount}} and {{othersCount}} others{{/othersCount}} sent you a friend request");
         seedIfAbsent(NotificationType.FRIEND_REQUEST, NotificationChannel.FCM, "en",
-                "{{firstName}} sent you a friend request",
-                "You have {{count}} new friend request(s)");
+                "Friend Request",
+                "{{firstName}}{{#othersCount}} and {{othersCount}} others{{/othersCount}} sent you a friend request");
     }
 
     private void seedIfAbsent(NotificationType type, NotificationChannel channel, String locale,
