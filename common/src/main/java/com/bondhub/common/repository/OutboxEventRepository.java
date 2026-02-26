@@ -6,19 +6,17 @@ import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.data.mongodb.repository.Query;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
 @Repository
 public interface OutboxEventRepository extends MongoRepository<OutboxEvent, String> {
-    
-    @Query("{ 'status': 'PENDING' }")
-    List<OutboxEvent> findPendingEvents();
-    
-    @Query("{ 'status': 'FAILED', 'retryCount': { $lt: ?0 } }")
-    List<OutboxEvent> findFailedEventsForRetry(int maxRetries);
-    
-    List<OutboxEvent> findByStatusAndRetryCountGreaterThanEqual(OutboxEvent.OutboxEventStatus status, int retryCount);
-    
     Optional<OutboxEvent> findTopByAggregateIdAndEventTypeOrderByCreatedAtDesc(String aggregateId, EventType eventType);
+
+    long deleteByStatusAndCreatedAtBefore(OutboxEvent.OutboxEventStatus outboxEventStatus, LocalDateTime cutoff);
+
+    long countByStatusAndCreatedAtBefore(OutboxEvent.OutboxEventStatus outboxEventStatus, LocalDateTime stuckThreshold);
+
+    List<OutboxEvent> findByStatusAndCreatedAtBefore(OutboxEvent.OutboxEventStatus status, LocalDateTime threshold);
 }

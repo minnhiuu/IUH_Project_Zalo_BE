@@ -50,8 +50,6 @@ public class OutboxEvent extends BaseModel {
         PENDING,
         PROCESSING,
         PUBLISHED,
-        CONSUMED,  // Consumer has successfully processed the event
-        FAILED,
-        DEAD
+        FAILED
     }
 }
