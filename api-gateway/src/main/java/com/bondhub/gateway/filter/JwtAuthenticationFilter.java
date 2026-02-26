@@ -59,6 +59,7 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
                     }
 
                     try {
+                        String accountId = jwtUtil.extractAccountId(token);
                         String userId = jwtUtil.extractUserId(token);
                         String email = jwtUtil.extractEmail(token);
                         String role = jwtUtil.extractRole(token);
@@ -66,14 +67,15 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
                         String remainingTTL = String.valueOf(jwtUtil.getRemainingTtl(token));
 
                         ServerHttpRequest modifiedRequest = request.mutate()
-                                .header("X-User-Id", userId)
+                                .header("X-Account-Id", accountId)
+                                .header("X-User-Id", userId != null ? userId : "")
                                 .header("X-User-Email", email)
                                 .header("X-User-Roles", role)
                                 .header("X-JWT-Id", jti)
                                 .header("X-Remaining-TTL", remainingTTL)
                                 .build();
 
-                        log.debug("Authentication successful for user: {} ({})", email, userId);
+                        log.debug("Authentication successful for account: {}, user: {}", accountId, userId);
 
                         return chain.filter(exchange.mutate().request(modifiedRequest).build());
 

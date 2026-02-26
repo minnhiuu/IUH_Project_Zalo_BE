@@ -28,12 +28,13 @@ public class JwtUtil {
     /**
      * Generate access token with user information
      *
-     * @param userId User ID
-     * @param email  User email
-     * @param role   User role
+     * @param accountId Account ID
+     * @param userId    User profile ID
+     * @param email     User email
+     * @param role      User role
      * @return JWT access token
      */
-    public String generateAccessToken(String userId, String email, Role role, String sessionId) {
+    public String generateAccessToken(String accountId, String userId, String email, Role role, String sessionId) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", userId);
         claims.put("email", email);
@@ -43,7 +44,7 @@ public class JwtUtil {
         claims.put("role", role != null ? role.getName() : null);
         claims.put("type", "access");
 
-        return generateToken(claims, userId, jwtProperties.getAccessTokenExpiration());
+        return generateToken(claims, accountId, jwtProperties.getAccessTokenExpiration());
     }
 
     /**
@@ -112,13 +113,23 @@ public class JwtUtil {
     }
 
     /**
-     * Extract user ID from token
+     * Extract account ID from token
+     *
+     * @param token JWT token
+     * @return Account ID
+     */
+    public String extractAccountId(String token) {
+        return extractClaim(token, Claims::getSubject);
+    }
+
+    /**
+     * Extract user profile ID from token
      *
      * @param token JWT token
      * @return User ID
      */
     public String extractUserId(String token) {
-        return extractClaim(token, Claims::getSubject);
+        return extractClaim(token, claims -> claims.get("userId", String.class));
     }
 
     /**

@@ -14,9 +14,9 @@ import com.bondhub.authservice.dto.auth.response.TokenResponse;
 import com.bondhub.authservice.enums.OtpPurpose;
 import com.bondhub.authservice.enums.DeviceType;
 import com.bondhub.authservice.model.Account;
+import com.bondhub.common.dto.client.userservice.user.request.UserCreateRequest;
 import com.bondhub.common.event.account.AccountRegisteredEvent;
 import com.bondhub.common.model.kafka.EventType;
-import com.bondhub.common.publisher.OutboxEventPublisher;
 import com.bondhub.authservice.model.redis.PendingRegistration;
 import com.bondhub.authservice.repository.AccountRepository;
 import com.bondhub.authservice.repository.redis.PendingRegistrationRepository;
@@ -55,7 +55,6 @@ public class AuthenticationServiceImpl implements AuthenticationService {
     MailService mailService;
     UserServiceClient userServiceClient;
     MessageSource messageSource;
-    OutboxEventPublisher outboxEventPublisher;
 
     @Override
     public TokenResponse login(LoginRequest request, String userAgent, String ipAddress) {
@@ -74,7 +73,19 @@ public class AuthenticationServiceImpl implements AuthenticationService {
             throw new AppException(ErrorCode.AUTH_UNAUTHENTICATED);
         }
 
-        return generateFullTokenResponse(account, request.deviceId(), request.deviceType(), userAgent, ipAddress);
+        String userId = null;
+        try {
+            var response = userServiceClient.getUserSummaryByAccountId(account.getId());
+            if (response != null && response.data() != null) {
+                userId = response.data().getId();
+                log.info("Fetched user profile for accountId: {}, userId: {}", account.getId(), userId);
+            }
+        } catch (Exception e) {
+            log.error("Failed to fetch user profile via API for accountId: {}", account.getId(), e);
+        }
+
+        return generateFullTokenResponse(account, userId, request.deviceId(), request.deviceType(), userAgent,
+                ipAddress);
     }
 
     @Override
@@ -102,7 +113,7 @@ public class AuthenticationServiceImpl implements AuthenticationService {
         account = accountRepository.save(account);
 
         String sessionId = UUID.randomUUID().toString();
-        String accessToken = jwtUtil.generateAccessToken(account.getId(), account.getEmail(), account.getRole(),
+        String accessToken = jwtUtil.generateAccessToken(account.getId(), null, account.getEmail(), account.getRole(),
                 sessionId);
 
         return TokenResponse.of(accessToken, null);
@@ -142,7 +153,7 @@ public class AuthenticationServiceImpl implements AuthenticationService {
                 .map(s -> s.getDeviceType())
                 .orElse(DeviceType.WEB);
 
-        return generateFullTokenResponse(account, request.deviceId(), deviceType, userAgent, ipAddress);
+        return generateFullTokenResponse(account, null, request.deviceId(), deviceType, userAgent, ipAddress);
     }
 
     @Override
@@ -275,32 +286,26 @@ public class AuthenticationServiceImpl implements AuthenticationService {
 
         log.info("✅ Account created and verified for: {}", account.getEmail());
 
-        // Publish account registered event via outbox pattern
+        // Call user-service to create user profile synchronously
+        String userId = null;
         try {
-            AccountRegisteredEvent event = AccountRegisteredEvent.builder()
+            var createRequest = UserCreateRequest.builder()
                     .accountId(account.getId())
-                    .email(account.getEmail())
                     .fullName(pendingReg.getFullName())
-                    .phoneNumber(account.getPhoneNumber())
-                    .timestamp(System.currentTimeMillis())
                     .build();
 
-            outboxEventPublisher.saveAndPublish(
-                    account.getId(),
-                    "Account",
-                    EventType.ACCOUNT_REGISTERED,
-                    event
-            );
-
-            log.info("✅ Account registered event published for accountId: {}", account.getId());
-
+            var response = userServiceClient.createUser(createRequest);
+            if (response != null && response.data() != null) {
+                userId = response.data().getId();
+                log.info("✅ User profile created via API for accountId: {}, userId: {}", account.getId(), userId);
+            }
         } catch (Exception e) {
-            log.error("❌ Failed to publish account registered event for accountId: {}", account.getId(), e);
-            log.error("❌ Failed to create user profile for account: {}", account.getId(), e);
+            log.error("❌ Failed to create user profile via API for accountId: {}", account.getId(), e);
         }
 
         return generateFullTokenResponse(
                 account,
+                userId,
                 request.deviceId(),
                 request.deviceType(),
                 userAgent,
@@ -347,13 +352,15 @@ public class AuthenticationServiceImpl implements AuthenticationService {
 
         return generateFullTokenResponse(
                 account,
+                null,
                 "web-device", // Default or from request if available
                 DeviceType.WEB,
                 userAgent,
                 ipAddress);
     }
 
-    private TokenResponse generateFullTokenResponse(Account account, String deviceId, DeviceType deviceType,
+    private TokenResponse generateFullTokenResponse(Account account, String userId, String deviceId,
+            DeviceType deviceType,
             String userAgent, String ipAddress) {
         String sessionId = UUID.randomUUID().toString();
 
@@ -361,7 +368,7 @@ public class AuthenticationServiceImpl implements AuthenticationService {
                 ? jwtUtil.getMobileRefreshExpirationMs()
                 : jwtUtil.getWebRefreshExpirationMs();
 
-        String accessToken = jwtUtil.generateAccessToken(account.getId(), account.getEmail(), account.getRole(),
+        String accessToken = jwtUtil.generateAccessToken(account.getId(), userId, account.getEmail(), account.getRole(),
                 sessionId);
         String refreshToken = jwtUtil.generateRefreshToken(account.getId(), sessionId, refreshExpirationMs);
 

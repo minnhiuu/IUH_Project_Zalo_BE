@@ -131,17 +131,27 @@ public class QrAuthenticationServiceImpl implements QrAuthenticationService {
         String sessionId = UUID.randomUUID().toString();
         long refreshExpirationMs = jwtUtil.getWebRefreshExpirationMs();
 
+        // Fetch userId or pass null if unable
+        String userId = null;
+        try {
+            ApiResponse<UserSummaryResponse> response = userServiceClient.getUserSummaryByAccountId(account.getId());
+            if (response != null && response.data() != null) {
+                userId = response.data().getId();
+            }
+        } catch (Exception e) {
+            log.warn("Could not fetch user profile ID for accountId: {}, reason: {}", account.getId(), e.getMessage());
+        }
+
         String accessToken = jwtUtil.generateAccessToken(
                 account.getId(),
+                userId,
                 account.getEmail(),
                 account.getRole(),
-                sessionId
-        );
+                sessionId);
         String refreshToken = jwtUtil.generateRefreshToken(
                 account.getId(),
                 sessionId,
-                refreshExpirationMs
-        );
+                refreshExpirationMs);
 
         tokenStoreService.createRefreshSession(
                 sessionId,
@@ -152,8 +162,7 @@ public class QrAuthenticationServiceImpl implements QrAuthenticationService {
                 refreshToken,
                 session.getUserAgent(),
                 session.getIpAddress(),
-                refreshExpirationMs / 1000
-        );
+                refreshExpirationMs / 1000);
 
         session.setStatus(QrSessionStatus.CONFIRMED);
         session.setWebAccessToken(accessToken);
@@ -194,7 +203,7 @@ public class QrAuthenticationServiceImpl implements QrAuthenticationService {
         if (qrContent == null || qrContent.isBlank()) {
             throw new AppException(ErrorCode.QR_SESSION_INVALID_STATE);
         }
-        
+
         if (qrContent.startsWith(qrProperties.getContentPrefix())) {
             String extractedId = qrContent.substring(qrProperties.getContentPrefix().length());
             if (extractedId.isBlank()) {
@@ -202,7 +211,7 @@ public class QrAuthenticationServiceImpl implements QrAuthenticationService {
             }
             return extractedId;
         }
-        
+
         return qrContent;
     }
 }
