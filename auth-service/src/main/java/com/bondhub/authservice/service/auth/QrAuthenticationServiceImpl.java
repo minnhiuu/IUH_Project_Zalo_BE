@@ -136,7 +136,7 @@ public class QrAuthenticationServiceImpl implements QrAuthenticationService {
         try {
             ApiResponse<UserSummaryResponse> response = userServiceClient.getUserSummaryByAccountId(account.getId());
             if (response != null && response.data() != null) {
-                userId = response.data().getId();
+                userId = response.data().id();
             }
         } catch (Exception e) {
             log.warn("Could not fetch user profile ID for accountId: {}, reason: {}", account.getId(), e.getMessage());

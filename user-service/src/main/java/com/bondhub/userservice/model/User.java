@@ -6,10 +6,12 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
 import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.mapping.Field;
 import org.springframework.data.mongodb.core.mapping.FieldType;
 import org.springframework.data.mongodb.core.mapping.MongoId;
 
 import java.time.LocalDate;
+import java.util.Set;
 
 @Document("users")
 @Getter
@@ -30,8 +32,11 @@ public class User extends BaseModel {
     String bio;
 
     Gender gender;
+    @Field(targetType = FieldType.OBJECT_ID)
     String accountId;
-//    Set<String> pinnedConversations;
-//    FileDocument background;
-//    FileDocument avatar;
+    Set<String> pinnedConversations;
+
+    String avatar;
+    String background;
+    Double backgroundY;
 }

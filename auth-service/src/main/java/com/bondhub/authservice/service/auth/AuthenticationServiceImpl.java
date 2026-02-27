@@ -77,7 +77,7 @@ public class AuthenticationServiceImpl implements AuthenticationService {
         try {
             var response = userServiceClient.getUserSummaryByAccountId(account.getId());
             if (response != null && response.data() != null) {
-                userId = response.data().getId();
+                userId = response.data().id();
                 log.info("Fetched user profile for accountId: {}, userId: {}", account.getId(), userId);
             }
         } catch (Exception e) {
@@ -296,7 +296,7 @@ public class AuthenticationServiceImpl implements AuthenticationService {
 
             var response = userServiceClient.createUser(createRequest);
             if (response != null && response.data() != null) {
-                userId = response.data().getId();
+                userId = response.data().id();
                 log.info("✅ User profile created via API for accountId: {}, userId: {}", account.getId(), userId);
             }
         } catch (Exception e) {
