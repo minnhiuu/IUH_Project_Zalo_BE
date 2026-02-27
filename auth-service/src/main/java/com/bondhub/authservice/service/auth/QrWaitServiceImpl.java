@@ -112,6 +112,7 @@ public class QrWaitServiceImpl implements QrWaitService{
                 .status(session.getStatus())
                 .accessToken(session.getWebAccessToken())
                 .refreshToken(session.getWebRefreshToken())
+                .refreshTokenExpirationMs(session.getRefreshTokenExpirationMs())
                 .userAvatar(session.getUserAvatar())
                 .userFullName(session.getUserFullName())
                 .build();

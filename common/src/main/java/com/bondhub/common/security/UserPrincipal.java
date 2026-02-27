@@ -17,6 +17,7 @@ import java.util.List;
 @AllArgsConstructor
 public class UserPrincipal implements UserDetails {
 
+    private final String accountId;
     private final String userId;
     private final String email;
     private final String jti;
@@ -59,10 +60,4 @@ public class UserPrincipal implements UserDetails {
         return true;
     }
 
-    /**
-     * Get user ID from security context
-     */
-    public String getId() {
-        return userId;
-    }
 }

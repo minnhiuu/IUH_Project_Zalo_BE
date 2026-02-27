@@ -50,7 +50,7 @@ public class SecurityTestController {
         UserPrincipal principal = (UserPrincipal) authentication.getPrincipal();
 
         UserInfo userInfo = new UserInfo(
-                principal.getId(),
+                principal.getUserId(),
                 principal.getEmail(),
                 principal.getAuthorities().stream()
                         .map(GrantedAuthority::getAuthority)
@@ -107,7 +107,7 @@ public class SecurityTestController {
         UserPrincipal principal = getCurrentUser();
 
         UserInfo userInfo = new UserInfo(
-                principal.getId(),
+                principal.getUserId(),
                 principal.getEmail(),
                 principal.getAuthorities().stream()
                         .map(GrantedAuthority::getAuthority)
@@ -176,7 +176,7 @@ public class SecurityTestController {
         headers.put("X-User-Roles", roles);
 
         UserPrincipal principal = getCurrentUser();
-        headers.put("SecurityContext-UserId", principal.getId());
+        headers.put("SecurityContext-UserId", principal.getUserId());
         headers.put("SecurityContext-Email", principal.getEmail());
 
         return ResponseEntity.ok(ApiResponse.success(headers));
