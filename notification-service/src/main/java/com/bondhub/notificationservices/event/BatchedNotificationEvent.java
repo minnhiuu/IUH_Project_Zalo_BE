@@ -20,13 +20,14 @@ public class BatchedNotificationEvent {
 
     List<String> actorIds;
     int actorCount;
-    String firstActorId;
-    String firstActorName;
-    String firstActorAvatar;
+    String referenceId;
+    String lastActorId;
+    String lastActorName;
+    String lastActorAvatar;
     int othersCount;
     String locale;
 
     List<Map<String, Object>> rawPayloads;
-
+    LocalDateTime lastOccurredAt;
     LocalDateTime batchedAt;
 }

@@ -69,7 +69,11 @@ public class BatcherServiceImpl implements BatcherService {
     }
 
     public static String buildBatchKey(RawNotificationEvent event) {
-        return event.getType().name() + ":" + event.getRecipientId();
+        String key = event.getType().name() + ":" + event.getRecipientId();
+        if (event.getReferenceId() != null) {
+            key += ":" + event.getReferenceId();
+        }
+        return key;
     }
 
     private String serialize(RawNotificationEvent event) {

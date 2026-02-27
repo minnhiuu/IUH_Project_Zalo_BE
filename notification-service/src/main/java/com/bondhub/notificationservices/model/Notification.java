@@ -3,7 +3,6 @@ package com.bondhub.notificationservices.model;
 import com.bondhub.common.model.BaseModel;
 import com.bondhub.notificationservices.enums.NotificationType;
 import lombok.*;
-import lombok.experimental.FieldDefaults;
 import org.springframework.data.mongodb.core.index.CompoundIndex;
 import org.springframework.data.mongodb.core.index.CompoundIndexes;
 import org.springframework.data.mongodb.core.mapping.Document;
@@ -40,12 +39,14 @@ public class Notification extends BaseModel {
 
     NotificationType type;
 
+    @Field(targetType = FieldType.OBJECT_ID)
     String referenceId;
 
     String title;
 
     String body;
 
+    @Field(targetType = FieldType.OBJECT_ID)
     List<String> actorIds;
 
     Map<String, Object> data;
@@ -54,4 +55,3 @@ public class Notification extends BaseModel {
 
     LocalDateTime readAt;
 }
-

@@ -102,18 +102,19 @@ public class RawNotificationListener {
         Map<String, Object> payload = new HashMap<>(
                 event.getPayload() != null ? event.getPayload() : Collections.emptyMap()
         );
-        payload.put("actorId",     event.getActorId());
+        payload.put("actorId", event.getActorId());
         payload.put("referenceId", event.getReferenceId());
-        payload.put("occurredAt",  event.getOccurredAt() != null ? event.getOccurredAt().toString() : null);
+        payload.put("occurredAt", event.getOccurredAt() != null ? event.getOccurredAt().toString() : null);
 
         return BatchedNotificationEvent.builder()
                 .recipientId(event.getRecipientId())
                 .type(event.getType())
                 .actorIds(List.of(event.getActorId()))
                 .actorCount(1)
-                .firstActorId(event.getActorId())
-                .firstActorName(event.getActorName())
-                .firstActorAvatar(event.getActorAvatar())
+                .referenceId(event.getReferenceId())
+                .lastActorId(event.getActorId())
+                .lastActorName(event.getActorName())
+                .lastActorAvatar(event.getActorAvatar())
                 .othersCount(0)
                 .locale(locale)
                 .rawPayloads(List.of(payload))

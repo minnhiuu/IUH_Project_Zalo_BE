@@ -56,7 +56,7 @@ public class BatchFlushServiceImpl implements BatchFlushService {
 
         if (events.isEmpty()) return;
 
-        RawNotificationEvent first = events.getFirst();
+        RawNotificationEvent last = events.getLast();
         List<String> actorIds = events.stream()
                 .map(RawNotificationEvent::getActorId)
                 .distinct()
@@ -64,7 +64,7 @@ public class BatchFlushServiceImpl implements BatchFlushService {
 
         int actorCount  = actorIds.size();
         int othersCount = actorCount - 1;
-        String locale   = userPreferenceService.getLocale(first.getRecipientId());
+        String locale   = userPreferenceService.getLocale(last.getRecipientId());
 
         List<Map<String, Object>> rawPayloads = events.stream()
                 .map(e -> {
@@ -78,16 +78,18 @@ public class BatchFlushServiceImpl implements BatchFlushService {
                 }).toList();
 
         BatchedNotificationEvent batched = BatchedNotificationEvent.builder()
-                .recipientId(first.getRecipientId())
-                .type(first.getType())
+                .recipientId(last.getRecipientId())
+                .type(last.getType())
                 .actorIds(actorIds)
                 .actorCount(actorCount)
-                .firstActorId(first.getActorId())
-                .firstActorName(first.getActorName() != null ? first.getActorName() : first.getActorId())
-                .firstActorAvatar(first.getActorAvatar())
+                .referenceId(last.getReferenceId())
+                .lastActorId(last.getActorId())
+                .lastActorName(last.getActorName() != null ? last.getActorName() : last.getActorId())
+                .lastActorAvatar(last.getActorAvatar())
                 .othersCount(othersCount)
                 .locale(locale)
                 .rawPayloads(rawPayloads)
+                .lastOccurredAt(last.getOccurredAt())
                 .batchedAt(LocalDateTime.now())
                 .build();
 
