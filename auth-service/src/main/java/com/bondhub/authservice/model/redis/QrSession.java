@@ -26,6 +26,7 @@ public class QrSession implements Serializable {
     String userFullName;
     String webAccessToken;
     String webRefreshToken;
+    Long refreshTokenExpirationMs;
     String ipAddress;
     String userAgent;
     String deviceId;
