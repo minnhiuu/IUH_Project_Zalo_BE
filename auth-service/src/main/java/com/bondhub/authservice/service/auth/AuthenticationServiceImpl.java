@@ -130,9 +130,9 @@ public class AuthenticationServiceImpl implements AuthenticationService {
         }
 
         String sessionId = jwtUtil.extractSessionId(refreshToken);
-        String userId = jwtUtil.extractUserId(refreshToken);
+        String accountId = jwtUtil.extractAccountId(refreshToken);
 
-        if (sessionId == null || userId == null) {
+        if (sessionId == null || accountId == null) {
             throw new AppException(ErrorCode.JWT_INVALID_TOKEN);
         }
 
@@ -144,7 +144,7 @@ public class AuthenticationServiceImpl implements AuthenticationService {
             throw new AppException(ErrorCode.JWT_INVALID_TOKEN);
         }
 
-        Account account = accountRepository.findById(userId)
+        Account account = accountRepository.findById(accountId)
                 .orElseThrow(() -> new AppException(ErrorCode.ACC_ACCOUNT_NOT_FOUND));
 
         if (!account.getEnabled()) {
@@ -335,7 +335,6 @@ public class AuthenticationServiceImpl implements AuthenticationService {
         log.info("Initiating password reset for email: {}", request.email());
 
         if (!accountRepository.existsByEmail(request.email())) {
-
             throw new AppException(ErrorCode.ACC_ACCOUNT_NOT_FOUND);
         }
 

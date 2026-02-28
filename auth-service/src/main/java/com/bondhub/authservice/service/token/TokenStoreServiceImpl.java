@@ -5,6 +5,7 @@ import com.bondhub.authservice.model.redis.BlacklistedAccessToken;
 import com.bondhub.authservice.model.redis.RefreshTokenSession;
 import com.bondhub.authservice.repository.redis.BlacklistedAccessTokenRepository;
 import com.bondhub.authservice.repository.redis.RefreshTokenSessionRepository;
+import com.bondhub.common.utils.JwtUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -23,6 +24,7 @@ public class TokenStoreServiceImpl implements TokenStoreService {
 
     private final BlacklistedAccessTokenRepository blacklistRepository;
     private final RefreshTokenSessionRepository refreshSessionRepository;
+    private final JwtUtil jwtUtil;
 
     @Override
     public void blacklistAccessToken(String jti, String userId, String phoneNumber, long ttlSeconds, String reason) {
@@ -139,6 +141,11 @@ public class TokenStoreServiceImpl implements TokenStoreService {
                 .map(session -> {
                     if (Boolean.TRUE.equals(session.getRevoked())) {
                         log.warn("[SECURITY] Session revoked: sessionId={}", sessionId);
+                        return false;
+                    }
+
+                    if (!jwtUtil.isRefreshToken(refreshToken)) {
+                        log.warn("The request token is not a refresh token: {}", refreshToken);
                         return false;
                     }
 
