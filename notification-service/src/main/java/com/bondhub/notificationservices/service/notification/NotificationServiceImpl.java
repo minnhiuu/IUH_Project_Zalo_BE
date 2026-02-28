@@ -3,10 +3,7 @@ package com.bondhub.notificationservices.service.notification;
 import com.bondhub.common.utils.LocalizationUtil;
 import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.notificationservices.dto.request.notification.CreateFriendRequestNotificationRequest;
-import com.bondhub.notificationservices.dto.response.notification.NotificationAcceptedResponse;
-import com.bondhub.notificationservices.dto.response.notification.NotificationHistoryResponse;
-import com.bondhub.notificationservices.dto.response.notification.NotificationResponse;
-import com.bondhub.notificationservices.dto.response.notification.UserNotificationStateResponse;
+import com.bondhub.notificationservices.dto.response.notification.*;
 import com.bondhub.notificationservices.enums.NotificationChannel;
 import com.bondhub.notificationservices.enums.NotificationType;
 import com.bondhub.notificationservices.event.RawNotificationEvent;
@@ -56,43 +53,67 @@ public class NotificationServiceImpl implements NotificationService {
         return enqueue(NotificationType.FRIEND_REQUEST, request);
     }
 
-
     @Override
     public NotificationHistoryResponse getNotificationHistory(LocalDateTime cursor, int limit) {
-        String userId = securityUtil.getCurrentUserId();
-        String locale = localizationUtil.getCurrentLocale();
-
-        Query query = new Query(Criteria.where("userId").is(userId));
-
-        if (cursor != null) {
-            query.addCriteria(Criteria.where("lastModifiedAt").lt(cursor));
-        }
-
-        query.with(Sort.by(Sort.Direction.DESC, "lastModifiedAt")).limit(limit);
-
-        List<Notification> notifications = mongoTemplate.find(query, Notification.class);
-
-        return groupAndRender(notifications, locale);
+        List<Notification> notifications = fetchNotifications(null, cursor, limit);
+        return buildGroupedHistoryResponse(notifications, limit);
     }
 
-    private NotificationHistoryResponse groupAndRender(List<Notification> notifications, String locale) {
+    @Override
+    public NotificationFlatHistoryResponse getUnreadHistory(LocalDateTime cursor, int limit) {
+        List<Notification> notifications = fetchNotifications(true, cursor, limit);
+        return buildUnreadHistoryResponse(notifications, limit);
+    }
+
+    private List<Notification> fetchNotifications(
+            Boolean unreadOnly,
+            LocalDateTime cursor,
+            int limit) {
+        String userId = securityUtil.getCurrentUserId();
+
+        Criteria criteria = Criteria.where("userId").is(userId);
+
+        if (Boolean.TRUE.equals(unreadOnly)) {
+            criteria.and("isRead").is(false);
+        }
+
+        if (cursor != null) {
+            criteria.and("lastModifiedAt").lt(cursor);
+        }
+
+        Query query = new Query(criteria)
+                .with(Sort.by(Sort.Direction.DESC, "lastModifiedAt"))
+                .limit(limit + 1);
+
+        return mongoTemplate.find(query, Notification.class);
+    }
+
+    private NotificationHistoryResponse buildGroupedHistoryResponse(List<Notification> notifications, int limit) {
         if (notifications.isEmpty()) {
             return new NotificationHistoryResponse(new ArrayList<>(), new ArrayList<>(), new ArrayList<>(), null);
         }
 
+        LocalDateTime nextCursor = null;
+        List<Notification> itemsToProcess = notifications;
+        if (notifications.size() > limit) {
+            itemsToProcess = notifications.subList(0, limit);
+            nextCursor = itemsToProcess.getLast().getLastModifiedAt();
+        }
+
+        String locale = localizationUtil.getCurrentLocale();
         LocalDateTime now = LocalDateTime.now();
-        LocalDateTime twoHoursAgo = now.minus(FRESH_WINDOW);
+        LocalDateTime freshBoundary = now.minus(FRESH_WINDOW);
         LocalDateTime startOfToday = now.toLocalDate().atStartOfDay();
 
         List<NotificationResponse> newest = new ArrayList<>();
         List<NotificationResponse> today = new ArrayList<>();
         List<NotificationResponse> previous = new ArrayList<>();
 
-        for (Notification n : notifications) {
+        for (Notification n : itemsToProcess) {
             NotificationResponse res = convertToResponse(n, locale);
             LocalDateTime time = n.getLastModifiedAt();
 
-            if (time.isAfter(twoHoursAgo)) {
+            if (time.isAfter(freshBoundary)) {
                 newest.add(res);
             } else if (time.isAfter(startOfToday)) {
                 today.add(res);
@@ -101,7 +122,27 @@ public class NotificationServiceImpl implements NotificationService {
             }
         }
 
-        return buildResponse(newest, today, previous, notifications);
+        return new NotificationHistoryResponse(newest, today, previous, nextCursor);
+    }
+
+    private NotificationFlatHistoryResponse buildUnreadHistoryResponse(List<Notification> notifications, int limit) {
+        if (notifications.isEmpty()) {
+            return new NotificationFlatHistoryResponse(new ArrayList<>(), null);
+        }
+
+        LocalDateTime nextCursor = null;
+        List<Notification> itemsToProcess = notifications;
+        if (notifications.size() > limit) {
+            itemsToProcess = notifications.subList(0, limit);
+            nextCursor = itemsToProcess.getLast().getLastModifiedAt();
+        }
+
+        String locale = localizationUtil.getCurrentLocale();
+        List<NotificationResponse> items = itemsToProcess.stream()
+                .map(n -> convertToResponse(n, locale))
+                .toList();
+
+        return new NotificationFlatHistoryResponse(items, nextCursor);
     }
 
     @Override
@@ -151,21 +192,6 @@ public class NotificationServiceImpl implements NotificationService {
                 .set("readAt", LocalDateTime.now());
 
         mongoTemplate.updateMulti(query, update, Notification.class);
-    }
-
-    private NotificationHistoryResponse buildResponse(
-            List<NotificationResponse> newest,
-            List<NotificationResponse> today,
-            List<NotificationResponse> previous,
-            List<Notification> source
-    ) {
-        LocalDateTime nextCursor = source.isEmpty() ? null : source.getLast().getLastModifiedAt();
-        return new NotificationHistoryResponse(
-                newest != null ? newest : new ArrayList<>(),
-                today != null ? today : new ArrayList<>(),
-                previous != null ? previous : new ArrayList<>(),
-                nextCursor
-        );
     }
 
     private NotificationResponse convertToResponse(Notification n, String locale) {

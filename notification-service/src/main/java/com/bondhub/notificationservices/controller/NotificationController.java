@@ -3,6 +3,7 @@ package com.bondhub.notificationservices.controller;
 import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.notificationservices.dto.request.notification.CreateFriendRequestNotificationRequest;
 import com.bondhub.notificationservices.dto.response.notification.NotificationAcceptedResponse;
+import com.bondhub.notificationservices.dto.response.notification.NotificationFlatHistoryResponse;
 import com.bondhub.notificationservices.dto.response.notification.NotificationHistoryResponse;
 import com.bondhub.notificationservices.dto.response.notification.UserNotificationStateResponse;
 import com.bondhub.notificationservices.service.notification.NotificationService;
@@ -39,6 +40,15 @@ public class NotificationController {
             LocalDateTime cursor,
             @RequestParam(defaultValue = "10") int limit) {
         return ResponseEntity.ok(ApiResponse.success(notificationService.getNotificationHistory(cursor, limit)));
+    }
+
+    @GetMapping("/history/unread")
+    public ResponseEntity<ApiResponse<NotificationFlatHistoryResponse>> getUnreadNotificationHistory(
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+            LocalDateTime cursor,
+            @RequestParam(defaultValue = "10") int limit) {
+        return ResponseEntity.ok(ApiResponse.success(notificationService.getUnreadHistory(cursor, limit)));
     }
 
     @GetMapping("/state")
