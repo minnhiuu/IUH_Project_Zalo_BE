@@ -37,4 +37,7 @@ public interface UserService {
     void indexUserToElasticsearch(UserIndexRequest request);
 
     void deleteUser(String id);
+
+    /** Update lastLoginAt timestamp for the user associated with the given accountId */
+    void recordLastLogin(String accountId);
 }

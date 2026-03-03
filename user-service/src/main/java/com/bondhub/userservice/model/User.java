@@ -6,11 +6,13 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
 import lombok.experimental.SuperBuilder;
+import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.FieldType;
 import org.springframework.data.mongodb.core.mapping.MongoId;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Set;
 
 @Document("users")
@@ -38,4 +40,11 @@ public class User extends BaseModel {
     String avatar;
     String background;
     Double backgroundY;
+
+    /** Denormalized from auth-service: true = active, false = banned */
+    @Indexed
+    Boolean enabled;
+
+    /** Updated on every successful login (set by auth-service via internal API) */
+    LocalDateTime lastLoginAt;
 }

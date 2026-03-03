@@ -13,5 +13,6 @@ public record AuditResponse(
     LocalDateTime lastModifiedAt,
     String createdBy,
     String lastModifiedBy,
+    LocalDateTime lastLoginAt,
     boolean active
 ) {}

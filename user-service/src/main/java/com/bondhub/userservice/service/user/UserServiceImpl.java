@@ -32,6 +32,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
@@ -209,6 +210,7 @@ public class UserServiceImpl implements UserService {
                 .id(response.id())
                 .phoneNumber(response.phoneNumber())
                 .email(response.email())
+                .role(response.role())
                 .fullName(response.fullName())
                 .bio(response.bio())
                 .gender(response.gender())
@@ -351,5 +353,14 @@ public class UserServiceImpl implements UserService {
         } catch (Exception e) {
             log.error("Failed to sync user to Elasticsearch index: {}", user.getId(), e);
         }
+    }
+
+    @Override
+    public void recordLastLogin(String accountId) {
+        userRepository.findByAccountId(accountId).ifPresent(user -> {
+            user.setLastLoginAt(LocalDateTime.now());
+            userRepository.save(user);
+            log.debug("Recorded last login for accountId={}, userId={}", accountId, user.getId());
+        });
     }
 }

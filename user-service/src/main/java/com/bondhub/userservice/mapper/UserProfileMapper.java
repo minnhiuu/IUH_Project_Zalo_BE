@@ -12,5 +12,6 @@ public interface UserProfileMapper {
     @Mapping(target = "id", source = "user.id")
     @Mapping(target = "phoneNumber", source = "account.phoneNumber")
     @Mapping(target = "email", source = "account.email")
+    @Mapping(target = "role", source = "account.role")
     UserProfileResponse toUserProfileResponse(User user, AccountResponse account);
 }
