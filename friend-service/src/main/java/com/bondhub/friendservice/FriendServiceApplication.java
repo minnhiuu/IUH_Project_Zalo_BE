@@ -1,9 +1,7 @@
 package com.bondhub.friendservice;
 
-import com.bondhub.common.config.kafka.KafkaTopicProperties;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.cloud.openfeign.EnableFeignClients;
 import org.springframework.data.mongodb.config.EnableMongoAuditing;
@@ -14,7 +12,6 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @EnableFeignClients
 @EnableScheduling
 @EnableMongoAuditing
-@EnableConfigurationProperties(KafkaTopicProperties.class)
 @ComponentScan(basePackages = { "com.bondhub.friendservice", "com.bondhub.common"})
 @EnableMongoRepositories(basePackages = { "com.bondhub.friendservice.repository", "com.bondhub.common.repository" })
 public class FriendServiceApplication {

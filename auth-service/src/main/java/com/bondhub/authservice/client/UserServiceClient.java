@@ -30,4 +30,8 @@ public interface UserServiceClient {
 
     @GetMapping("/internal/users/account/{accountId}/summary")
     ApiResponse<UserSummaryResponse> getUserSummaryByAccountId(@PathVariable String accountId);
+
+    /** Fire-and-forget: record last login timestamp in user-service */
+    @PostMapping("/internal/users/{accountId}/last-login")
+    ApiResponse<Void> recordLastLogin(@PathVariable("accountId") String accountId);
 }

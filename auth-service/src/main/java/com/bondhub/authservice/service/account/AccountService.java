@@ -107,5 +107,28 @@ public interface AccountService {
      * @return true if account exists, false otherwise
      */
     boolean existsByPhoneNumber(String phoneNumber);
+
+    /**
+     * Bans an account by disabling it.
+     *
+     * @param id     the account id
+     * @param reason the ban reason
+     */
+    void banAccount(String id, String reason);
+
+    /**
+     * Unbans an account by re-enabling it.
+     *
+     * @param id the account id
+     */
+    void unbanAccount(String id);
+
+    /**
+     * Batch fetch multiple accounts by their IDs.
+     *
+     * @param ids list of account IDs
+     * @return list of account responses
+     */
+    List<AccountResponse> getAccountsByIds(List<String> ids);
 }
 

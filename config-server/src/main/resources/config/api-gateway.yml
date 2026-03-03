@@ -140,6 +140,18 @@ spring:
                     name: userServiceCircuitBreaker
                     fallbackUri: forward:/fallback/user-service
 
+            # Admin Routes (Protected - ADMIN role required)
+            - id: user-service-admin
+              uri: lb://user-service
+              predicates:
+                - Path=/api/admin/**
+              filters:
+                - RewritePath=/api/admin/(?<segment>.*), /admin/${segment}
+                - name: CircuitBreaker
+                  args:
+                    name: userServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/user-service
+
             # Message Service Routes (Protected - JWT required)
             - id: message-service
               uri: lb://message-service

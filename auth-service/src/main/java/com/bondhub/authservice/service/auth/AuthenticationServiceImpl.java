@@ -88,6 +88,13 @@ public class AuthenticationServiceImpl implements AuthenticationService {
             log.error("Failed to fetch user profile via API for accountId: {}", account.getId(), e);
         }
 
+        // Record last login timestamp (non-blocking, best-effort)
+        try {
+            userServiceClient.recordLastLogin(account.getId());
+        } catch (Exception e) {
+            log.warn("Failed to record last login for accountId={}: {}", account.getId(), e.getMessage());
+        }
+
         return tokenProvider.generateFullTokenResponse(
                 account, request.deviceId(), request.deviceType(), userAgent, ipAddress);
     }
