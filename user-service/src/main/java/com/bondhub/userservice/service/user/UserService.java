@@ -4,12 +4,10 @@ import com.bondhub.common.dto.client.userservice.user.response.UserSummaryRespon
 import com.bondhub.userservice.dto.request.AvatarUpdateRequest;
 import com.bondhub.userservice.dto.request.BackgroundUpdateRequest;
 import com.bondhub.userservice.dto.request.UserCreateRequest;
-import com.bondhub.userservice.dto.request.UserIndexRequest;
 import com.bondhub.userservice.dto.request.UserUpdateRequest;
 import com.bondhub.userservice.dto.response.UserImageResponse;
 import com.bondhub.userservice.dto.response.UserProfileResponse;
 import com.bondhub.userservice.dto.response.UserResponse;
-import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 

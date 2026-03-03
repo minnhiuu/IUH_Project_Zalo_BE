@@ -1,13 +1,11 @@
 package com.bondhub.userservice.listener;
 
 import com.bondhub.common.config.kafka.KafkaTopicProperties;
-import com.bondhub.common.enums.Role;
 import com.bondhub.common.event.account.AccountRegisteredEvent;
 import com.bondhub.common.model.kafka.EventType;
 import com.bondhub.common.publisher.OutboxEventPublisher;
 import com.bondhub.common.event.user.UserCreatedEvent;
 import com.bondhub.userservice.dto.request.UserCreateRequest;
-import com.bondhub.userservice.dto.request.UserIndexRequest;
 import com.bondhub.userservice.dto.response.UserResponse;
 import com.bondhub.userservice.publisher.UserIndexEventPublisher;
 import com.bondhub.userservice.service.user.UserService;

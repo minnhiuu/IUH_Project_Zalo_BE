@@ -1,4 +1,4 @@
-package com.bondhub.userservice.dto.request;
+package com.bondhub.userservice.dto.request.elasticsearch;
 
 import com.bondhub.common.enums.Role;
 import lombok.Builder;

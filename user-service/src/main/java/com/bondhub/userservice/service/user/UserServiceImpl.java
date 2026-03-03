@@ -12,7 +12,7 @@ import com.bondhub.userservice.client.AuthServiceClient;
 import com.bondhub.userservice.client.FileServiceClient;
 import com.bondhub.userservice.dto.request.UserCreateRequest;
 import com.bondhub.userservice.dto.request.UserUpdateRequest;
-import com.bondhub.userservice.dto.request.UserIndexRequest;
+import com.bondhub.userservice.dto.request.elasticsearch.UserIndexRequest;
 import com.bondhub.userservice.dto.request.AvatarUpdateRequest;
 import com.bondhub.userservice.dto.request.BackgroundUpdateRequest;
 import com.bondhub.userservice.dto.response.AccountResponse;

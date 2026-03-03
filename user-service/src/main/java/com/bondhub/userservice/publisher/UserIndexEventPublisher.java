@@ -4,7 +4,7 @@ import com.bondhub.common.event.user.UserIndexDeletedEvent;
 import com.bondhub.common.event.user.UserIndexRequestedEvent;
 import com.bondhub.common.model.kafka.EventType;
 import com.bondhub.common.publisher.OutboxEventPublisher;
-import com.bondhub.userservice.dto.request.UserIndexRequest;
+import com.bondhub.userservice.dto.request.elasticsearch.UserIndexRequest;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
