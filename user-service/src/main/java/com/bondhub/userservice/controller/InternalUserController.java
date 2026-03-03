@@ -18,4 +18,13 @@ public class InternalUserController {
         return ResponseEntity.ok(ApiResponse.success(userService.getUserSummaryByAccountId(accountId)));
     }
 
+    /**
+     * Called by auth-service after a successful login to record last login timestamp.
+     * This is an internal endpoint — no JWT required (allowed by SecurityConfig).
+     */
+    @PostMapping("/{accountId}/last-login")
+    public ResponseEntity<ApiResponse<Void>> recordLastLogin(@PathVariable String accountId) {
+        userService.recordLastLogin(accountId);
+        return ResponseEntity.ok(ApiResponse.successWithoutData());
+    }
 }
