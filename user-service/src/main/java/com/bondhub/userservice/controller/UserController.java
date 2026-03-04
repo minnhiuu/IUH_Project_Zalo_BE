@@ -5,6 +5,7 @@ import com.bondhub.userservice.dto.request.UserCreateRequest;
 import com.bondhub.userservice.dto.request.UserUpdateRequest;
 import com.bondhub.userservice.dto.request.AvatarUpdateRequest;
 import com.bondhub.userservice.dto.request.BackgroundUpdateRequest;
+import com.bondhub.userservice.dto.request.BioUpdateRequest;
 import com.bondhub.userservice.dto.response.UserImageResponse;
 import com.bondhub.userservice.dto.response.UserProfileResponse;
 import com.bondhub.userservice.dto.response.UserResponse;
@@ -85,6 +86,12 @@ public class UserController {
     public ResponseEntity<ApiResponse<UserImageResponse>> updateBackgroundPosition(
             @RequestParam Double y) {
         return ResponseEntity.ok(ApiResponse.success(userService.updateBackgroundPosition(y)));
+    }
+
+    @PatchMapping("/profile/bio")
+    public ResponseEntity<ApiResponse<UserProfileResponse>> updateBio(
+            @RequestBody BioUpdateRequest request) {
+        return ResponseEntity.ok(ApiResponse.success(userService.updateBio(request)));
     }
 
     @DeleteMapping("/{id}")
