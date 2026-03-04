@@ -9,9 +9,13 @@ spring:
   main:
     allow-bean-definition-overriding: true
 
+  # ==================== ELASTICSEARCH CONFIGURATION ====================
+  elasticsearch:
+    uris: ${ELASTICSEARCH_URIS}
+
   # ==================== KAFKA CONFIGURATION ====================
   kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
 
     # Common Producer Configuration
     producer:
@@ -171,5 +175,3 @@ bondhub:
   security:
     gateway-auth:
       enabled: false
-
-

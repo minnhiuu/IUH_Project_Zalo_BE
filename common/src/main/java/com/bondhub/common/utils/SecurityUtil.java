@@ -40,6 +40,10 @@ public class SecurityUtil {
         return getCurrentUserPrincipal().getAccountId();
     }
 
+    public String getCurrentUserId() {
+        return getCurrentUserPrincipal().getUserId();
+    }
+
     public String getCurrentEmail() {
         return getCurrentUserPrincipal().getEmail();
     }

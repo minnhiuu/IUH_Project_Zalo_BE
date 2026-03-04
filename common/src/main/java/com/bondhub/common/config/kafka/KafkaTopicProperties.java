@@ -33,6 +33,7 @@ public class KafkaTopicProperties {
         private String created = "user.created";
         private String updated = "user.updated";
         private String deleted = "user.deleted";
+        private String index = "user.index";
     }
 
     @Getter

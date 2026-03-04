@@ -25,6 +25,7 @@ import java.util.stream.Collectors;
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 public class SecurityContextFilter extends OncePerRequestFilter {
 
+    private static final String HEADER_ACCOUNT_ID = "X-Account-Id";
     private static final String HEADER_USER_ID = "X-User-Id";
     private static final String HEADER_USER_EMAIL = "X-User-Email";
     private static final String HEADER_USER_ROLES = "X-User-Roles";
@@ -36,18 +37,21 @@ public class SecurityContextFilter extends OncePerRequestFilter {
             HttpServletResponse response,
             FilterChain filterChain) throws ServletException, IOException {
 
+        String accountId = request.getHeader(HEADER_ACCOUNT_ID);
         String userId = request.getHeader(HEADER_USER_ID);
         String email = request.getHeader(HEADER_USER_EMAIL);
         String rolesHeader = request.getHeader(HEADER_USER_ROLES);
         String jti = request.getHeader(HEADER_USER_JTI);
-        Long remainingTTL = request.getHeader(HEADER_REMAINING_TTL) != null ?
-                Long.parseLong(request.getHeader(HEADER_REMAINING_TTL)) : null;
+        Long remainingTTL = request.getHeader(HEADER_REMAINING_TTL) != null
+                ? Long.parseLong(request.getHeader(HEADER_REMAINING_TTL))
+                : null;
 
-        if (userId != null && email != null) {
+        if (accountId != null && email != null) {
             try {
                 List<GrantedAuthority> authorities = parseRoles(rolesHeader);
 
-                UserPrincipal userPrincipal = new UserPrincipal(userId, email, jti, remainingTTL, authorities);
+                UserPrincipal userPrincipal = new UserPrincipal(accountId, userId, email, jti, remainingTTL,
+                        authorities);
 
                 UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
                         userPrincipal,
@@ -56,7 +60,7 @@ public class SecurityContextFilter extends OncePerRequestFilter {
 
                 SecurityContextHolder.getContext().setAuthentication(authentication);
 
-                log.debug("Security context set for user: {} ({})", email, userId);
+                log.debug("Security context set for user: {} ({}) and account: {}", email, userId, accountId);
 
             } catch (Exception e) {
                 log.error("Error setting security context: {}", e.getMessage());

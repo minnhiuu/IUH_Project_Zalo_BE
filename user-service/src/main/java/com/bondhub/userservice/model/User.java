@@ -2,17 +2,15 @@ package com.bondhub.userservice.model;
 
 import com.bondhub.common.model.BaseModel;
 import com.bondhub.userservice.model.enums.Gender;
-import com.bondhub.userservice.model.enums.PrivacyLevel;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
-import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.mapping.Field;
 import org.springframework.data.mongodb.core.mapping.FieldType;
 import org.springframework.data.mongodb.core.mapping.MongoId;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.Set;
 
 @Document("users")
@@ -34,13 +32,11 @@ public class User extends BaseModel {
     String bio;
 
     Gender gender;
+    @Field(targetType = FieldType.OBJECT_ID)
     String accountId;
     Set<String> pinnedConversations;
 
     String avatar;
     String background;
     Double backgroundY;
-
-    @Builder.Default
-    UserSetting userSetting = new UserSetting();
 }

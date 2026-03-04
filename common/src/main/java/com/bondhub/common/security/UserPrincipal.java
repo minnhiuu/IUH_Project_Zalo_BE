@@ -5,7 +5,9 @@ import lombok.Getter;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
+import java.time.LocalDateTime;
 import java.util.Collection;
+import java.util.List;
 
 /**
  * User Principal
@@ -16,6 +18,7 @@ import java.util.Collection;
 public class UserPrincipal implements UserDetails {
 
     private final String accountId;
+    private final String userId;
     private final String email;
     private final String jti;
     private final Long remainingTTL;
@@ -57,10 +60,4 @@ public class UserPrincipal implements UserDetails {
         return true;
     }
 
-    /**
-     * Get user ID from security context
-     */
-    public String getId() {
-        return accountId;
-    }
 }

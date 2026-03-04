@@ -9,5 +9,6 @@ public record QrStatusResponse(
         String userAvatar,
         String userFullName,
         String accessToken,
-        String refreshToken
+        String refreshToken,
+        Long refreshTokenExpirationMs
 ) {}

@@ -55,7 +55,7 @@ public class AuthController {
 
         // Set refresh token in HttpOnly cookie
         ResponseCookie cookie = cookieUtil.createRefreshTokenCookie(
-                tokenResponse.refreshToken());
+                tokenResponse.refreshToken(), tokenResponse.refreshTokenExpirationMs());
         httpResponse.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
 
         return ResponseEntity.ok(ApiResponse.success(tokenResponse));
@@ -117,7 +117,7 @@ public class AuthController {
 
         // Set refresh token in HttpOnly cookie
         ResponseCookie cookie = cookieUtil.createRefreshTokenCookie(
-                tokenResponse.refreshToken());
+                tokenResponse.refreshToken(), tokenResponse.refreshTokenExpirationMs());
         httpResponse.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
 
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(tokenResponse));
@@ -157,7 +157,7 @@ public class AuthController {
 
         // Set refresh token in HttpOnly cookie
         ResponseCookie cookie = cookieUtil.createRefreshTokenCookie(
-                tokenResponse.refreshToken());
+                tokenResponse.refreshToken(), tokenResponse.refreshTokenExpirationMs());
         httpResponse.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
 
         return ResponseEntity.ok(ApiResponse.success(tokenResponse));
@@ -205,7 +205,7 @@ public class AuthController {
 
         // Update refresh token in cookie (Rotation)
         ResponseCookie cookie = cookieUtil.createRefreshTokenCookie(
-                tokenResponse.refreshToken());
+                tokenResponse.refreshToken(), tokenResponse.refreshTokenExpirationMs());
         httpResponse.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
 
         return ResponseEntity.ok(ApiResponse.success(tokenResponse));

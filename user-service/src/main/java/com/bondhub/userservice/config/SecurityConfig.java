@@ -42,7 +42,7 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> {
                     // Permit internal service-to-service communication
-                    auth.requestMatchers("/internal/**").permitAll();
+                    auth.requestMatchers(request -> request.getRequestURI().contains("/internal/")).permitAll();
                     
                     // Permit base endpoints
                     auth.requestMatchers("/").permitAll();

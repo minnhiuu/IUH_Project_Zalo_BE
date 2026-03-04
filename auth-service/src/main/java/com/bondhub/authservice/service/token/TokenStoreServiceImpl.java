@@ -5,11 +5,15 @@ import com.bondhub.authservice.model.redis.BlacklistedAccessToken;
 import com.bondhub.authservice.model.redis.RefreshTokenSession;
 import com.bondhub.authservice.repository.redis.BlacklistedAccessTokenRepository;
 import com.bondhub.authservice.repository.redis.RefreshTokenSessionRepository;
-import com.bondhub.common.utils.HashUtil;
+import com.bondhub.common.utils.JwtUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Optional;
 
@@ -20,9 +24,10 @@ public class TokenStoreServiceImpl implements TokenStoreService {
 
     private final BlacklistedAccessTokenRepository blacklistRepository;
     private final RefreshTokenSessionRepository refreshSessionRepository;
+    private final JwtUtil jwtUtil;
 
     @Override
-    public void blacklistAccessToken(String jti, String accountId, String phoneNumber, long ttlSeconds, String reason) {
+    public void blacklistAccessToken(String jti, String userId, String phoneNumber, long ttlSeconds, String reason) {
         if (ttlSeconds <= 0) {
             log.debug("Skipping blacklist for expired token jti={}", jti);
             return;
@@ -30,7 +35,7 @@ public class TokenStoreServiceImpl implements TokenStoreService {
 
         BlacklistedAccessToken blacklisted = BlacklistedAccessToken.builder()
                 .jti(jti)
-                .userId(accountId)
+                .userId(userId)
                 .phoneNumber(phoneNumber)
                 .reason(reason)
                 .blacklistedAt(System.currentTimeMillis())
@@ -38,7 +43,7 @@ public class TokenStoreServiceImpl implements TokenStoreService {
                 .build();
 
         blacklistRepository.save(blacklisted);
-        log.info("Access token blacklisted: jti={}, accountId={}, reason={}", jti, accountId, reason);
+        log.info("Access token blacklisted: jti={}, userId={}, reason={}", jti, userId, reason);
     }
 
     @Override
@@ -49,7 +54,7 @@ public class TokenStoreServiceImpl implements TokenStoreService {
     @Override
     public void createRefreshSession(
             String sessionId,
-            String accountId,
+            String userId,
             String phoneNumber,
             String deviceId,
             DeviceType deviceType,
@@ -58,7 +63,7 @@ public class TokenStoreServiceImpl implements TokenStoreService {
             String ipAddress,
             long ttlSeconds) {
         List<RefreshTokenSession> oldSessions = refreshSessionRepository
-                .findByAccountIdAndDeviceType(accountId, deviceType);
+                .findByUserIdAndDeviceType(userId, deviceType);
 
         for (RefreshTokenSession oldSession : oldSessions) {
             if (!deviceId.equals(oldSession.getDeviceId())) {
@@ -77,11 +82,13 @@ public class TokenStoreServiceImpl implements TokenStoreService {
 
         RefreshTokenSession session = RefreshTokenSession.builder()
                 .sessionId(sessionId)
-                .accountId(accountId)
+                .userId(userId)
+                .phoneNumber(phoneNumber)
                 .deviceId(deviceId)
                 .deviceType(deviceType)
                 .refreshTokenHash(hashSha256(refreshToken))
                 .userAgentHash(userAgent != null ? hashSha256(userAgent) : null)
+                .ipHash(ipAddress != null ? hashSha256(ipAddress) : null)
                 .issuedAt(now)
                 .expiresAt(expiresAt)
                 .revoked(false)
@@ -89,8 +96,8 @@ public class TokenStoreServiceImpl implements TokenStoreService {
                 .build();
 
         refreshSessionRepository.save(session);
-        log.info("Refresh session created: sessionId={}, accountId={}, deviceType={}, deviceId={}",
-                sessionId, accountId, deviceType, deviceId);
+        log.info("Refresh session created: sessionId={}, userId={}, deviceType={}, deviceId={}",
+                sessionId, userId, deviceType, deviceId);
     }
 
     @Override
@@ -137,6 +144,11 @@ public class TokenStoreServiceImpl implements TokenStoreService {
                         return false;
                     }
 
+                    if (!jwtUtil.isRefreshToken(refreshToken)) {
+                        log.warn("The request token is not a refresh token: {}", refreshToken);
+                        return false;
+                    }
+
                     if (!session.isValid()) {
                         log.warn("Session expired: sessionId={}", sessionId);
                         return false;
@@ -180,42 +192,19 @@ public class TokenStoreServiceImpl implements TokenStoreService {
         refreshSessionRepository.findById(sessionId).ifPresent(session -> {
             session.setRevoked(true);
             refreshSessionRepository.save(session);
-            log.info("Refresh session revoked: sessionId={}, accountId={}", sessionId, session.getAccountId());
+            log.info("Refresh session revoked: sessionId={}, userId={}", sessionId, session.getUserId());
         });
     }
 
     @Override
-    public List<String> revokeAllUserRefreshSessionsExcept(String accountId, String excludedSessionId) {
-        List<RefreshTokenSession> sessions = refreshSessionRepository.findByAccountId(accountId);
-
-        List<RefreshTokenSession> sessionsToRevoke = sessions.stream()
-                .filter(session -> !session.getSessionId().equals(excludedSessionId))
-                .filter(session -> !Boolean.TRUE.equals(session.getRevoked()))
-                .toList();
-
-        List<String> revokedSessionIds = new java.util.ArrayList<>();
-        if (!sessionsToRevoke.isEmpty()) {
-            sessionsToRevoke.forEach(session -> {
-                session.setRevoked(true);
-                revokedSessionIds.add(session.getSessionId());
-            });
-            refreshSessionRepository.saveAll(sessionsToRevoke);
-            log.info("Revoked {} other refresh sessions for accountId={}, keeping sessionId={}",
-                    revokedSessionIds.size(), accountId, excludedSessionId);
-        }
-
-        return revokedSessionIds;
-    }
-
-    @Override
-    public int revokeAllUserRefreshSessions(String accountId) {
-        List<RefreshTokenSession> sessions = refreshSessionRepository.findByAccountId(accountId);
+    public int revokeAllUserRefreshSessions(String userId) {
+        List<RefreshTokenSession> sessions = refreshSessionRepository.findByUserId(userId);
         int count = sessions.size();
 
         if (count > 0) {
             sessions.forEach(session -> session.setRevoked(true));
             refreshSessionRepository.saveAll(sessions);
-            log.info("Revoked {} refresh sessions for accountId={}", count, accountId);
+            log.info("Revoked {} refresh sessions for userId={}", count, userId);
         }
 
         return count;
@@ -223,6 +212,15 @@ public class TokenStoreServiceImpl implements TokenStoreService {
 
     @Override
     public String hashSha256(String input) {
-        return HashUtil.hashSha256(input);
+        if (input == null) {
+            return null;
+        }
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(input.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(hash);
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException("SHA-256 algorithm not available", e);
+        }
     }
 }
