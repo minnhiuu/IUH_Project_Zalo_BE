@@ -3,7 +3,7 @@ package com.bondhub.notificationservices.service.notification;
 import com.bondhub.common.utils.LocalizationUtil;
 import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.notificationservices.dto.request.notification.CreateFriendRequestNotificationRequest;
-import com.bondhub.notificationservices.dto.response.notification.*;
+import com.bondhub.notificationservices.dto.response.notificationtemplate.NotificationTemplateResponse;
 import com.bondhub.notificationservices.enums.NotificationChannel;
 import com.bondhub.notificationservices.enums.NotificationType;
 import com.bondhub.notificationservices.event.RawNotificationEvent;
@@ -29,6 +29,9 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -101,6 +104,10 @@ public class NotificationServiceImpl implements NotificationService {
         }
 
         String locale = localizationUtil.getCurrentLocale();
+        List<NotificationType> types = itemsToProcess.stream().map(Notification::getType).distinct().toList();
+        Map<NotificationType, NotificationTemplateResponse> templateMap = 
+                templateService.getTemplates(types, NotificationChannel.IN_APP, locale);
+
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime freshBoundary = now.minus(FRESH_WINDOW);
         LocalDateTime startOfToday = now.toLocalDate().atStartOfDay();
@@ -110,7 +117,7 @@ public class NotificationServiceImpl implements NotificationService {
         List<NotificationResponse> previous = new ArrayList<>();
 
         for (Notification n : itemsToProcess) {
-            NotificationResponse res = convertToResponse(n, locale);
+            NotificationResponse res = convertToResponse(n, locale, templateMap);
             LocalDateTime time = n.getLastModifiedAt();
 
             if (time.isAfter(freshBoundary)) {
@@ -138,8 +145,12 @@ public class NotificationServiceImpl implements NotificationService {
         }
 
         String locale = localizationUtil.getCurrentLocale();
+        List<NotificationType> types = itemsToProcess.stream().map(Notification::getType).distinct().toList();
+        Map<NotificationType, NotificationTemplateResponse> templateMap = 
+                templateService.getTemplates(types, NotificationChannel.IN_APP, locale);
+
         List<NotificationResponse> items = itemsToProcess.stream()
-                .map(n -> convertToResponse(n, locale))
+                .map(n -> convertToResponse(n, locale, templateMap))
                 .toList();
 
         return new NotificationFlatHistoryResponse(items, nextCursor);
@@ -194,20 +205,20 @@ public class NotificationServiceImpl implements NotificationService {
         mongoTemplate.updateMulti(query, update, Notification.class);
     }
 
-    private NotificationResponse convertToResponse(Notification n, String locale) {
-        String title = templateService.renderTitle(
-                n.getType(),
-                NotificationChannel.IN_APP,
-                locale,
-                n.getPayload()
-        );
+    private NotificationResponse convertToResponse(
+            Notification n, 
+            String locale, 
+            Map<NotificationType, NotificationTemplateResponse> templateMap) {
+        
+        NotificationTemplateResponse template = templateMap.get(n.getType());
+        
+        if (template == null) {
+            log.warn("Template not found in batch for type={} locale={}", n.getType(), locale);
+            return notificationMapper.toResponse(n, "", "");
+        }
 
-        String body = templateService.renderBody(
-                n.getType(),
-                NotificationChannel.IN_APP,
-                locale,
-                n.getPayload()
-        );
+        String title = templateService.render(template.titleTemplate(), n.getPayload());
+        String body = templateService.render(template.bodyTemplate(), n.getPayload());
 
         return notificationMapper.toResponse(n, title, body);
     }

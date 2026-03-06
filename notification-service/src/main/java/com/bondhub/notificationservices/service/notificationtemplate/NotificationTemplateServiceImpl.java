@@ -17,6 +17,8 @@ import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @Service
@@ -84,22 +86,21 @@ public class NotificationTemplateServiceImpl implements NotificationTemplateServ
     }
 
     @Override
-    public String renderTitle(NotificationType type, NotificationChannel channel,
-                              String locale, Map<String, Object> payload) {
-        NotificationTemplate template = notificationTemplateRepository
-                .findByTypeAndChannelAndLocaleAndActiveTrue(type, channel, locale)
-                .orElseThrow(() -> new AppException(ErrorCode.NOTIFICATION_TEMPLATE_NOT_FOUND));
+    public Map<NotificationType, NotificationTemplateResponse> getTemplates(
+            List<NotificationType> types, NotificationChannel channel, String locale) {
+        
+        List<NotificationTemplate> templates = notificationTemplateRepository
+                .findByTypeInAndChannelAndLocaleAndActiveTrue(types, channel, locale);
 
-        return templateEngine.render(template.getTitleTemplate(), payload);
+        Map<NotificationType, NotificationTemplateResponse> result = new HashMap<>();
+        for (NotificationTemplate t : templates) {
+            result.put(t.getType(), notificationTemplateMapper.toResponse(t));
+        }
+        return result;
     }
 
     @Override
-    public String renderBody(NotificationType type, NotificationChannel channel,
-                             String locale, Map<String, Object> payload) {
-        NotificationTemplate template = notificationTemplateRepository
-                .findByTypeAndChannelAndLocaleAndActiveTrue(type, channel, locale)
-                .orElseThrow(() -> new AppException(ErrorCode.NOTIFICATION_TEMPLATE_NOT_FOUND));
-
-        return templateEngine.render(template.getBodyTemplate(), payload);
+    public String render(String template, Map<String, Object> payload) {
+        return templateEngine.render(template, payload);
     }
 }

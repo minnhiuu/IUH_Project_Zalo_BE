@@ -11,6 +11,8 @@ import org.mapstruct.Mapping;
 public interface NotificationMapper {
 
     @Mapping(target = "actorCount", expression = "java(notification.getActorIds() != null ? notification.getActorIds().size() : 0)")
+    @Mapping(target = "read", source = "notification.read")
+    @Mapping(target = "payload", source = "notification.payload")
     NotificationResponse toResponse(Notification notification, String title, String body);
 
     UserNotificationStateResponse toStateResponse(UserNotificationState state);

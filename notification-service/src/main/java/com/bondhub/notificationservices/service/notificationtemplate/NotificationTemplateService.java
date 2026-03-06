@@ -6,6 +6,7 @@ import com.bondhub.notificationservices.dto.response.notificationtemplate.Notifi
 import com.bondhub.notificationservices.enums.NotificationChannel;
 import com.bondhub.notificationservices.enums.NotificationType;
 
+import java.util.List;
 import java.util.Map;
 
 public interface NotificationTemplateService {
@@ -16,7 +17,7 @@ public interface NotificationTemplateService {
 
     NotificationTemplateResponse getTemplate(NotificationType type, NotificationChannel channel, String locale);
 
-    String renderTitle(NotificationType type, NotificationChannel channel, String locale, Map<String, Object> payload);
+    Map<NotificationType, NotificationTemplateResponse> getTemplates(List<NotificationType> types, NotificationChannel channel, String locale);
 
-    String renderBody(NotificationType type, NotificationChannel channel, String locale, Map<String, Object> payload);
+    String render(String template, Map<String, Object> payload);
 }
