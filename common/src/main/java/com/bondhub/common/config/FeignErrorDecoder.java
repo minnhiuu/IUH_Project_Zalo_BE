@@ -17,7 +17,8 @@ import java.io.InputStream;
 @Slf4j
 public class FeignErrorDecoder implements ErrorDecoder {
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper = new ObjectMapper()
+            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
     @Override
     public Exception decode(String methodKey, Response response) {
