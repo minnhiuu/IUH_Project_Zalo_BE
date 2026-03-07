@@ -390,19 +390,25 @@ public class AuthenticationServiceImpl implements AuthenticationService {
 
         log.info("Logging out all other devices for user: {}, currentSessionId: {}", userId, currentSessionId);
 
-        // Use Redis to find and revoke sessions directly, avoiding MongoDB device repo
+        // Revoke all other refresh sessions in Redis (marks revoked=true, keeps the
+        // record for JTI lookup)
         List<String> revokedSessionIds = tokenStoreService.revokeAllUserRefreshSessionsExcept(userId, currentSessionId);
 
-        // Update last active time for all revoked sessions in MongoDB
+        long accessTokenTtlMs = jwtUtil.getAccessTokenExpirationSeconds() * 1000;
+
+        // For each revoked session: blacklist its paired access token + update MongoDB
+        // device record
         for (String sessionId : revokedSessionIds) {
             try {
+                tokenStoreService.revokeAndBlacklistSession(sessionId, userId, accessTokenTtlMs);
+
                 DeviceUpdateRequest updateRequest = DeviceUpdateRequest.builder()
                         .lastActiveTime(LocalDateTime.now())
                         .build();
                 deviceService.updateDeviceBySessionId(sessionId, updateRequest);
-                log.debug("Updated device for revoked session: {}", sessionId);
+                log.debug("Force-logged out session and blacklisted access token: {}", sessionId);
             } catch (Exception e) {
-                log.warn("Failed to update device for revoked session: {}", sessionId);
+                log.warn("Failed to fully process logout for session: {}", sessionId);
             }
         }
 
