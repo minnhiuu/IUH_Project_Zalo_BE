@@ -15,23 +15,22 @@ public class FeignClientInterceptor implements RequestInterceptor {
     @Override
     public void apply(RequestTemplate template) {
         ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
-        
+
         if (attributes != null) {
             HttpServletRequest request = attributes.getRequest();
-            
-            // Lấy tất cả các header từ request hiện tại
+
             Enumeration<String> headerNames = request.getHeaderNames();
             if (headerNames != null) {
                 while (headerNames.hasMoreElements()) {
                     String name = headerNames.nextElement();
                     String value = request.getHeader(name);
-                    
-                    // Chép Authorization header và các header X-User-* từ Gateway
-                    if (name.equalsIgnoreCase("Authorization") || 
-                        name.toLowerCase().startsWith("x-user-") || 
-                        name.equalsIgnoreCase("X-JWT-Id") || 
-                        name.equalsIgnoreCase("X-Remaining-TTL")) {
-                        
+
+                    if (name.equalsIgnoreCase("Authorization") ||
+                            name.toLowerCase().startsWith("x-user-") ||
+                            name.equalsIgnoreCase("X-Account-Id") ||
+                            name.equalsIgnoreCase("X-JWT-Id") ||
+                            name.equalsIgnoreCase("X-Remaining-TTL")) {
+
                         template.header(name, value);
                     }
                 }
