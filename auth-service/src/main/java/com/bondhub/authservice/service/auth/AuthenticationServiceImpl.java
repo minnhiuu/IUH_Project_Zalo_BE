@@ -9,6 +9,7 @@ import com.bondhub.authservice.dto.device.request.DeviceUpdateRequest;
 import com.bondhub.authservice.enums.OtpPurpose;
 import com.bondhub.authservice.enums.DeviceType;
 import com.bondhub.authservice.model.Account;
+import com.bondhub.authservice.model.redis.RefreshTokenSession;
 import com.bondhub.authservice.service.device.DeviceService;
 import com.bondhub.common.dto.client.userservice.user.request.UserCreateRequest;
 import com.bondhub.common.event.account.AccountRegisteredEvent;
@@ -303,7 +304,7 @@ public class AuthenticationServiceImpl implements AuthenticationService {
             if (response != null && response.data() != null) {
                 userId = response.data().id();
                 log.info("✅ User profile created via API for accountId: {}, userId: {}", account.getId(), userId);
-                
+
                 UserIndexEvent indexEvent = UserIndexEvent.builder()
                         .userId(userId)
                         .phoneNumber(account.getPhoneNumber())
@@ -314,8 +315,7 @@ public class AuthenticationServiceImpl implements AuthenticationService {
                         userId,
                         "User",
                         EventType.USER_INDEX,
-                        indexEvent
-                );
+                        indexEvent);
                 log.info("📤 Published USER_INDEX event for userId: {}", userId);
             }
         } catch (Exception e) {
@@ -423,7 +423,7 @@ public class AuthenticationServiceImpl implements AuthenticationService {
         log.info("Request to logout device session {} by user {}", targetSessionId, userId);
 
         // Verify ownership and existence via TokenStoreService
-        com.bondhub.authservice.model.redis.RefreshTokenSession session = tokenStoreService
+        RefreshTokenSession session = tokenStoreService
                 .findRefreshSession(targetSessionId)
                 .orElseThrow(() -> new AppException(ErrorCode.DEV_DEVICE_NOT_FOUND));
 
@@ -433,8 +433,9 @@ public class AuthenticationServiceImpl implements AuthenticationService {
             throw new AppException(ErrorCode.AUTH_UNAUTHORIZED);
         }
 
-        // Revoke session
-        tokenStoreService.revokeRefreshSession(targetSessionId);
+        // Revoke the refresh session AND blacklist the paired access token immediately
+        long accessTokenTtlMs = jwtUtil.getAccessTokenExpirationSeconds() * 1000;
+        tokenStoreService.revokeAndBlacklistSession(targetSessionId, userId, accessTokenTtlMs);
 
         // Update device in MongoDB
         try {
@@ -442,7 +443,7 @@ public class AuthenticationServiceImpl implements AuthenticationService {
                     .lastActiveTime(LocalDateTime.now())
                     .build();
             deviceService.updateDeviceBySessionId(targetSessionId, updateRequest);
-            log.info("✅ Device logged out and updated: {}", targetSessionId);
+            log.info("✅ Device logged out and access token blacklisted: {}", targetSessionId);
         } catch (Exception e) {
             log.warn("⚠️ Could not update device details for session: {}", targetSessionId);
         }

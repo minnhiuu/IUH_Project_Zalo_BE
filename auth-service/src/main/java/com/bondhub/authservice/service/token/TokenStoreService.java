@@ -46,6 +46,7 @@ public interface TokenStoreService {
                         String deviceId,
                         DeviceType deviceType,
                         String refreshToken,
+                        String accessTokenJti,
                         String userAgent,
                         String ipAddress,
                         long ttlSeconds);
@@ -90,6 +91,21 @@ public interface TokenStoreService {
          * @param sessionId Session ID to revoke
          */
         void revokeRefreshSession(String sessionId);
+
+        /**
+         * Revoke a refresh session AND blacklist its paired access token.
+         * <p>
+         * Use this instead of {@link #revokeRefreshSession(String)} when forcing a
+         * device logout so the still-valid access token is invalidated immediately.
+         * </p>
+         *
+         * @param sessionId        Session ID to revoke
+         * @param accountId        Account ID (for blacklist metadata)
+         * @param accessTokenTtlMs Remaining TTL of the access token in milliseconds
+         *                         (pass 0 or negative to skip blacklisting expired
+         *                         tokens)
+         */
+        void revokeAndBlacklistSession(String sessionId, String accountId, long accessTokenTtlMs);
 
         /**
          * Revoke all refresh sessions for a user (e.g., "Logout all devices")

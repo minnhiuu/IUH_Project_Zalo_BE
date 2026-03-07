@@ -32,6 +32,7 @@ public class RefreshTokenSession {
     DeviceType deviceType;
 
     String refreshTokenHash;
+    String accessTokenJti; // JTI of the paired access token – used to blacklist on force-logout
     String userAgentHash;
     String ipHash;
 
@@ -39,7 +40,6 @@ public class RefreshTokenSession {
     Long expiresAt;
     @Builder.Default
     Boolean revoked = false;
-
 
     @TimeToLive(unit = TimeUnit.SECONDS)
     Long ttl;

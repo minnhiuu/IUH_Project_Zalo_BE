@@ -59,6 +59,7 @@ public class TokenStoreServiceImpl implements TokenStoreService {
             String deviceId,
             DeviceType deviceType,
             String refreshToken,
+            String accessTokenJti,
             String userAgent,
             String ipAddress,
             long ttlSeconds) {
@@ -86,6 +87,7 @@ public class TokenStoreServiceImpl implements TokenStoreService {
                 .deviceId(deviceId)
                 .deviceType(deviceType)
                 .refreshTokenHash(hashSha256(refreshToken))
+                .accessTokenJti(accessTokenJti)
                 .userAgentHash(userAgent != null ? hashSha256(userAgent) : null)
                 .ipHash(ipAddress != null ? hashSha256(ipAddress) : null)
                 .issuedAt(now)
@@ -192,6 +194,26 @@ public class TokenStoreServiceImpl implements TokenStoreService {
             session.setRevoked(true);
             refreshSessionRepository.save(session);
             log.info("Refresh session revoked: sessionId={}, accountId={}", sessionId, session.getAccountId());
+        });
+    }
+
+    @Override
+    public void revokeAndBlacklistSession(String sessionId, String accountId, long accessTokenTtlMs) {
+        refreshSessionRepository.findById(sessionId).ifPresent(session -> {
+            // 1. Revoke the refresh session
+            session.setRevoked(true);
+            refreshSessionRepository.save(session);
+            log.info("Refresh session revoked (forced): sessionId={}, accountId={}", sessionId, accountId);
+
+            // 2. Blacklist the paired access token by its stored JTI
+            String jti = session.getAccessTokenJti();
+            if (jti != null && !jti.isBlank() && accessTokenTtlMs > 0) {
+                long ttlSeconds = accessTokenTtlMs / 1000;
+                blacklistAccessToken(jti, accountId, null, ttlSeconds, "Device logout");
+                log.info("Access token blacklisted on device logout: jti={}, sessionId={}", jti, sessionId);
+            } else {
+                log.debug("Skipping access token blacklist: jti={}, ttlMs={}", jti, accessTokenTtlMs);
+            }
         });
     }
 

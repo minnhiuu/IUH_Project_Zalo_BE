@@ -157,6 +157,45 @@ public class DeviceServiceImpl implements DeviceService {
     }
 
     @Override
+    public DeviceResponse saveOrUpdateDevice(DeviceCreateRequest request) {
+        // Try to find an existing device for this physical device + account combination
+        if (request.deviceId() != null && !request.deviceId().isBlank()
+                && request.accountId() != null && !request.accountId().isBlank()) {
+
+            Optional<Device> existing = deviceRepository.findByDeviceIdAndAccountId(
+                    request.deviceId(), request.accountId());
+
+            if (existing.isPresent()) {
+                Device deviceToUpdate = existing.get();
+                log.info("Updating existing device {} for accountId: {}", deviceToUpdate.getId(), request.accountId());
+
+                // Update only the session-related fields
+                DeviceUpdateRequest updateRequest = DeviceUpdateRequest.builder()
+                        .sessionId(request.sessionId())
+                        .ipAddress(request.ipAddress())
+                        .lastActiveTime(request.lastActiveTime())
+                        .deviceName(request.deviceName())
+                        .browser(request.browser())
+                        .os(request.os())
+                        .deviceType(request.deviceType())
+                        .build();
+
+                deviceMapper.updateEntityFromRequest(deviceToUpdate, updateRequest);
+                Device updatedDevice = deviceRepository.save(deviceToUpdate);
+                log.info("Device updated (upsert) with sessionId: {}", request.sessionId());
+                return deviceMapper.toResponse(updatedDevice, isSessionActive(updatedDevice.getSessionId()));
+            }
+        }
+
+        // No existing device found → create a new one
+        log.info("Creating new device (upsert) with sessionId: {}", request.sessionId());
+        Device device = deviceMapper.toEntity(request);
+        Device savedDevice = deviceRepository.save(device);
+        log.info("Device created (upsert) with id: {}", savedDevice.getId());
+        return deviceMapper.toResponse(savedDevice, isSessionActive(savedDevice.getSessionId()));
+    }
+
+    @Override
     public List<DeviceResponse> getActiveDevicesWithSessions(String accountId, String currentSessionId) {
         log.info("Fetching active devices with sessions for accountId: {}", accountId);
 

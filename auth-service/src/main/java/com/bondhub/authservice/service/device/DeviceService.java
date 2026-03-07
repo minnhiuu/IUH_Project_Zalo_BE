@@ -10,8 +10,10 @@ import java.util.List;
  * Service interface for managing Device operations.
  * <p>
  * This service provides CRUD operations for Device entities using DTOs
- * and additional utility methods for checking device existence and retrieving devices by account.
- * All methods return appropriate response objects for consistent response handling.
+ * and additional utility methods for checking device existence and retrieving
+ * devices by account.
+ * All methods return appropriate response objects for consistent response
+ * handling.
  * </p>
  *
  * @author BondHub Development Team
@@ -28,7 +30,8 @@ public interface DeviceService {
      *
      * @param request the device creation request DTO, must not be null
      * @return the created device response DTO with generated ID
-     * @throws AppException if session ID already exists (DEV_SESSION_ID_ALREADY_USED)
+     * @throws AppException if session ID already exists
+     *                      (DEV_SESSION_ID_ALREADY_USED)
      */
     DeviceResponse createDevice(DeviceCreateRequest request);
 
@@ -72,11 +75,13 @@ public interface DeviceService {
      * validates that the new value is unique before updating.
      * </p>
      *
-     * @param id the unique identifier of the device to update, must not be null
+     * @param id      the unique identifier of the device to update, must not be
+     *                null
      * @param request the device update request DTO containing updated information
      * @return the updated device response DTO
      * @throws AppException if device not found (DEV_DEVICE_NOT_FOUND)
-     *                      or session ID already exists (DEV_SESSION_ID_ALREADY_USED)
+     *                      or session ID already exists
+     *                      (DEV_SESSION_ID_ALREADY_USED)
      */
     DeviceResponse updateDevice(String id, DeviceUpdateRequest request);
 
@@ -87,7 +92,7 @@ public interface DeviceService {
      * </p>
      *
      * @param sessionId the session ID of the device to update, must not be null
-     * @param request the device update request DTO containing updated information
+     * @param request   the device update request DTO containing updated information
      * @return the updated device response DTO
      * @throws AppException if device not found (DEV_DEVICE_NOT_FOUND)
      */
@@ -117,16 +122,33 @@ public interface DeviceService {
     boolean existsBySessionId(String sessionId);
 
     /**
+     * Saves or updates a device in MongoDB during login/register.
+     * <p>
+     * If a device with the same {@code deviceId} and {@code accountId} already
+     * exists
+     * it will be updated (new sessionId, ipAddress, lastActiveTime). Otherwise a
+     * new
+     * device document is created.
+     * </p>
+     *
+     * @param request device creation payload (deviceId, sessionId, accountId, etc.)
+     * @return the saved/updated device response DTO
+     */
+    DeviceResponse saveOrUpdateDevice(DeviceCreateRequest request);
+
+    /**
      * Retrieves all active devices with active sessions for a given account.
      * <p>
-     * This method returns devices that have valid (non-expired and non-revoked) 
+     * This method returns devices that have valid (non-expired and non-revoked)
      * refresh token sessions in Redis. The response includes session details
      * (issuedAt, expiresAt, isCurrentDevice).
      * </p>
      *
-     * @param accountId the account ID to search for, must not be null
-     * @param currentSessionId the current session ID to mark the current device (optional)
-     * @return a list of device response DTOs with session information (may be empty)
+     * @param accountId        the account ID to search for, must not be null
+     * @param currentSessionId the current session ID to mark the current device
+     *                         (optional)
+     * @return a list of device response DTOs with session information (may be
+     *         empty)
      */
     List<DeviceResponse> getActiveDevicesWithSessions(String accountId, String currentSessionId);
 }
