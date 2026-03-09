@@ -18,6 +18,7 @@ public enum ErrorCode {
         AUTH_DEVICE_ID_REQUIRED(HttpStatus.BAD_REQUEST, 1007, "error.auth.device.id.required"),
         AUTH_DEVICE_MISMATCH(HttpStatus.FORBIDDEN, 1008, "error.auth.device.mismatch"),
         AUTH_SESSION_KICKED(HttpStatus.UNAUTHORIZED, 1009, "error.auth.session.kicked"),
+        AUTH_ACCOUNT_BANNED(HttpStatus.FORBIDDEN, 1013, "error.auth.account.banned"),
 
         // User account errors (2xxx)
         ACC_PHONE_NUMBER_ALREADY_USED(HttpStatus.CONFLICT, 2001, "error.acc.phone.number.already.used"),

@@ -30,6 +30,11 @@ public interface UserActivityLogRepository extends MongoRepository<UserActivityL
         String userId, LocalDateTime startDate, LocalDateTime endDate, Pageable pageable);
     
     /**
+     * Find the most recent log of a specific action for a user
+     */
+    java.util.Optional<UserActivityLog> findTopByUserIdAndActionOrderByCreatedAtDesc(String userId, UserAction action);
+
+    /**
      * Count total activity logs for a user
      */
     long countByUserId(String userId);

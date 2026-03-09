@@ -80,9 +80,13 @@ public class TokenValidationService {
                     return reactiveRedisTemplate.opsForHash()
                             .get(sessionKey, "revoked")
                             .map(revoked -> {
-                                if (revoked != null && Boolean.parseBoolean(revoked.toString())) {
-                                    log.debug("Session is revoked: {}", sessionId);
-                                    return false;
+                                if (revoked != null) {
+                                    String v = revoked.toString();
+                                    boolean isRevoked = "1".equals(v) || "true".equalsIgnoreCase(v);
+                                    if (isRevoked) {
+                                        log.debug("Session is revoked: {}", sessionId);
+                                        return false;
+                                    }
                                 }
                                 return true;
                             })

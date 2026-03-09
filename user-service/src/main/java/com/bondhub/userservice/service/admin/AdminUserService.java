@@ -10,10 +10,7 @@ import java.util.List;
 
 public interface AdminUserService {
 
-    /**
-     * Get paginated list of all users for admin
-     */
-    PageResponse<List<UserAdminResponse>> getAllUsers(String search, String status, Pageable pageable);
+    PageResponse<List<UserAdminResponse>> getAllUsers(String name, String phone, String email, String status, Pageable pageable);
 
     /**
      * Get full user detail with audit info for admin

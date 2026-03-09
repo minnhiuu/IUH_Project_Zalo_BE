@@ -7,11 +7,11 @@ import com.bondhub.common.exception.ErrorCode;
 import com.bondhub.common.utils.S3Util;
 import com.bondhub.userservice.client.AuthServiceClient;
 import com.bondhub.userservice.dto.response.AccountResponse;
-import com.bondhub.userservice.dto.response.AuditResponse;
 import com.bondhub.userservice.dto.response.UserActivityLogResponse;
 import com.bondhub.userservice.dto.response.UserAdminDetailResponse;
 import com.bondhub.userservice.dto.response.UserAdminResponse;
-import com.bondhub.userservice.dto.response.UserResponse;
+import com.bondhub.userservice.mapper.AdminUserMapper;
+import com.bondhub.userservice.mapper.UserActivityLogMapper;
 import com.bondhub.userservice.model.User;
 import com.bondhub.userservice.model.UserActivityLog;
 import com.bondhub.userservice.model.enums.UserAction;
@@ -23,6 +23,7 @@ import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -40,6 +41,8 @@ public class AdminUserServiceImpl implements AdminUserService {
     final UserRepository userRepository;
     final UserActivityLogRepository activityLogRepository;
     final AuthServiceClient authServiceClient;
+    final AdminUserMapper adminUserMapper;
+    final UserActivityLogMapper userActivityLogMapper;
 
     @Value("${aws.s3.bucket.name}")
     String bucketName;
@@ -48,35 +51,54 @@ public class AdminUserServiceImpl implements AdminUserService {
     String region;
 
     @Override
-    public PageResponse<List<UserAdminResponse>> getAllUsers(String search, String status, Pageable pageable) {
-        log.info("[Admin] Fetching all users — search='{}', status='{}'", search, status);
+    public PageResponse<List<UserAdminResponse>> getAllUsers(String name, String phone, String email, String status, Pageable pageable) {
+        log.info("[Admin] Fetching users - name='{}', phone='{}', email='{}', status='{}'", name, phone, email, status);
 
-        String keyword = (search != null && !search.isBlank()) ? search.trim() : null;
+        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
 
-        // Build filtered page based on keyword and/or status
-        // "ACTIVE" = active != false
-        // "BANNED" = active = false
-        Boolean isBanned = (status != null && status.equalsIgnoreCase("BANNED")) ? Boolean.TRUE : null;
-        boolean filterActive = (status != null && status.equalsIgnoreCase("ACTIVE"));
+        // Phone or email: exact lookup via auth-service â†’ find user by accountId
+        if (StringUtils.hasText(phone) || StringUtils.hasText(email)) {
+            AccountResponse account = StringUtils.hasText(phone)
+                    ? fetchAccountByPhone(phone)
+                    : fetchAccountByEmail(email);
 
-        Page<User> page;
-        if (keyword != null && isBanned != null) {
-            // banned + keyword
-            page = userRepository.findByActiveAndFullNameContainingIgnoreCase(false, keyword, pageable);
-        } else if (keyword != null && filterActive) {
-            // active + keyword
-            page = userRepository.findActiveUsersByKeyword(keyword, pageable);
-        } else if (keyword != null) {
-            page = userRepository.findByFullNameContainingIgnoreCase(keyword, pageable);
-        } else if (isBanned != null) {
-            page = userRepository.findByActive(false, pageable);
-        } else if (filterActive) {
-            page = userRepository.findActiveUsers(pageable);
-        } else {
-            page = userRepository.findAll(pageable);
+            if (account == null) {
+                return PageResponse.fromPage(Page.empty(pageable), u -> null);
+            }
+
+            User user = userRepository.findByAccountId(account.id()).orElse(null);
+            if (user == null || !matchesStatus(user, status)) {
+                return PageResponse.fromPage(Page.empty(pageable), u -> null);
+            }
+
+            Page<User> singlePage = new PageImpl<>(List.of(user), pageable, 1);
+            return PageResponse.fromPage(singlePage, u -> adminUserMapper.toUserAdminResponse(u, account, baseUrl));
         }
 
-        // Batch fetch all account info for the page in a single Feign call
+        // Name search in MongoDB with optional status filter
+        boolean isBanned = "BANNED".equalsIgnoreCase(status);
+        boolean filterActive = "ACTIVE".equalsIgnoreCase(status);
+
+        Page<User> page;
+        if (StringUtils.hasText(name)) {
+            String keyword = name.trim();
+            if (isBanned) {
+                page = userRepository.findByActiveAndFullNameContainingIgnoreCase(false, keyword, pageable);
+            } else if (filterActive) {
+                page = userRepository.findActiveUsersByKeyword(keyword, pageable);
+            } else {
+                page = userRepository.findByFullNameContainingIgnoreCase(keyword, pageable);
+            }
+        } else {
+            if (isBanned) {
+                page = userRepository.findByActive(false, pageable);
+            } else if (filterActive) {
+                page = userRepository.findActiveUsers(pageable);
+            } else {
+                page = userRepository.findAll(pageable);
+            }
+        }
+
         List<String> accountIds = page.getContent().stream()
                 .map(User::getAccountId)
                 .filter(StringUtils::hasText)
@@ -84,37 +106,8 @@ public class AdminUserServiceImpl implements AdminUserService {
                 .collect(Collectors.toList());
         Map<String, AccountResponse> accountMap = fetchAccountsBatch(accountIds);
 
-        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
-
-        return PageResponse.fromPage(page, user -> {
-            AccountResponse accountInfo = accountMap.get(user.getAccountId());
-
-            UserResponse userResponse = UserResponse.builder()
-                    .id(user.getId())
-                    .fullName(user.getFullName())
-                    .dob(user.getDob())
-                    .bio(user.getBio())
-                    .gender(user.getGender())
-                    .accountInfo(accountInfo)
-                    .avatar(user.getAvatar() != null ? baseUrl + user.getAvatar() : null)
-                    .background(user.getBackground() != null ? baseUrl + user.getBackground() : null)
-                    .backgroundY(user.getBackgroundY())
-                    .build();
-
-            AuditResponse auditResponse = AuditResponse.builder()
-                    .createdAt(user.getCreatedAt())
-                    .lastModifiedAt(user.getLastModifiedAt())
-                    .createdBy(user.getCreatedBy())
-                    .lastModifiedBy(user.getLastModifiedBy())
-                    .lastLoginAt(user.getLastLoginAt())
-                    .active(user.isActive())
-                    .build();
-
-            return UserAdminResponse.builder()
-                    .user(userResponse)
-                    .audit(auditResponse)
-                    .build();
-        });
+        return PageResponse.fromPage(page, user ->
+                adminUserMapper.toUserAdminResponse(user, accountMap.get(user.getAccountId()), baseUrl));
     }
 
     @Override
@@ -128,30 +121,15 @@ public class AdminUserServiceImpl implements AdminUserService {
         AccountResponse account = fetchAccountSafe(user.getAccountId());
         long totalLogs = activityLogRepository.countByUserId(userId);
 
-        return UserAdminDetailResponse.builder()
-                .id(user.getId())
-                .fullName(user.getFullName())
-                .dob(user.getDob())
-                .bio(user.getBio())
-                .gender(user.getGender())
-                .avatar(user.getAvatar() != null ? baseUrl + user.getAvatar() : null)
-                .background(user.getBackground() != null ? baseUrl + user.getBackground() : null)
-                .backgroundY(user.getBackgroundY())
-                // Account info
-                .accountId(user.getAccountId())
-                .email(account != null ? account.email() : null)
-                .phoneNumber(account != null ? account.phoneNumber() : null)
-                .role(account != null ? account.role() : null)
-                .active(account != null ? account.enabled() : null)
-                .isVerified(account != null ? account.isVerified() : null)
-                // Audit info
-                .createdAt(user.getCreatedAt())
-                .lastModifiedAt(user.getLastModifiedAt())
-                .createdBy(user.getCreatedBy())
-                .lastModifiedBy(user.getLastModifiedBy())
-                .lastLoginAt(user.getLastLoginAt())
-                .totalActivityLogs(totalLogs)
-                .build();
+        String banReason = null;
+        if (!user.isActive()) {
+            banReason = activityLogRepository
+                    .findTopByUserIdAndActionOrderByCreatedAtDesc(userId, UserAction.ACCOUNT_LOCKED)
+                    .map(log -> log.getMetadata() != null ? (String) log.getMetadata().get("reason") : null)
+                    .orElse(null);
+        }
+
+        return adminUserMapper.toUserAdminDetailResponse(user, account, baseUrl, totalLogs, banReason);
     }
 
     @Override
@@ -163,18 +141,7 @@ public class AdminUserServiceImpl implements AdminUserService {
         }
 
         Page<UserActivityLog> page = activityLogRepository.findByUserIdOrderByCreatedAtDesc(userId, pageable);
-
-        return PageResponse.fromPage(page, log -> UserActivityLogResponse.builder()
-                .id(log.getId())
-                .userId(log.getUserId())
-                .action(log.getAction())
-                .description(log.getDescription())
-                .ipAddress(log.getIpAddress())
-                .userAgent(log.getUserAgent())
-                .metadata(log.getMetadata())
-                .createdAt(log.getCreatedAt())
-                .createdBy(log.getCreatedBy())
-                .build());
+        return PageResponse.fromPage(page, userActivityLogMapper::toUserActivityLogResponse);
     }
 
     @Override
@@ -183,15 +150,11 @@ public class AdminUserServiceImpl implements AdminUserService {
         try {
             User user = userRepository.findById(userId)
                     .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
-            log.info("[Admin] Found user={}, accountId={}", user.getId(), user.getAccountId());
 
             authServiceClient.banAccount(user.getAccountId(), reason);
-            log.info("[Admin] Auth-service banAccount called successfully for accountId={}", user.getAccountId());
 
-            // Sync active flag locally for native status filtering
             user.setActive(false);
             userRepository.save(user);
-            log.info("[Admin] User.active synced to false for userId={}", userId);
 
             activityLogRepository.save(UserActivityLog.builder()
                     .userId(userId)
@@ -205,7 +168,7 @@ public class AdminUserServiceImpl implements AdminUserService {
             log.error("[Admin] AppException in banUser userId={}: code={}", userId, e.getErrorCode());
             throw e;
         } catch (Exception e) {
-            log.error("[Admin] Unexpected error in banUser userId={}: {} - {}", userId, e.getClass().getName(), e.getMessage(), e);
+            log.error("[Admin] Unexpected error in banUser userId={}: {}", userId, e.getMessage(), e);
             throw e;
         }
     }
@@ -219,7 +182,6 @@ public class AdminUserServiceImpl implements AdminUserService {
 
         authServiceClient.unbanAccount(user.getAccountId());
 
-        // Sync enabled flag locally for native status filtering
         user.setActive(true);
         userRepository.save(user);
 
@@ -233,13 +195,41 @@ public class AdminUserServiceImpl implements AdminUserService {
         log.info("[Admin] User unbanned successfully: userId={}", userId);
     }
 
+    private boolean matchesStatus(User user, String status) {
+        if (!StringUtils.hasText(status)) return true;
+        boolean isActive = user.isActive();
+        if ("ACTIVE".equalsIgnoreCase(status)) return isActive;
+        if ("BANNED".equalsIgnoreCase(status)) return !isActive;
+        return true;
+    }
+
     private AccountResponse fetchAccountSafe(String accountId) {
         if (!StringUtils.hasText(accountId)) return null;
         try {
             ApiResponse<AccountResponse> response = authServiceClient.getAccountById(accountId);
             return (response != null) ? response.data() : null;
         } catch (Exception e) {
-            log.warn("[Admin] Failed to fetch account info for accountId={}: {}", accountId, e.getMessage());
+            log.warn("[Admin] Failed to fetch account for accountId={}: {}", accountId, e.getMessage());
+            return null;
+        }
+    }
+
+    private AccountResponse fetchAccountByPhone(String phone) {
+        try {
+            ApiResponse<AccountResponse> response = authServiceClient.getAccountByPhoneNumber(phone);
+            return (response != null) ? response.data() : null;
+        } catch (Exception e) {
+            log.warn("[Admin] Failed to fetch account by phone={}: {}", phone, e.getMessage());
+            return null;
+        }
+    }
+
+    private AccountResponse fetchAccountByEmail(String email) {
+        try {
+            ApiResponse<AccountResponse> response = authServiceClient.getAccountByEmail(email);
+            return (response != null) ? response.data() : null;
+        } catch (Exception e) {
+            log.warn("[Admin] Failed to fetch account by email={}: {}", email, e.getMessage());
             return null;
         }
     }
@@ -257,5 +247,4 @@ public class AdminUserServiceImpl implements AdminUserService {
         }
         return Map.of();
     }
-
 }

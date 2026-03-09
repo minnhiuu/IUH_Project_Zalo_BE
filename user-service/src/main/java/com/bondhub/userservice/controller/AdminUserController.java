@@ -26,31 +26,21 @@ public class AdminUserController {
 
     private final AdminUserService adminUserService;
 
-    /**
-     * GET /admin/users
-     * Paginated list of all users with optional search and status filter
-     */
     @GetMapping
     public ResponseEntity<ApiResponse<PageResponse<List<UserAdminResponse>>>> getAllUsers(
-            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String name,
+            @RequestParam(required = false) String phone,
+            @RequestParam(required = false) String email,
             @RequestParam(required = false) String status,
             @PageableDefault(size = 10, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
-        return ResponseEntity.ok(ApiResponse.success(adminUserService.getAllUsers(search, status, pageable)));
+        return ResponseEntity.ok(ApiResponse.success(adminUserService.getAllUsers(name, phone, email, status, pageable)));
     }
 
-    /**
-     * GET /admin/users/{id}
-     * Full user detail — profile + account info + audit
-     */
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponse<UserAdminDetailResponse>> getUserDetail(@PathVariable String id) {
         return ResponseEntity.ok(ApiResponse.success(adminUserService.getUserDetail(id)));
     }
 
-    /**
-     * GET /admin/users/{id}/activity-logs
-     * Interactive audit history timeline (paginated)
-     */
     @GetMapping("/{id}/activity-logs")
     public ResponseEntity<ApiResponse<PageResponse<List<UserActivityLogResponse>>>> getUserActivityLogs(
             @PathVariable String id,
@@ -58,10 +48,6 @@ public class AdminUserController {
         return ResponseEntity.ok(ApiResponse.success(adminUserService.getUserActivityLogs(id, pageable)));
     }
 
-    /**
-     * PATCH /admin/users/{id}/ban
-     * Ban a user account
-     */
     @PostMapping("/{id}/ban")
     public ResponseEntity<ApiResponse<Void>> banUser(
             @PathVariable String id,
@@ -70,10 +56,6 @@ public class AdminUserController {
         return ResponseEntity.ok(ApiResponse.successWithoutData());
     }
 
-    /**
-     * POST /admin/users/{id}/unban
-     * Unban a user account
-     */
     @PostMapping("/{id}/unban")
     public ResponseEntity<ApiResponse<Void>> unbanUser(@PathVariable String id) {
         adminUserService.unbanUser(id);

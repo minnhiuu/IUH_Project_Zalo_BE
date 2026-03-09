@@ -74,7 +74,7 @@ public class AuthenticationServiceImpl implements AuthenticationService {
         }
 
         if (!account.getEnabled()) {
-            throw new AppException(ErrorCode.AUTH_UNAUTHENTICATED);
+            throw new AppException(ErrorCode.AUTH_ACCOUNT_BANNED);
         }
 
         String userId = null;
@@ -155,7 +155,7 @@ public class AuthenticationServiceImpl implements AuthenticationService {
                 .orElseThrow(() -> new AppException(ErrorCode.ACC_ACCOUNT_NOT_FOUND));
 
         if (!account.getEnabled()) {
-            throw new AppException(ErrorCode.AUTH_UNAUTHENTICATED);
+            throw new AppException(ErrorCode.AUTH_ACCOUNT_BANNED);
         }
 
         tokenStoreService.revokeRefreshSession(sessionId);

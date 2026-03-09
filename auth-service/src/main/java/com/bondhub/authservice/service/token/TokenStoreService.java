@@ -92,6 +92,15 @@ public interface TokenStoreService {
         void revokeRefreshSession(String sessionId);
 
         /**
+         * Update the access token info stored in a session (called after token generation)
+         *
+         * @param sessionId            Session ID
+         * @param accessTokenJti       JTI of the issued access token
+         * @param accessTokenExpiresAt Expiry timestamp (ms since epoch) of the access token
+         */
+        void updateSessionAccessToken(String sessionId, String accessTokenJti, Long accessTokenExpiresAt);
+
+        /**
          * Revoke all refresh sessions for a user (e.g., "Logout all devices")
          *
          * @param userId User ID

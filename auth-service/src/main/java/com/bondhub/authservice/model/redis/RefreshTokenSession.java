@@ -39,6 +39,9 @@ public class RefreshTokenSession {
     private Long issuedAt;
     private Long expiresAt;
 
+    private String accessTokenJti;
+    private Long accessTokenExpiresAt;
+
     @Builder.Default
     private Boolean revoked = false;
 

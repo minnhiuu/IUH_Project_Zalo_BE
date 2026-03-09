@@ -58,6 +58,11 @@ public class TokenProvider {
                 ipAddress,
                 refreshExpirationMs / 1000);
 
+        String accessTokenJti = jwtUtil.extractJti(accessToken);
+        long accessTokenTtlSeconds = jwtUtil.getAccessTokenExpirationSeconds();
+        tokenStoreService.updateSessionAccessToken(sessionId, accessTokenJti,
+                System.currentTimeMillis() + (accessTokenTtlSeconds * 1000));
+
         return TokenResponse.of(accessToken, refreshToken, refreshExpirationMs);
     }
 }

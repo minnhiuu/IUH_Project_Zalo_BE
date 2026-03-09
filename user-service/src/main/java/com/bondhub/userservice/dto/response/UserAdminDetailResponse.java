@@ -37,5 +37,8 @@ public record UserAdminDetailResponse(
     LocalDateTime lastLoginAt,
 
     // Stats
-    long totalActivityLogs
+    long totalActivityLogs,
+
+    // Ban info (null if not banned)
+    String banReason
 ) {}

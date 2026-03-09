@@ -4,6 +4,7 @@ import com.bondhub.authservice.dto.account.request.AccountCreateRequest;
 import com.bondhub.authservice.dto.account.response.AccountResponse;
 import com.bondhub.authservice.dto.account.request.AccountUpdateRequest;
 import com.bondhub.common.dto.ApiResponse;
+import com.bondhub.common.exception.AppException;
 
 import java.util.List;
 
@@ -130,5 +131,7 @@ public interface AccountService {
      * @return list of account responses
      */
     List<AccountResponse> getAccountsByIds(List<String> ids);
+
+
 }
 

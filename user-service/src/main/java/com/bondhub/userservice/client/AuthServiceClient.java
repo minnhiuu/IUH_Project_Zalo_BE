@@ -13,7 +13,12 @@ public interface AuthServiceClient {
     @GetMapping("/auth/accounts/{id}")
     ApiResponse<AccountResponse> getAccountById(@PathVariable("id") String id);
 
-    /** Batch fetch multiple accounts in one call — avoids N+1 */
+    @GetMapping("/auth/accounts/phone/{phoneNumber}")
+    ApiResponse<AccountResponse> getAccountByPhoneNumber(@PathVariable("phoneNumber") String phoneNumber);
+
+    @GetMapping("/auth/accounts/email/{email}")
+    ApiResponse<AccountResponse> getAccountByEmail(@PathVariable("email") String email);
+
     @PostMapping("/auth/accounts/internal/batch")
     ApiResponse<List<AccountResponse>> getAccountsByIds(@RequestBody List<String> ids);
 
@@ -23,3 +28,4 @@ public interface AuthServiceClient {
     @PostMapping("/auth/accounts/internal/{id}/unban")
     ApiResponse<Void> unbanAccount(@PathVariable("id") String id);
 }
+
