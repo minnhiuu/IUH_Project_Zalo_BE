@@ -26,7 +26,7 @@ public record UserAdminDetailResponse(
     String email,
     String phoneNumber,
     String role,
-    Boolean enabled,
+    Boolean active,
     Boolean isVerified,
 
     // Audit info

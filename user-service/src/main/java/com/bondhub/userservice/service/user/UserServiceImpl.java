@@ -15,6 +15,7 @@ import com.bondhub.userservice.dto.request.UserUpdateRequest;
 import com.bondhub.userservice.dto.request.UserIndexRequest;
 import com.bondhub.userservice.dto.request.AvatarUpdateRequest;
 import com.bondhub.userservice.dto.request.BackgroundUpdateRequest;
+import com.bondhub.userservice.dto.request.BioUpdateRequest;
 import com.bondhub.userservice.dto.response.AccountResponse;
 import com.bondhub.userservice.dto.response.UserResponse;
 import com.bondhub.userservice.dto.response.UserProfileResponse;
@@ -61,8 +62,7 @@ public class UserServiceImpl implements UserService {
         user = userRepository.save(user);
         log.info("User created successfully with id: {}", user.getId());
 
-        // Default role is USER for newly created users
-        syncUserToIndex(user, null, Role.USER);
+        syncUserToIndex(user, null, null);
 
         return userMapper.toUserResponse(user);
     }
@@ -72,21 +72,19 @@ public class UserServiceImpl implements UserService {
         log.info("Fetching user with id: {}", id);
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
-        
-        UserResponse response = userMapper.toUserResponse(user);
-        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
-        
-        return UserResponse.builder()
-                .id(response.id())
-                .fullName(response.fullName())
-                .dob(response.dob())
-                .bio(response.bio())
-                .gender(response.gender())
-                .accountInfo(response.accountInfo())
-                .avatar(response.avatar() != null ? baseUrl + response.avatar() : null)
-                .background(response.background() != null ? baseUrl + response.background() : null)
-                .backgroundY(response.backgroundY())
-                .build();
+
+        AccountResponse accountResponse = null;
+        try {
+            ApiResponse<AccountResponse> accountApiResponse = authServiceClient.getAccountById(user.getAccountId());
+            if (accountApiResponse != null && accountApiResponse.data() != null) {
+                accountResponse = accountApiResponse.data();
+                log.info("Account info fetched successfully for user: {}", id);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to fetch account info for user: {}. Account info will be null.", id, e);
+        }
+
+        return getUserResponseWithUrl(user, accountResponse);
     }
 
     @Override
@@ -94,21 +92,19 @@ public class UserServiceImpl implements UserService {
         log.info("Fetching user with accountId: {}", accountId);
         User user = userRepository.findByAccountId(accountId)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
-        
-        UserResponse response = userMapper.toUserResponse(user);
-        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
-        
-        return UserResponse.builder()
-                .id(response.id())
-                .fullName(response.fullName())
-                .dob(response.dob())
-                .bio(response.bio())
-                .gender(response.gender())
-                .accountInfo(response.accountInfo())
-                .avatar(response.avatar() != null ? baseUrl + response.avatar() : null)
-                .background(response.background() != null ? baseUrl + response.background() : null)
-                .backgroundY(response.backgroundY())
-                .build();
+
+        AccountResponse accountResponse = null;
+        try {
+            ApiResponse<AccountResponse> accountApiResponse = authServiceClient.getAccountById(accountId);
+            if (accountApiResponse != null && accountApiResponse.data() != null) {
+                accountResponse = accountApiResponse.data();
+                log.info("Account info fetched successfully for accountId: {}", accountId);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to fetch account info for accountId: {}. Account info will be null.", accountId, e);
+        }
+
+        return getUserResponseWithUrl(user, accountResponse);
     }
 
     @Override
@@ -155,7 +151,7 @@ public class UserServiceImpl implements UserService {
     public List<UserResponse> getAllUsers() {
         log.info("Fetching all users");
         String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
-        
+
         return userRepository.findAll().stream()
                 .map(user -> {
                     UserResponse response = userMapper.toUserResponse(user);
@@ -210,7 +206,6 @@ public class UserServiceImpl implements UserService {
                 .id(response.id())
                 .phoneNumber(response.phoneNumber())
                 .email(response.email())
-                .role(response.role())
                 .fullName(response.fullName())
                 .bio(response.bio())
                 .gender(response.gender())
@@ -218,6 +213,22 @@ public class UserServiceImpl implements UserService {
                 .avatar(response.avatar() != null ? baseUrl + response.avatar() : null)
                 .background(response.background() != null ? baseUrl + response.background() : null)
                 .backgroundY(response.backgroundY())
+                .build();
+    }
+
+    private UserResponse getUserResponseWithUrl(User user, AccountResponse accountResponse) {
+        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+
+        return UserResponse.builder()
+                .id(user.getId())
+                .fullName(user.getFullName())
+                .dob(user.getDob())
+                .bio(user.getBio())
+                .gender(user.getGender())
+                .accountInfo(accountResponse)
+                .avatar(user.getAvatar() != null ? baseUrl + user.getAvatar() : null)
+                .background(user.getBackground() != null ? baseUrl + user.getBackground() : null)
+                .backgroundY(user.getBackgroundY())
                 .build();
     }
 
@@ -311,6 +322,34 @@ public class UserServiceImpl implements UserService {
         log.info("Background position updated successfully for user: {}", accountId);
         String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
         return userMapper.toBackgroundResponse(user, baseUrl);
+    }
+
+    @Override //Do intel ngu: xong ròi cút
+    public UserProfileResponse updateBio(BioUpdateRequest request) {
+        String accountId = securityUtil.getCurrentAccountId();
+        log.info("Updating bio for user: {}", accountId);
+
+        User user = userRepository.findByAccountId(accountId)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+
+        user.setBio(request.bio());
+        user = userRepository.save(user);
+
+        AccountResponse accountResponse = null;
+        try {
+            ApiResponse<AccountResponse> accountApiResponse = authServiceClient.getAccountById(accountId);
+            if (accountApiResponse != null && accountApiResponse.data() != null) {
+                accountResponse = accountApiResponse.data();
+            }
+        } catch (Exception e) {
+            log.warn("Failed to fetch account info for user: {}", accountId, e);
+        }
+
+        log.info("Bio updated successfully for user: {}", accountId);
+
+        syncUserToIndex(user, accountResponse != null ? accountResponse.phoneNumber() : null, null);
+
+        return getUserProfileResponseWithUrl(user, accountResponse);
     }
 
     @Override

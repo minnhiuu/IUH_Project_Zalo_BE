@@ -54,22 +54,22 @@ public class AdminUserServiceImpl implements AdminUserService {
         String keyword = (search != null && !search.isBlank()) ? search.trim() : null;
 
         // Build filtered page based on keyword and/or status
-        // "ACTIVE" = enabled != false (includes null = never banned)
-        // "BANNED" = enabled = false
+        // "ACTIVE" = active != false
+        // "BANNED" = active = false
         Boolean isBanned = (status != null && status.equalsIgnoreCase("BANNED")) ? Boolean.TRUE : null;
         boolean filterActive = (status != null && status.equalsIgnoreCase("ACTIVE"));
 
         Page<User> page;
         if (keyword != null && isBanned != null) {
             // banned + keyword
-            page = userRepository.findByEnabledAndFullNameContainingIgnoreCase(false, keyword, pageable);
+            page = userRepository.findByActiveAndFullNameContainingIgnoreCase(false, keyword, pageable);
         } else if (keyword != null && filterActive) {
             // active + keyword
             page = userRepository.findActiveUsersByKeyword(keyword, pageable);
         } else if (keyword != null) {
             page = userRepository.findByFullNameContainingIgnoreCase(keyword, pageable);
         } else if (isBanned != null) {
-            page = userRepository.findByEnabled(false, pageable);
+            page = userRepository.findByActive(false, pageable);
         } else if (filterActive) {
             page = userRepository.findActiveUsers(pageable);
         } else {
@@ -142,7 +142,7 @@ public class AdminUserServiceImpl implements AdminUserService {
                 .email(account != null ? account.email() : null)
                 .phoneNumber(account != null ? account.phoneNumber() : null)
                 .role(account != null ? account.role() : null)
-                .enabled(account != null ? account.enabled() : null)
+                .active(account != null ? account.enabled() : null)
                 .isVerified(account != null ? account.isVerified() : null)
                 // Audit info
                 .createdAt(user.getCreatedAt())
@@ -188,10 +188,10 @@ public class AdminUserServiceImpl implements AdminUserService {
             authServiceClient.banAccount(user.getAccountId(), reason);
             log.info("[Admin] Auth-service banAccount called successfully for accountId={}", user.getAccountId());
 
-            // Sync enabled flag locally for native status filtering
-            user.setEnabled(false);
+            // Sync active flag locally for native status filtering
+            user.setActive(false);
             userRepository.save(user);
-            log.info("[Admin] User.enabled synced to false for userId={}", userId);
+            log.info("[Admin] User.active synced to false for userId={}", userId);
 
             activityLogRepository.save(UserActivityLog.builder()
                     .userId(userId)
@@ -220,7 +220,7 @@ public class AdminUserServiceImpl implements AdminUserService {
         authServiceClient.unbanAccount(user.getAccountId());
 
         // Sync enabled flag locally for native status filtering
-        user.setEnabled(true);
+        user.setActive(true);
         userRepository.save(user);
 
         activityLogRepository.save(UserActivityLog.builder()

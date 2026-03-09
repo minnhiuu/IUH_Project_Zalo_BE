@@ -20,17 +20,17 @@ public interface UserRepository extends MongoRepository<User, String> {
     /** Keyword search on fullName (case-insensitive) */
     Page<User> findByFullNameContainingIgnoreCase(String fullName, Pageable pageable);
 
-    /** Filter by enabled=false (BANNED) */
-    Page<User> findByEnabled(Boolean enabled, Pageable pageable);
+    /** Filter by active=false (BANNED) */
+    Page<User> findByActive(Boolean active, Pageable pageable);
 
-    /** Filter ACTIVE: enabled=true OR enabled=null (never banned) */
-    @Query("{ 'enabled': { $ne: false } }")
+    /** Filter ACTIVE: active=true */
+    @Query("{ 'active': { $ne: false } }")
     Page<User> findActiveUsers(Pageable pageable);
 
     /** ACTIVE + keyword combined */
-    @Query("{ 'enabled': { $ne: false }, 'fullName': { $regex: ?0, $options: 'i' } }")
+    @Query("{ 'active': { $ne: false }, 'fullName': { $regex: ?0, $options: 'i' } }")
     Page<User> findActiveUsersByKeyword(String keyword, Pageable pageable);
 
     /** Keyword + BANNED combined */
-    Page<User> findByEnabledAndFullNameContainingIgnoreCase(Boolean enabled, String fullName, Pageable pageable);
+    Page<User> findByActiveAndFullNameContainingIgnoreCase(Boolean active, String fullName, Pageable pageable);
 }

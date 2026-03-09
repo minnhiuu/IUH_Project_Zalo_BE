@@ -41,10 +41,6 @@ public class User extends BaseModel {
     String background;
     Double backgroundY;
 
-    /** Denormalized from auth-service: true = active, false = banned */
-    @Indexed
-    Boolean enabled;
-
     /** Updated on every successful login (set by auth-service via internal API) */
     LocalDateTime lastLoginAt;
 }
