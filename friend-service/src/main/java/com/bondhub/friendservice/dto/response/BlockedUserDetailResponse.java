@@ -1,6 +1,6 @@
-package com.bondhub.userservice.dto.response;
+package com.bondhub.friendservice.dto.response;
 
-import com.bondhub.userservice.model.enums.Gender;
+import com.bondhub.common.enums.Gender;
 import lombok.Builder;
 
 import java.time.LocalDate;

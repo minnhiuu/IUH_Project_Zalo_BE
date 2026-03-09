@@ -26,9 +26,10 @@ public class FeignClientInterceptor implements RequestInterceptor {
                     String name = headerNames.nextElement();
                     String value = request.getHeader(name);
                     
-                    // Chép Authorization header và các header X-User-* từ Gateway
+                    // Chép Authorization header và các header X-User-*, X-Account-Id từ Gateway
                     if (name.equalsIgnoreCase("Authorization") || 
                         name.toLowerCase().startsWith("x-user-") || 
+                        name.equalsIgnoreCase("X-Account-Id") ||
                         name.equalsIgnoreCase("X-JWT-Id") || 
                         name.equalsIgnoreCase("X-Remaining-TTL")) {
                         

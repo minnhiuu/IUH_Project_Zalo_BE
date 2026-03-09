@@ -1,4 +1,4 @@
-package com.bondhub.userservice.dto.request;
+package com.bondhub.friendservice.dto.request;
 
 import lombok.Builder;
 

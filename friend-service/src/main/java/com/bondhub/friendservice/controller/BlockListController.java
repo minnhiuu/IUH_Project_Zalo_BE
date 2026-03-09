@@ -1,11 +1,11 @@
-package com.bondhub.userservice.controller;
+package com.bondhub.friendservice.controller;
 
 import com.bondhub.common.dto.ApiResponse;
-import com.bondhub.userservice.dto.request.BlockUserRequest;
-import com.bondhub.userservice.dto.request.UpdateBlockPreferenceRequest;
-import com.bondhub.userservice.dto.response.BlockedUserResponse;
-import com.bondhub.userservice.dto.response.BlockedUserDetailResponse;
-import com.bondhub.userservice.service.blocklist.BlockListService;
+import com.bondhub.friendservice.dto.request.BlockUserRequest;
+import com.bondhub.friendservice.dto.request.UpdateBlockPreferenceRequest;
+import com.bondhub.friendservice.dto.response.BlockedUserDetailResponse;
+import com.bondhub.friendservice.dto.response.BlockedUserResponse;
+import com.bondhub.friendservice.service.blocklist.BlockListService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -14,14 +14,12 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-
 @RestController
 @RequestMapping("/blocks")
 @RequiredArgsConstructor
 public class BlockListController {
-    
+
     private final BlockListService blockListService;
-    
 
     @PostMapping
     public ResponseEntity<ApiResponse<BlockedUserResponse>> blockUser(
@@ -29,7 +27,6 @@ public class BlockListController {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success(blockListService.blockUser(request)));
     }
-    
 
     @DeleteMapping("/{blockedUserId}")
     public ResponseEntity<ApiResponse<Void>> unblockUser(
@@ -37,7 +34,6 @@ public class BlockListController {
         blockListService.unblockUser(blockedUserId);
         return ResponseEntity.ok(ApiResponse.successWithoutData());
     }
-    
 
     @PatchMapping("/{blockedUserId}/preferences")
     public ResponseEntity<ApiResponse<BlockedUserResponse>> updateBlockPreference(
@@ -46,26 +42,22 @@ public class BlockListController {
         return ResponseEntity.ok(
                 ApiResponse.success(blockListService.updateBlockPreference(blockedUserId, request)));
     }
-    
 
     @GetMapping
     public ResponseEntity<ApiResponse<List<BlockedUserResponse>>> getMyBlockedUsers() {
         return ResponseEntity.ok(ApiResponse.success(blockListService.getMyBlockedUsers()));
     }
-    
 
     @GetMapping("/details")
     public ResponseEntity<ApiResponse<List<BlockedUserDetailResponse>>> getMyBlockedUsersWithDetails() {
         return ResponseEntity.ok(ApiResponse.success(blockListService.getMyBlockedUsersWithDetails()));
     }
-    
 
     @GetMapping("/{userId}/check")
     public ResponseEntity<ApiResponse<Boolean>> isUserBlocked(
             @PathVariable String userId) {
         return ResponseEntity.ok(ApiResponse.success(blockListService.isUserBlocked(userId)));
     }
-    
 
     @GetMapping("/{blockedUserId}")
     public ResponseEntity<ApiResponse<BlockedUserResponse>> getBlockDetails(

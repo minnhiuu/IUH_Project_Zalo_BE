@@ -1,19 +1,17 @@
-package com.bondhub.userservice.mapper;
+package com.bondhub.friendservice.mapper;
 
-import com.bondhub.userservice.dto.request.BlockUserRequest;
-import com.bondhub.userservice.dto.response.BlockPreferenceResponse;
-import com.bondhub.userservice.dto.response.BlockedUserResponse;
-import com.bondhub.userservice.dto.response.BlockedUserDetailResponse;
-import com.bondhub.userservice.model.BlockList;
-import com.bondhub.userservice.model.BlockPreference;
-import com.bondhub.userservice.model.User;
+import com.bondhub.common.dto.client.userservice.user.response.UserSummaryResponse;
+import com.bondhub.friendservice.dto.request.BlockUserRequest;
+import com.bondhub.friendservice.dto.response.BlockPreferenceResponse;
+import com.bondhub.friendservice.dto.response.BlockedUserDetailResponse;
+import com.bondhub.friendservice.dto.response.BlockedUserResponse;
+import com.bondhub.friendservice.model.BlockList;
+import com.bondhub.friendservice.model.BlockPreference;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
-
 @Mapper(componentModel = "spring")
 public interface BlockListMapper {
-
 
     BlockedUserResponse toBlockedUserResponse(BlockList blockList);
 
@@ -23,13 +21,12 @@ public interface BlockListMapper {
     @Mapping(target = "blockedUserId", source = "user.id")
     @Mapping(target = "fullName", source = "user.fullName")
     @Mapping(target = "avatar", source = "user.avatar")
-    @Mapping(target = "bio", source = "user.bio")
-    @Mapping(target = "gender", source = "user.gender")
-    @Mapping(target = "dob", source = "user.dob")
+    @Mapping(target = "bio", ignore = true)
+    @Mapping(target = "gender", ignore = true)
+    @Mapping(target = "dob", ignore = true)
     @Mapping(target = "preference", source = "blockList.preference")
     @Mapping(target = "blockedAt", source = "blockList.createdAt")
-    BlockedUserDetailResponse toBlockedUserDetailResponse(BlockList blockList, User user);
-
+    BlockedUserDetailResponse toBlockedUserDetailResponse(BlockList blockList, UserSummaryResponse user);
 
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "blockerId", source = "blockerId")
@@ -41,7 +38,6 @@ public interface BlockListMapper {
     @Mapping(target = "lastModifiedBy", ignore = true)
     @Mapping(target = "active", ignore = true)
     BlockList toBlockList(BlockUserRequest request, String blockerId);
-
 
     default BlockPreference createBlockPreference(BlockUserRequest request) {
         return BlockPreference.builder()

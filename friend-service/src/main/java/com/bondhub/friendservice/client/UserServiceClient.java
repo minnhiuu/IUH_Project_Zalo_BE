@@ -10,13 +10,13 @@ import java.util.List;
 
 @FeignClient(name = "user-service", path = "/users")
 public interface UserServiceClient {
-    
+
     @GetMapping("/{id}")
     ApiResponse<UserSummaryResponse> getUserSummary(@PathVariable("id") String id);
-    
+
     @GetMapping("/account/{accountId}")
     ApiResponse<UserSummaryResponse> getUserByAccountId(@PathVariable("accountId") String accountId);
-    
+
     @GetMapping("/batch")
     ApiResponse<List<UserSummaryResponse>> getUsersByIds(@PathVariable("ids") List<String> ids);
 }

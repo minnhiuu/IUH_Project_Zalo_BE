@@ -1,4 +1,4 @@
-package com.bondhub.userservice.model;
+package com.bondhub.friendservice.model;
 
 import lombok.*;
 import lombok.experimental.FieldDefaults;
@@ -13,13 +13,13 @@ import lombok.experimental.FieldDefaults;
 @Builder
 @FieldDefaults(level = AccessLevel.PRIVATE)
 public class BlockPreference {
-    
+
     @Builder.Default
     boolean message = true; // Block messages by default when blocking a user
-    
+
     @Builder.Default
     boolean call = true;    // Block calls by default when blocking a user
-    
+
     @Builder.Default
     boolean story = true;   // Block stories by default when blocking a user
 }

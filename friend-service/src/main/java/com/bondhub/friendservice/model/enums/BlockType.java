@@ -1,5 +1,4 @@
-package com.bondhub.userservice.model.enums;
-
+package com.bondhub.friendservice.model.enums;
 
 public enum BlockType {
     MESSAGE,

@@ -1,11 +1,11 @@
-package com.bondhub.userservice.service.blocklist;
+package com.bondhub.friendservice.service.blocklist;
 
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
-import com.bondhub.userservice.model.BlockList;
-import com.bondhub.userservice.model.BlockPreference;
-import com.bondhub.userservice.model.enums.BlockType;
-import com.bondhub.userservice.repository.BlockListRepository;
+import com.bondhub.friendservice.model.BlockList;
+import com.bondhub.friendservice.model.BlockPreference;
+import com.bondhub.friendservice.model.enums.BlockType;
+import com.bondhub.friendservice.repository.BlockListRepository;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
@@ -22,25 +22,25 @@ import java.util.Optional;
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 @RequiredArgsConstructor
 public class BlockCheckServiceImpl implements BlockCheckService {
-    
+
     BlockListRepository blockListRepository;
-    
+
     @Override
     public void checkAndThrowIfBlocked(String senderId, String recipientId, BlockType blockType) {
         log.debug("Checking if user {} is blocked by user {} for {}", senderId, recipientId, blockType);
-        
+
         // Check if recipient has blocked sender
         Optional<BlockList> blockOpt = blockListRepository.findByBlockerIdAndBlockedUserId(recipientId, senderId);
-        
+
         if (blockOpt.isPresent()) {
             BlockList block = blockOpt.get();
             BlockPreference preference = block.getPreference();
-            
+
             if (preference == null) {
                 // No preference means all communication is blocked
                 throwBlockedException(blockType);
             }
-            
+
             // Check specific block type
             boolean isBlocked = switch (blockType) {
                 case MESSAGE -> preference.isMessage();
@@ -48,18 +48,18 @@ public class BlockCheckServiceImpl implements BlockCheckService {
                 case STORY -> preference.isStory();
                 case ALL -> preference.isMessage() || preference.isCall() || preference.isStory();
             };
-            
+
             if (isBlocked) {
                 log.warn("Communication blocked: sender={}, recipient={}, type={}", senderId, recipientId, blockType);
                 throwBlockedException(blockType);
             }
         }
     }
-    
+
     @Override
     public void checkBidirectionalBlock(String userId1, String userId2, BlockType blockType) {
         log.debug("Checking bidirectional block between {} and {} for {}", userId1, userId2, blockType);
-        
+
         // Check if user1 blocked user2
         try {
             checkAndThrowIfBlocked(userId2, userId1, blockType);
@@ -67,11 +67,11 @@ public class BlockCheckServiceImpl implements BlockCheckService {
             // User1 has blocked user2
             throw e;
         }
-        
+
         // Check if user2 blocked user1
         checkAndThrowIfBlocked(userId1, userId2, blockType);
     }
-    
+
     @Override
     public boolean isBlocked(String senderId, String recipientId, BlockType blockType) {
         try {
@@ -81,7 +81,7 @@ public class BlockCheckServiceImpl implements BlockCheckService {
             return true;
         }
     }
-    
+
     /**
      * Throw appropriate exception based on block type
      */
@@ -92,7 +92,7 @@ public class BlockCheckServiceImpl implements BlockCheckService {
             case STORY -> ErrorCode.STORY_BLOCKED;
             case ALL -> ErrorCode.COMMUNICATION_BLOCKED;
         };
-        
+
         throw new AppException(errorCode);
     }
 }

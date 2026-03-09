@@ -1,4 +1,4 @@
-package com.bondhub.userservice.model;
+package com.bondhub.friendservice.model;
 
 import com.bondhub.common.model.BaseModel;
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -28,13 +28,13 @@ import org.springframework.data.mongodb.core.mapping.MongoId;
     @CompoundIndex(name = "blocker_idx", def = "{'blockerId': 1}")
 })
 public class BlockList extends BaseModel {
-    
+
     @EqualsAndHashCode.Include
     @MongoId(FieldType.OBJECT_ID)
     String id;
-    
+
     String blockerId;      // User who blocked
     String blockedUserId;  // User who was blocked
-    
+
     BlockPreference preference; // Specific blocking preferences for this relationship
 }
