@@ -5,6 +5,7 @@ import com.bondhub.common.dto.client.userservice.user.response.UserSummaryRespon
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestParam;
 
 import java.util.List;
 
@@ -18,5 +19,5 @@ public interface UserServiceClient {
     ApiResponse<UserSummaryResponse> getUserByAccountId(@PathVariable("accountId") String accountId);
     
     @GetMapping("/batch")
-    ApiResponse<List<UserSummaryResponse>> getUsersByIds(@PathVariable("ids") List<String> ids);
+    ApiResponse<List<UserSummaryResponse>> getUsersByIds(@RequestParam("ids") List<String> ids);
 }

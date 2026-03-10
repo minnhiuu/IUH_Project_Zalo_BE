@@ -25,9 +25,12 @@ public interface FriendShipRepository extends MongoRepository<FriendShip, String
     List<FriendShip> findByReceivedAndFriendStatusOrderByCreatedAtDesc(String userId, FriendStatus status);
     
     
-    @Query("{ $or: [ " +
-           "{ 'requested': ?0, 'received': ?1 }, " +
-           "{ 'requested': ?1, 'received': ?0 } " +
+    @Query("{ $and: [ " +
+           "{ $or: [ " +
+           "  { 'requested': ?0, 'received': ?1 }, " +
+           "  { 'requested': ?1, 'received': ?0 } " +
+           "] }, " +
+           "{ 'friendStatus': { $in: ['PENDING', 'ACCEPTED'] } } " +
            "] }")
     Optional<FriendShip> findFriendshipBetweenUsers(String userId1, String userId2);
     
