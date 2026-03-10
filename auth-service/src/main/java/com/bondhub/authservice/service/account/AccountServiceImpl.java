@@ -169,6 +169,7 @@ public class AccountServiceImpl implements AccountService {
         Account account = accountRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.ACC_ACCOUNT_NOT_FOUND));
         account.setEnabled(false);
+        account.setActive(false);
         accountRepository.save(account);
         int revoked = tokenStoreService.revokeAllUserRefreshSessions(id);
         log.info("Account banned: id={}, revokedSessions={}", id, revoked);
@@ -180,6 +181,7 @@ public class AccountServiceImpl implements AccountService {
         Account account = accountRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.ACC_ACCOUNT_NOT_FOUND));
         account.setEnabled(true);
+        account.setActive(true);
         accountRepository.save(account);
         log.info("Account unbanned: id={}", id);
     }

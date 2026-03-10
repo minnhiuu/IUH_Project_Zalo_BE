@@ -67,15 +67,9 @@ public enum ErrorCode {
         NOT_AUTHORIZED_TO_CANCEL(HttpStatus.FORBIDDEN, 3008, "error.friend.not.authorized.to.cancel"),
         FRIEND_REQUEST_NOT_PENDING(HttpStatus.BAD_REQUEST, 3009, "error.friend.request.not.pending"),
 
-
-        // Block List errors (23xx)
-        CANNOT_BLOCK_YOURSELF(HttpStatus.BAD_REQUEST, 2301, "error.block.cannot.block.yourself"),
-        USER_ALREADY_BLOCKED(HttpStatus.CONFLICT, 2302, "error.block.user.already.blocked"),
-        BLOCK_NOT_FOUND(HttpStatus.NOT_FOUND, 2303, "error.block.not.found"),
-        MESSAGE_BLOCKED(HttpStatus.FORBIDDEN, 2304, "error.block.message.blocked"),
-        CALL_BLOCKED(HttpStatus.FORBIDDEN, 2305, "error.block.call.blocked"),
-        STORY_BLOCKED(HttpStatus.FORBIDDEN, 2306, "error.block.story.blocked"),
-        COMMUNICATION_BLOCKED(HttpStatus.FORBIDDEN, 2307, "error.block.communication.blocked")
+        // Admin / ban errors
+        CANNOT_BAN_YOURSELF(HttpStatus.BAD_REQUEST, 2208, "error.cannot.ban.yourself"),
+        CANNOT_BAN_ADMIN(HttpStatus.FORBIDDEN, 2209, "error.cannot.ban.admin")
 
         ;
 

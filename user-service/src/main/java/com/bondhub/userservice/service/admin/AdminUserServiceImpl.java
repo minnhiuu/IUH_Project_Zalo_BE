@@ -2,9 +2,11 @@ package com.bondhub.userservice.service.admin;
 
 import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.common.dto.PageResponse;
+import com.bondhub.common.enums.Role;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
 import com.bondhub.common.utils.S3Util;
+import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.userservice.client.AuthServiceClient;
 import com.bondhub.userservice.dto.response.AccountResponse;
 import com.bondhub.userservice.dto.response.UserActivityLogResponse;
@@ -12,9 +14,11 @@ import com.bondhub.userservice.dto.response.UserAdminDetailResponse;
 import com.bondhub.userservice.dto.response.UserAdminResponse;
 import com.bondhub.userservice.mapper.AdminUserMapper;
 import com.bondhub.userservice.mapper.UserActivityLogMapper;
+import com.bondhub.userservice.model.ActivityLogMetadata;
 import com.bondhub.userservice.model.User;
 import com.bondhub.userservice.model.UserActivityLog;
 import com.bondhub.userservice.model.enums.UserAction;
+import com.bondhub.userservice.model.enums.UserStatus;
 import com.bondhub.userservice.repository.UserActivityLogRepository;
 import com.bondhub.userservice.repository.UserRepository;
 import lombok.AccessLevel;
@@ -43,6 +47,7 @@ public class AdminUserServiceImpl implements AdminUserService {
     final AuthServiceClient authServiceClient;
     final AdminUserMapper adminUserMapper;
     final UserActivityLogMapper userActivityLogMapper;
+    final SecurityUtil securityUtil;
 
     @Value("${aws.s3.bucket.name}")
     String bucketName;
@@ -55,8 +60,9 @@ public class AdminUserServiceImpl implements AdminUserService {
         log.info("[Admin] Fetching users - name='{}', phone='{}', email='{}', status='{}'", name, phone, email, status);
 
         String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+        UserStatus userStatus = UserStatus.fromString(status);
 
-        // Phone or email: exact lookup via auth-service â†’ find user by accountId
+        // Phone or email: exact lookup via auth-service → find user by accountId
         if (StringUtils.hasText(phone) || StringUtils.hasText(email)) {
             AccountResponse account = StringUtils.hasText(phone)
                     ? fetchAccountByPhone(phone)
@@ -67,7 +73,7 @@ public class AdminUserServiceImpl implements AdminUserService {
             }
 
             User user = userRepository.findByAccountId(account.id()).orElse(null);
-            if (user == null || !matchesStatus(user, status)) {
+            if (user == null || !matchesStatus(user, userStatus)) {
                 return PageResponse.fromPage(Page.empty(pageable), u -> null);
             }
 
@@ -76,23 +82,20 @@ public class AdminUserServiceImpl implements AdminUserService {
         }
 
         // Name search in MongoDB with optional status filter
-        boolean isBanned = "BANNED".equalsIgnoreCase(status);
-        boolean filterActive = "ACTIVE".equalsIgnoreCase(status);
-
         Page<User> page;
         if (StringUtils.hasText(name)) {
             String keyword = name.trim();
-            if (isBanned) {
+            if (userStatus == UserStatus.BANNED) {
                 page = userRepository.findByActiveAndFullNameContainingIgnoreCase(false, keyword, pageable);
-            } else if (filterActive) {
+            } else if (userStatus == UserStatus.ACTIVE) {
                 page = userRepository.findActiveUsersByKeyword(keyword, pageable);
             } else {
                 page = userRepository.findByFullNameContainingIgnoreCase(keyword, pageable);
             }
         } else {
-            if (isBanned) {
+            if (userStatus == UserStatus.BANNED) {
                 page = userRepository.findByActive(false, pageable);
-            } else if (filterActive) {
+            } else if (userStatus == UserStatus.ACTIVE) {
                 page = userRepository.findActiveUsers(pageable);
             } else {
                 page = userRepository.findAll(pageable);
@@ -125,7 +128,7 @@ public class AdminUserServiceImpl implements AdminUserService {
         if (!user.isActive()) {
             banReason = activityLogRepository
                     .findTopByUserIdAndActionOrderByCreatedAtDesc(userId, UserAction.ACCOUNT_LOCKED)
-                    .map(log -> log.getMetadata() != null ? (String) log.getMetadata().get("reason") : null)
+                    .map(log -> log.getMetadata() != null ? log.getMetadata().reason() : null)
                     .orElse(null);
         }
 
@@ -151,6 +154,15 @@ public class AdminUserServiceImpl implements AdminUserService {
             User user = userRepository.findById(userId)
                     .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
 
+            if (userId.equals(securityUtil.getCurrentUserId())) {
+                throw new AppException(ErrorCode.CANNOT_BAN_YOURSELF);
+            }
+
+            AccountResponse targetAccount = fetchAccountSafe(user.getAccountId());
+            if (targetAccount != null && Role.ADMIN.name().equals(targetAccount.role())) {
+                throw new AppException(ErrorCode.CANNOT_BAN_ADMIN);
+            }
+
             authServiceClient.banAccount(user.getAccountId(), reason);
 
             user.setActive(false);
@@ -160,7 +172,10 @@ public class AdminUserServiceImpl implements AdminUserService {
                     .userId(userId)
                     .action(UserAction.ACCOUNT_LOCKED)
                     .description("Account banned by admin. Reason: " + reason)
-                    .metadata(Map.of("reason", reason, "accountId", user.getAccountId()))
+                    .metadata(ActivityLogMetadata.builder()
+                            .reason(reason)
+                            .accountId(user.getAccountId())
+                            .build())
                     .build());
 
             log.info("[Admin] User banned successfully: userId={}", userId);
@@ -189,18 +204,20 @@ public class AdminUserServiceImpl implements AdminUserService {
                 .userId(userId)
                 .action(UserAction.ACCOUNT_UNLOCKED)
                 .description("Account unbanned by admin.")
-                .metadata(Map.of("accountId", user.getAccountId()))
+                .metadata(ActivityLogMetadata.builder()
+                        .accountId(user.getAccountId())
+                        .build())
                 .build());
 
         log.info("[Admin] User unbanned successfully: userId={}", userId);
     }
 
-    private boolean matchesStatus(User user, String status) {
-        if (!StringUtils.hasText(status)) return true;
-        boolean isActive = user.isActive();
-        if ("ACTIVE".equalsIgnoreCase(status)) return isActive;
-        if ("BANNED".equalsIgnoreCase(status)) return !isActive;
-        return true;
+    private boolean matchesStatus(User user, UserStatus userStatus) {
+        if (userStatus == null) return true;
+        return switch (userStatus) {
+            case ACTIVE -> user.isActive();
+            case BANNED -> !user.isActive();
+        };
     }
 
     private AccountResponse fetchAccountSafe(String accountId) {

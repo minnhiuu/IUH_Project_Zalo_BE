@@ -27,4 +27,15 @@ public class InternalUserController {
         userService.recordLastLogin(accountId);
         return ResponseEntity.ok(ApiResponse.successWithoutData());
     }
+
+    /**
+     * Called by auth-service when ban/unban happens to keep user.active in sync.
+     */
+    @PostMapping("/account/{accountId}/ban-status")
+    public ResponseEntity<ApiResponse<Void>> syncBanStatus(
+            @PathVariable String accountId,
+            @RequestParam boolean banned) {
+        userService.syncBanStatus(accountId, banned);
+        return ResponseEntity.ok(ApiResponse.successWithoutData());
+    }
 }

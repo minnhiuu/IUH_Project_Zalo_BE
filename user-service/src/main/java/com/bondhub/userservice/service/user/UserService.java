@@ -43,4 +43,7 @@ public interface UserService {
 
     /** Update lastLoginAt timestamp for the user associated with the given accountId */
     void recordLastLogin(String accountId);
+
+    /** Sync ban/unban status from auth-service: set user.active = !banned */
+    void syncBanStatus(String accountId, boolean banned);
 }

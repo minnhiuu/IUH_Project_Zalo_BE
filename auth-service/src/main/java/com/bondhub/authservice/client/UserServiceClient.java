@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 
 import java.util.Map;
 
@@ -34,4 +35,8 @@ public interface UserServiceClient {
     /** Fire-and-forget: record last login timestamp in user-service */
     @PostMapping("/internal/users/{accountId}/last-login")
     ApiResponse<Void> recordLastLogin(@PathVariable("accountId") String accountId);
+
+    /** Sync ban/unban status to user-service so user.active stays in sync */
+    @PostMapping("/internal/users/account/{accountId}/ban-status")
+    ApiResponse<Void> syncBanStatus(@PathVariable("accountId") String accountId, @RequestParam("banned") boolean banned);
 }

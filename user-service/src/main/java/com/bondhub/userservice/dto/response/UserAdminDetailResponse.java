@@ -26,7 +26,6 @@ public record UserAdminDetailResponse(
     String email,
     String phoneNumber,
     String role,
-    Boolean active,
     Boolean isVerified,
 
     // Audit info
@@ -38,6 +37,9 @@ public record UserAdminDetailResponse(
 
     // Stats
     long totalActivityLogs,
+
+    // Ban status (from user.active — source of truth for FE)
+    boolean active,
 
     // Ban info (null if not banned)
     String banReason
