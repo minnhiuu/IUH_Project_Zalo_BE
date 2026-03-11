@@ -13,7 +13,6 @@ import com.bondhub.friendservice.dto.response.BlockedUserResponse;
 import com.bondhub.friendservice.mapper.BlockListMapper;
 import com.bondhub.friendservice.model.BlockList;
 import com.bondhub.friendservice.model.BlockPreference;
-import com.bondhub.friendservice.model.enums.BlockType;
 import com.bondhub.friendservice.repository.BlockListRepository;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
@@ -24,8 +23,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 
+/**
+ * Implementation of {@link BlockListService} for managing user block relationships.
+ * Handles blocking/unblocking users, updating block preferences, and querying block status.
+ */
 @Service
 @Slf4j
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
@@ -165,47 +167,6 @@ public class BlockListServiceImpl implements BlockListService {
 
         log.info("Found {} blocked users with details for user {}", responses.size(), currentUserId);
         return responses;
-    }
-
-    @Override
-    public boolean isBlockedForType(String targetUserId, BlockType blockType) {
-        String currentUserId = securityUtil.getCurrentUserId();
-
-        Optional<BlockList> blockList = blockListRepository.findByBlockerIdAndBlockedUserId(
-                currentUserId, targetUserId);
-
-        if (blockList.isEmpty()) {
-            return false;
-        }
-
-        BlockPreference preference = blockList.get().getPreference();
-        if (preference == null) {
-            return true; // Default: all blocked
-        }
-
-        return switch (blockType) {
-            case MESSAGE -> preference.isMessage();
-            case CALL -> preference.isCall();
-            case STORY -> preference.isStory();
-            case ALL -> preference.isMessage() && preference.isCall() && preference.isStory();
-        };
-    }
-
-    @Override
-    public Optional<BlockPreference> getBlockPreference(String blockedUserId) {
-        String currentUserId = securityUtil.getCurrentUserId();
-
-        return blockListRepository.findByBlockerIdAndBlockedUserId(
-                currentUserId, blockedUserId)
-                .map(BlockList::getPreference);
-    }
-
-    @Override
-    public boolean hasBidirectionalBlock(String userId1, String userId2) {
-        boolean user1BlocksUser2 = blockListRepository.existsByBlockerIdAndBlockedUserId(userId1, userId2);
-        boolean user2BlocksUser1 = blockListRepository.existsByBlockerIdAndBlockedUserId(userId2, userId1);
-
-        return user1BlocksUser2 && user2BlocksUser1;
     }
 
     private UserSummaryResponse getUserSummaryById(String userId) {

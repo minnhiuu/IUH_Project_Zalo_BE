@@ -15,7 +15,9 @@ import org.springframework.stereotype.Service;
 import java.util.Optional;
 
 /**
- * Service implementation for checking blocking status
+ * Implementation of {@link BlockCheckService} for evaluating block status between users.
+ * Communicates directly with {@link com.bondhub.friendservice.repository.BlockListRepository}
+ * to avoid circular dependency with {@link BlockListService}.
  */
 @Service
 @Slf4j
@@ -60,7 +62,7 @@ public class BlockCheckServiceImpl implements BlockCheckService {
     public void checkBidirectionalBlock(String userId1, String userId2, BlockType blockType) {
         log.debug("Checking bidirectional block between {} and {} for {}", userId1, userId2, blockType);
 
-        // Check if user1 blocked user2
+        // Check if user1 has blocked user2
         try {
             checkAndThrowIfBlocked(userId2, userId1, blockType);
         } catch (AppException e) {
@@ -68,7 +70,7 @@ public class BlockCheckServiceImpl implements BlockCheckService {
             throw e;
         }
 
-        // Check if user2 blocked user1
+        // Check if user2 has blocked user1
         checkAndThrowIfBlocked(userId1, userId2, blockType);
     }
 
