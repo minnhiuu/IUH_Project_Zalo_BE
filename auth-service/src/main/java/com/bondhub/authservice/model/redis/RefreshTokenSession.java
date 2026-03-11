@@ -2,6 +2,7 @@ package com.bondhub.authservice.model.redis;
 
 import com.bondhub.authservice.enums.DeviceType;
 import lombok.*;
+import lombok.experimental.FieldDefaults;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.redis.core.RedisHash;
 import org.springframework.data.redis.core.TimeToLive;
@@ -14,36 +15,34 @@ import java.util.concurrent.TimeUnit;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@FieldDefaults(level = AccessLevel.PRIVATE)
 @RedisHash("refresh:session")
 public class RefreshTokenSession {
 
     @Id
-    private String sessionId;
+    String sessionId;
 
     @Indexed
-    private String userId;
+    String accountId;
 
     @Indexed
-    private String phoneNumber;
+    String deviceId;
 
     @Indexed
-    private String deviceId;
+    DeviceType deviceType;
 
-    @Indexed
-    private DeviceType deviceType;
+    String refreshTokenHash;
+    String accessTokenJti; // JTI of the paired access token – used to blacklist on force-logout
+    String userAgentHash;
+    String ipHash;
 
-    private String refreshTokenHash;
-    private String userAgentHash;
-    private String ipHash;
-
-    private Long issuedAt;
-    private Long expiresAt;
-
+    Long issuedAt;
+    Long expiresAt;
     @Builder.Default
-    private Boolean revoked = false;
+    Boolean revoked = false;
 
     @TimeToLive(unit = TimeUnit.SECONDS)
-    private Long ttl;
+    Long ttl;
 
     public boolean isValid() {
         if (Boolean.TRUE.equals(revoked)) {

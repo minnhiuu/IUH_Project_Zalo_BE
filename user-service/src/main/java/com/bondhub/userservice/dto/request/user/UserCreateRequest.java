@@ -1,18 +1,16 @@
-package com.bondhub.userservice.dto.response;
+package com.bondhub.userservice.dto.request.user;
 
 import com.bondhub.userservice.model.enums.Gender;
 import lombok.Builder;
 import java.time.LocalDate;
 
 @Builder
-public record UserResponse(
-    String id,
+public record UserCreateRequest(
     String fullName,
     LocalDate dob,
     String bio,
     Gender gender,
-    AccountResponse accountInfo,
-    String avatar,
-    String background,
-    Double backgroundY
+    String accountId,
+    String phoneNumber,
+    String role
 ) {}

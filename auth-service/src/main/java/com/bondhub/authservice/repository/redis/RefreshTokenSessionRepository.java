@@ -11,11 +11,12 @@ import java.util.Optional;
 @Repository
 public interface RefreshTokenSessionRepository extends CrudRepository<RefreshTokenSession, String> {
 
-    List<RefreshTokenSession> findByUserId(String userId);
+    List<RefreshTokenSession> findByAccountId(String accountId);
 
-    List<RefreshTokenSession> findByUserIdAndDeviceType(String userId, DeviceType deviceType);
+    List<RefreshTokenSession> findByAccountIdAndDeviceType(String accountId, DeviceType deviceType);
 
-    Optional<RefreshTokenSession> findByUserIdAndDeviceId(String userId, String deviceId);
+    Optional<RefreshTokenSession> findByAccountIdAndDeviceId(String accountId, String deviceId);
 
-    void deleteByUserId(String userId);
+    void deleteByAccountId(String accountId);
+
 }

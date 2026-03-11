@@ -20,7 +20,7 @@ public class BlacklistedAccessToken {
     private String jti;
 
     @Indexed
-    private String userId;
+    private String accountId;
 
     @Indexed
     private String phoneNumber;

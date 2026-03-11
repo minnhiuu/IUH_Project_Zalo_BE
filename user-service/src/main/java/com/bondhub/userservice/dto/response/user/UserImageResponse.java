@@ -1,4 +1,4 @@
-package com.bondhub.userservice.dto.response;
+package com.bondhub.userservice.dto.response.user;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.Builder;
