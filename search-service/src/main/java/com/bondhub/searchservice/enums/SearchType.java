@@ -1,4 +1,4 @@
-package com.bondhub.userservice.model.enums;
+package com.bondhub.searchservice.enums;
 
 public enum SearchType {
     USER,

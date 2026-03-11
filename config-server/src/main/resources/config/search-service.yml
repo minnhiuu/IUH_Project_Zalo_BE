@@ -13,6 +13,11 @@ spring:
       uri: ${MONGODB_URI_SEARCH}
       auto-index-creation: true
       uuid-representation: standard
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD}
+      timeout: 5000ms
 
   # Kafka Consumer configuration for search indexing events
   kafka:

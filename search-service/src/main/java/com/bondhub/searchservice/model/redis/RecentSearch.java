@@ -1,6 +1,6 @@
-package com.bondhub.userservice.model.redis;
+package com.bondhub.searchservice.model.redis;
 
-import com.bondhub.userservice.model.enums.SearchType;
+import com.bondhub.searchservice.enums.SearchType;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;

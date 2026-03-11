@@ -1,11 +1,11 @@
-package com.bondhub.userservice.service.recentsearch;
+package com.bondhub.searchservice.service;
 
 import com.bondhub.common.utils.SecurityUtil;
-import com.bondhub.userservice.dto.request.recentsearch.RecentSearchRequest;
-import com.bondhub.userservice.dto.response.RecentSearchResponse;
-import com.bondhub.userservice.mapper.RecentSearchMapper;
-import com.bondhub.userservice.model.enums.SearchType;
-import com.bondhub.userservice.model.redis.RecentSearch;
+import com.bondhub.searchservice.dto.request.RecentSearchRequest;
+import com.bondhub.searchservice.dto.response.RecentSearchResponse;
+import com.bondhub.searchservice.enums.SearchType;
+import com.bondhub.searchservice.mapper.RecentSearchMapper;
+import com.bondhub.searchservice.model.redis.RecentSearch;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
@@ -52,8 +52,25 @@ public class RecentSearchServiceImpl implements RecentSearchService {
                     .forEach(oldItem -> redisTemplate.opsForZSet().remove(key, oldItem));
         }
 
-        redisTemplate.opsForZSet().add(key, newItem, now);
+        if (request.type() != SearchType.KEYWORD) {
+            String queryKey = PREFIX_QUERY + userId;
+            Set<Object> queries = redisTemplate.opsForZSet().range(queryKey, 0, -1);
+            if (queries != null) {
+                queries.stream()
+                        .map(obj -> (RecentSearch) obj)
+                        .filter(q -> {
+                            String keyword = q.getName().toLowerCase();
+                            String itemName = request.name().toLowerCase();
+                            return itemName.contains(keyword) || keyword.contains(itemName);
+                        })
+                        .forEach(q -> {
+                            redisTemplate.opsForZSet().remove(queryKey, q);
+                            log.info("Removed redundant query '{}' after selecting item '{}'", q.getName(), request.name());
+                        });
+            }
+        }
 
+        redisTemplate.opsForZSet().add(key, newItem, now);
         Long size = redisTemplate.opsForZSet().size(key);
         if (size != null && size > MAX_ITEMS) {
             redisTemplate.opsForZSet().removeRange(key, 0, size - (MAX_ITEMS + 1));

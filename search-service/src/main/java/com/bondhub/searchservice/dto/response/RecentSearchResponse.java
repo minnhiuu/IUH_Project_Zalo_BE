@@ -1,6 +1,6 @@
-package com.bondhub.userservice.dto.response;
+package com.bondhub.searchservice.dto.response;
 
-import com.bondhub.userservice.model.enums.SearchType;
+import com.bondhub.searchservice.enums.SearchType;
 import lombok.Builder;
 
 @Builder

@@ -1,6 +1,6 @@
-package com.bondhub.userservice.dto.request.recentsearch;
+package com.bondhub.searchservice.dto.request;
 
-import com.bondhub.userservice.model.enums.SearchType;
+import com.bondhub.searchservice.enums.SearchType;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 

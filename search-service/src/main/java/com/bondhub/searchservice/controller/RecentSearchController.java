@@ -1,10 +1,10 @@
-package com.bondhub.userservice.controller;
+package com.bondhub.searchservice.controller;
 
 import com.bondhub.common.dto.ApiResponse;
-import com.bondhub.userservice.dto.request.recentsearch.RecentSearchRequest;
-import com.bondhub.userservice.dto.response.RecentSearchResponse;
-import com.bondhub.userservice.model.enums.SearchType;
-import com.bondhub.userservice.service.recentsearch.RecentSearchService;
+import com.bondhub.searchservice.dto.request.RecentSearchRequest;
+import com.bondhub.searchservice.dto.response.RecentSearchResponse;
+import com.bondhub.searchservice.enums.SearchType;
+import com.bondhub.searchservice.service.RecentSearchService;
 import jakarta.validation.Valid;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/users/recent-search")
+@RequestMapping("/search/recent")
 @RequiredArgsConstructor
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public class RecentSearchController {

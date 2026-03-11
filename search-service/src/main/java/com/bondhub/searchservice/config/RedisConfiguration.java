@@ -1,4 +1,4 @@
-package com.bondhub.userservice.config;
+package com.bondhub.searchservice.config;
 
 import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
@@ -12,12 +12,10 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.data.redis.repository.configuration.EnableRedisRepositories;
 import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
 @Configuration
-@EnableRedisRepositories(basePackages = "com.bondhub.userservice.repository")
 public class RedisConfiguration {
 
     @Value("${spring.data.redis.host:localhost}")
@@ -26,7 +24,7 @@ public class RedisConfiguration {
     @Value("${spring.data.redis.port:6379}")
     private int port;
 
-    @Value("${spring.data.redis.password:123456}")
+    @Value("${spring.data.redis.password}")
     private String password;
 
     @Bean
