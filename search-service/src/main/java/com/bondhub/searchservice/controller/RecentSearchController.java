@@ -2,6 +2,7 @@ package com.bondhub.searchservice.controller;
 
 import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.searchservice.dto.request.RecentSearchRequest;
+import com.bondhub.searchservice.dto.response.RecentHistoryResponse;
 import com.bondhub.searchservice.dto.response.RecentSearchResponse;
 import com.bondhub.searchservice.enums.SearchType;
 import com.bondhub.searchservice.service.RecentSearchService;
@@ -25,6 +26,11 @@ public class RecentSearchController {
     @GetMapping("/items")
     public ResponseEntity<ApiResponse<List<RecentSearchResponse>>> getRecentItems() {
         return ResponseEntity.ok(ApiResponse.success(recentSearchService.getRecentItems()));
+    }
+ 
+    @GetMapping("/history")
+    public ResponseEntity<ApiResponse<RecentHistoryResponse>> getRecentHistory() {
+        return ResponseEntity.ok(ApiResponse.success(recentSearchService.getRecentHistory()));
     }
 
     @GetMapping("/queries")

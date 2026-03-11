@@ -1,6 +1,7 @@
 package com.bondhub.searchservice.service;
 
 import co.elastic.clients.elasticsearch._types.query_dsl.Query;
+import co.elastic.clients.elasticsearch._types.query_dsl.TextQueryType;
 import com.bondhub.common.dto.PageResponse;
 import com.bondhub.common.dto.client.userservice.user.response.UserSummaryResponse;
 import com.bondhub.common.enums.Role;
@@ -38,13 +39,12 @@ public class UserSearchServiceImpl implements UserSearchService {
         }
 
         String searchTerm = keyword.trim();
-        String currentAccountId = securityUtil.getCurrentAccountId();
+        String currentUserId = securityUtil.getCurrentUserId();
 
         Query query = Query.of(q -> q.bool(b -> {
             b.should(s -> s.term(t ->
                     t.field("phoneNumber")
                             .value(searchTerm)
-                            .boost(10.0f)
             ));
 
             b.should(s -> s.match(m ->
@@ -56,7 +56,7 @@ public class UserSearchServiceImpl implements UserSearchService {
             b.should(s -> s.match(m ->
                     m.field("fullName.fuzzy")
                             .query(searchTerm)
-                            .fuzziness("AUTO")
+                            .fuzziness("1")
                             .prefixLength(0)
                             .maxExpansions(50)
                             .fuzzyTranspositions(true)
@@ -66,10 +66,10 @@ public class UserSearchServiceImpl implements UserSearchService {
             b.should(s -> s.multiMatch(mm ->
                     mm.fields("fullName", "fullName.fuzzy")
                             .query(searchTerm)
-                            .fuzziness("AUTO")
+                            .fuzziness("1")
                             .prefixLength(0)
                             .maxExpansions(50)
-                            .type(co.elastic.clients.elasticsearch._types.query_dsl.TextQueryType.BestFields)
+                            .type(TextQueryType.BestFields)
                             .boost(1.5f)
             ));
 
@@ -80,10 +80,11 @@ public class UserSearchServiceImpl implements UserSearchService {
                             .value(Role.USER.name())
             ));
 
-            if (currentAccountId != null) {
-                b.mustNot(m -> m.term(t ->
-                        t.field("accountId")
-                                .value(currentAccountId)
+            if (currentUserId != null) {
+                b.filter(f -> f.bool(fb -> fb
+                        .should(s -> s.bool(nb -> nb.mustNot(mn -> mn.term(t -> t.field("id").value(currentUserId)))))
+                        .should(s -> s.term(t -> t.field("phoneNumber").value(searchTerm)))
+                        .minimumShouldMatch("1")
                 ));
             }
 
@@ -115,15 +116,17 @@ public class UserSearchServiceImpl implements UserSearchService {
 
         return PageResponse.fromPage(
                 page,
-                hit -> toUserSummaryResponse(hit.getContent())
+                hit -> toUserSummaryResponse(hit.getContent(), searchTerm)
         );
     }
 
-    private UserSummaryResponse toUserSummaryResponse(UserIndex userIndex) {
+    private UserSummaryResponse toUserSummaryResponse(UserIndex userIndex, String searchTerm) {
+        boolean isPhoneMatch = searchTerm.equals(userIndex.getPhoneNumber());
         return UserSummaryResponse.builder()
                 .id(userIndex.getId())
                 .fullName(userIndex.getFullName())
                 .avatar(userIndex.getAvatar())
+                .phoneNumber(isPhoneMatch ? userIndex.getPhoneNumber() : null)
                 .build();
     }
 }

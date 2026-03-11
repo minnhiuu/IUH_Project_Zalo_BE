@@ -2,6 +2,7 @@ package com.bondhub.searchservice.service;
 
 import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.searchservice.dto.request.RecentSearchRequest;
+import com.bondhub.searchservice.dto.response.RecentHistoryResponse;
 import com.bondhub.searchservice.dto.response.RecentSearchResponse;
 import com.bondhub.searchservice.enums.SearchType;
 import com.bondhub.searchservice.mapper.RecentSearchMapper;
@@ -27,7 +28,7 @@ public class RecentSearchServiceImpl implements RecentSearchService {
     RedisTemplate<String, Object> redisTemplate;
     RecentSearchMapper recentSearchMapper;
     SecurityUtil securityUtil;
-
+ 
     static String PREFIX_ITEM = "recent_search:items:";
     static String PREFIX_QUERY = "recent_search:queries:";
     static int MAX_ITEMS = 15;
@@ -36,6 +37,12 @@ public class RecentSearchServiceImpl implements RecentSearchService {
     @Override
     public void addSearchItem(RecentSearchRequest request) {
         String userId = securityUtil.getCurrentUserId();
+ 
+        if (request.id().equals(userId)) {
+            log.info("Skipping saving self search to history for user: {}", userId);
+            return;
+        }
+ 
         String key = (request.type() == SearchType.KEYWORD)
                 ? PREFIX_QUERY + userId
                 : PREFIX_ITEM + userId;
@@ -87,6 +94,15 @@ public class RecentSearchServiceImpl implements RecentSearchService {
     @Override
     public List<RecentSearchResponse> getRecentQueries() {
         return fetchFromRedis(PREFIX_QUERY + securityUtil.getCurrentUserId());
+    }
+
+    @Override
+    public RecentHistoryResponse getRecentHistory() {
+        String userId = securityUtil.getCurrentUserId();
+        return RecentHistoryResponse.builder()
+                .items(fetchFromRedis(PREFIX_ITEM + userId))
+                .queries(fetchFromRedis(PREFIX_QUERY + userId))
+                .build();
     }
 
     private List<RecentSearchResponse> fetchFromRedis(String key) {
