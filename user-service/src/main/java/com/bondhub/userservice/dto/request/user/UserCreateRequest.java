@@ -10,5 +10,7 @@ public record UserCreateRequest(
     LocalDate dob,
     String bio,
     Gender gender,
-    String accountId
+    String accountId,
+    String phoneNumber,
+    String role
 ) {}

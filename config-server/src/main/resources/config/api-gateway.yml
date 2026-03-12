@@ -61,6 +61,13 @@ spring:
               filters:
                 - RewritePath=/file/v3/api-docs, /v3/api-docs
 
+            - id: search-service-docs
+              uri: lb://search-service
+              predicates:
+                - Path=/search/v3/api-docs/**
+              filters:
+                - RewritePath=/search/v3/api-docs, /v3/api-docs
+
             # Auth Service Routes (Public - no JWT required)
             - id: auth-service-qr-wait
               uri: lb://auth-service
@@ -111,6 +118,17 @@ spring:
                     name: userServiceCircuitBreaker
                     fallbackUri: forward:/fallback/user-service
 
+            - id: user-service-elasticsearch-legacy
+              uri: lb://search-service
+              predicates:
+                - Path=/api/users/elasticsearch/**
+              filters:
+                - RewritePath=/api/users/elasticsearch/(?<segment>.*), /search/elasticsearch/${segment}
+                - name: CircuitBreaker
+                  args:
+                    name: searchServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/search-service
+
             # Message Service Routes (Protected - JWT required)
             - id: message-service
               uri: lb://message-service
@@ -134,6 +152,17 @@ spring:
                   args:
                     name: notificationServiceCircuitBreaker
                     fallbackUri: forward:/fallback/notification-service
+
+            - id: search-service
+              uri: lb://search-service
+              predicates:
+                - Path=/api/search/**
+              filters:
+                - RewritePath=/api/search/(?<segment>.*), /search/${segment}
+                - name: CircuitBreaker
+                  args:
+                    name: searchServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/search-service
 
           # Global CORS Configuration
           globalCors:
@@ -377,6 +406,8 @@ springdoc:
         url: /notification/v3/api-docs
       - name: File Service
         url: /file/v3/api-docs
+      - name: Search Service
+        url: /search/v3/api-docs
     # Enable "Try it out" functionality
     use-root-path: true
     path: /swagger-ui.html

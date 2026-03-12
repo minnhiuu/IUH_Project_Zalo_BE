@@ -63,6 +63,22 @@ public class AccountServiceImpl implements AccountService {
     }
 
     @Override
+    public List<AccountResponse> getAccountsByIds(List<String> ids) {
+        if (ids == null || ids.isEmpty()) {
+            log.warn("Empty or null account IDs list provided");
+            return List.of();
+        }
+        
+        log.info("Fetching {} accounts by batch IDs", ids.size());
+        List<Account> accounts = accountRepository.findAllById(ids);
+        log.info("Found {} accounts out of {} requested", accounts.size(), ids.size());
+        
+        return accounts.stream()
+                .map(accountMapper::toResponse)
+                .toList();
+    }
+
+    @Override
     public AccountResponse getAccountByEmail(String email) {
         log.info("Fetching account with email: {}", email);
         Account account = accountRepository.findByEmail(email)

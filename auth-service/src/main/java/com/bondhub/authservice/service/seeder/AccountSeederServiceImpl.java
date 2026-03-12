@@ -84,8 +84,6 @@ public class AccountSeederServiceImpl implements AccountSeederService {
         int skipped = 0;
         Random random = new Random();
 
-        created += createAdminAccount();
-
         int startIndex = findNextAvailableIndex();
         log.info("📊 Starting from testuser{}", startIndex);
 
@@ -120,7 +118,7 @@ public class AccountSeederServiceImpl implements AccountSeederService {
                         .build();
 
                 account = accountRepository.save(account);
-                log.info("✅ Account created: {} - {}", email, fullName);
+                // log.info("✅ Account created: {} - {}", email, fullName); // Giảm log nếu cần, hoặc giữ tùy ý
 
                 AccountRegisteredEvent event = AccountRegisteredEvent.builder()
                         .accountId(account.getId())
@@ -137,10 +135,12 @@ public class AccountSeederServiceImpl implements AccountSeederService {
                         event
                 );
 
-                log.info("📤 Event published for: {} - {}", email, fullName);
+                // log.info("📤 Event published for: {} - {}", email, fullName);
                 created++;
 
-                Thread.sleep(50);
+                if (count <= 100) {
+                    Thread.sleep(10); // Chỉ sleep ngắn nếu số lượng ít để tránh đứng thread quá lâu
+                }
 
             } catch (Exception e) {
                 log.error("❌ Failed to seed account #{}", i, e);
@@ -151,14 +151,21 @@ public class AccountSeederServiceImpl implements AccountSeederService {
         result.put("created", created);
         result.put("skipped", skipped);
         result.put("total", count);
-        result.put("message", String.format("Seed completed! Created: %d, Skipped: %d (including 1 admin)", created, skipped));
+        result.put("message", String.format("Seed completed! Created: %d, Skipped: %d", created, skipped));
         result.put("fuzzy_test_info", "100+ diverse Vietnamese names for comprehensive search testing");
-        result.put("admin_credentials", "Email: admin@bondhub.com | Password: Admin@123");
         result.put("test_accounts_password", "Test@123");
         result.put("next_start_index", startIndex + count);
 
         log.info("🌱 Seeding completed! Created: {}, Skipped: {}", created, skipped);
         return result;
+    }
+
+    @Override
+    @org.springframework.scheduling.annotation.Async
+    public void seedAccountsAsync(int count) {
+        log.info("🚀 Background seeding started for {} accounts", count);
+        seedAccounts(count);
+        log.info("🏁 Background seeding for {} accounts completed!", count);
     }
 
     private int findNextAvailableIndex() {
@@ -172,34 +179,6 @@ public class AccountSeederServiceImpl implements AccountSeederService {
         return index;
     }
 
-    private int createAdminAccount() {
-        String adminEmail = "admin@bondhub.com";
-
-        try {
-            if (accountRepository.existsByEmail(adminEmail)) {
-                log.info("👤 Admin account already exists: {}", adminEmail);
-                return 0;
-            }
-
-            Account adminAccount = Account.builder()
-                    .email(adminEmail)
-                    .password(passwordEncoder.encode("Admin@123"))
-                    .phoneNumber("0900000000")
-                    .role(Role.ADMIN)
-                    .isVerified(true)
-                    .enabled(true)
-                    .build();
-
-            adminAccount = accountRepository.save(adminAccount);
-            log.info("👑 Admin account created: {}", adminEmail);
-            log.info("ℹ️ Admin account does not trigger user creation event (admin-only account)");
-            return 1;
-
-        } catch (Exception e) {
-            log.error("❌ Failed to create admin account", e);
-            return 0;
-        }
-    }
 
     /**
      * Apply fuzzy variations lên tên có sẵn

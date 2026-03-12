@@ -36,6 +36,7 @@ import org.springframework.context.MessageSource;
 import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -45,6 +46,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 @Slf4j
+@Transactional
 public class AuthenticationServiceImpl implements AuthenticationService {
 
     AccountRepository accountRepository;
@@ -296,31 +298,18 @@ public class AuthenticationServiceImpl implements AuthenticationService {
 
         log.info("✅ Account created and verified for: {}", account.getEmail());
 
-        // Call user-service to create user profile synchronously
-        String userId = null;
+        // Create user profile synchronously via Feign, user-service will handle indexing
         try {
             var createRequest = UserCreateRequest.builder()
                     .accountId(account.getId())
                     .fullName(pendingReg.getFullName())
+                    .phoneNumber(account.getPhoneNumber())
+                    .role(Role.USER.name())
                     .build();
 
             var response = userServiceClient.createUser(createRequest);
             if (response != null && response.data() != null) {
-                userId = response.data().id();
-                log.info("✅ User profile created via API for accountId: {}, userId: {}", account.getId(), userId);
-
-                UserIndexEvent indexEvent = UserIndexEvent.builder()
-                        .userId(userId)
-                        .phoneNumber(account.getPhoneNumber())
-                        .role(account.getRole())
-                        .build();
-
-                outboxEventPublisher.saveAndPublish(
-                        userId,
-                        "User",
-                        EventType.USER_INDEX,
-                        indexEvent);
-                log.info("📤 Published USER_INDEX event for userId: {}", userId);
+                log.info("✅ User profile created via API for accountId: {}, userId: {}", account.getId(), response.data().id());
             }
         } catch (Exception e) {
             log.error("❌ Failed to create user profile via API for accountId: {}", account.getId(), e);

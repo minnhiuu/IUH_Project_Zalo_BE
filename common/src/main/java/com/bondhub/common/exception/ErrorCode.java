@@ -59,8 +59,18 @@ public enum ErrorCode {
         INVALID_YEAR_ATTRIBUTE_PAIR(HttpStatus.BAD_REQUEST, 2304, "error.invalid.year.attribute.pair"),
         INVALID_OPERATION(HttpStatus.BAD_REQUEST, 2305, "error.invalid.operation"),
         INVALID_PROMOTION_CONDITION(HttpStatus.BAD_REQUEST, 2306, "error.invalid.promotion.condition"),
-        ACC_PASSWORD_MISMATCH(HttpStatus.BAD_REQUEST, 2307, "error.acc.password.mismatch")
+        ACC_PASSWORD_MISMATCH(HttpStatus.BAD_REQUEST, 2307, "error.acc.password.mismatch"),
 
+
+        // Elasticsearch errors (23xx)
+        EL_INDEX_NOT_FOUND(HttpStatus.NOT_FOUND, 2301, "error.el.index.not.found"),
+        EL_CLUSTER_UNHEALTHY(HttpStatus.INTERNAL_SERVER_ERROR, 2302, "error.el.cluster.unhealthy"),
+        EL_DOCUMENT_NOT_FOUND(HttpStatus.NOT_FOUND, 2303, "error.el.document.not.found"),
+        EL_REINDEX_IN_PROGRESS(HttpStatus.CONFLICT, 2304, "error.el.reindex.in.progress"),
+
+        // DLQ errors (24xx)
+        DLQ_EVENT_NOT_FOUND(HttpStatus.NOT_FOUND, 2401, "error.dlq.event.not.found"),
+        DLQ_RETRY_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, 2402, "error.dlq.retry.failed")
         ;
 
         private final HttpStatus httpStatus;

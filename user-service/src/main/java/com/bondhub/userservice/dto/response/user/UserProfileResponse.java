@@ -15,5 +15,6 @@ public record UserProfileResponse(
     LocalDate dob,
     String avatar,
     String background,
-    Double backgroundY
+    Double backgroundY,
+    String role
 ) {}

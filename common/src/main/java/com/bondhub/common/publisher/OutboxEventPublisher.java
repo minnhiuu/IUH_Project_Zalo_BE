@@ -2,7 +2,8 @@ package com.bondhub.common.publisher;
 
 import com.bondhub.common.config.kafka.KafkaTopicProperties;
 import com.bondhub.common.event.account.AccountRegisteredEvent;
-import com.bondhub.common.event.user.UserIndexEvent;
+import com.bondhub.common.event.user.UserIndexDeletedEvent;
+import com.bondhub.common.event.user.UserIndexRequestedEvent;
 import com.bondhub.common.model.kafka.EventType;
 import com.bondhub.common.model.kafka.OutboxEvent;
 import com.bondhub.common.repository.OutboxEventRepository;
@@ -128,7 +129,8 @@ public class OutboxEventPublisher {
             case USER_CREATED -> kafkaTopicProperties.getUserEvents().getCreated();
             case USER_UPDATED -> kafkaTopicProperties.getUserEvents().getUpdated();
             case USER_DELETED -> kafkaTopicProperties.getUserEvents().getDeleted();
-            case USER_INDEX -> kafkaTopicProperties.getUserEvents().getIndex();
+            case USER_INDEX_REQUESTED -> kafkaTopicProperties.getUserEvents().getIndexRequested();
+            case USER_INDEX_DELETED -> kafkaTopicProperties.getUserEvents().getIndexDeleted();
         };
     }
 
@@ -137,7 +139,8 @@ public class OutboxEventPublisher {
             case ACCOUNT_REGISTERED, ACCOUNT_UPDATED, ACCOUNT_DELETED, 
                  ACCOUNT_VERIFIED, ACCOUNT_ENABLED, ACCOUNT_DISABLED -> AccountRegisteredEvent.class;
             case USER_CREATED, USER_UPDATED, USER_DELETED -> UserCreatedEvent.class;
-            case USER_INDEX ->  UserIndexEvent.class;
+            case USER_INDEX_REQUESTED ->  UserIndexRequestedEvent.class;
+            case USER_INDEX_DELETED -> UserIndexDeletedEvent.class;
         };
     }
 }

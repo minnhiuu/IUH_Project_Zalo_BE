@@ -33,6 +33,7 @@
         <module>message-service</module>
         <module>notification-service</module>
         <module>file-service</module>
+        <module>search-service</module>
     </modules>
 
     <dependencyManagement>
