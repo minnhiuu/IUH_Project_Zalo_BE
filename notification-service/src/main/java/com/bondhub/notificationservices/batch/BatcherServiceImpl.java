@@ -1,8 +1,8 @@
 package com.bondhub.notificationservices.batch;
 
+import com.bondhub.common.enums.NotificationType;
+import com.bondhub.common.event.notification.RawNotificationEvent;
 import com.bondhub.notificationservices.enums.BatchWindowConfig;
-import com.bondhub.notificationservices.enums.NotificationType;
-import com.bondhub.notificationservices.event.RawNotificationEvent;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;

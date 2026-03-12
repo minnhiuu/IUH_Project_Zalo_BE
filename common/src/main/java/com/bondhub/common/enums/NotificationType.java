@@ -1,4 +1,4 @@
-package com.bondhub.notificationservices.enums;
+package com.bondhub.common.enums;
 
 public enum NotificationType {
     DOB,

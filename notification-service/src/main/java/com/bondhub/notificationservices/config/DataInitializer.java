@@ -1,7 +1,7 @@
 package com.bondhub.notificationservices.config;
 
 import com.bondhub.notificationservices.enums.NotificationChannel;
-import com.bondhub.notificationservices.enums.NotificationType;
+import com.bondhub.common.enums.NotificationType;
 import com.bondhub.notificationservices.model.Notification;
 import com.bondhub.notificationservices.model.NotificationTemplate;
 import com.bondhub.notificationservices.repository.NotificationTemplateRepository;

@@ -1,7 +1,7 @@
 package com.bondhub.notificationservices.model;
 
 import com.bondhub.common.model.BaseModel;
-import com.bondhub.notificationservices.enums.NotificationType;
+import com.bondhub.common.enums.NotificationType;
 import lombok.*;
 import org.springframework.data.mongodb.core.index.CompoundIndex;
 import org.springframework.data.mongodb.core.index.CompoundIndexes;

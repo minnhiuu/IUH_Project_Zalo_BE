@@ -1,6 +1,6 @@
 package com.bondhub.notificationservices.dto.response.notificationtemplate;
 
-import com.bondhub.notificationservices.enums.NotificationType;
+import com.bondhub.common.enums.NotificationType;
 
 public record NotificationTemplateResponse(
         String id,

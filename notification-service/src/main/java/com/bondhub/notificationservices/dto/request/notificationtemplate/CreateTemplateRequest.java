@@ -1,7 +1,7 @@
 package com.bondhub.notificationservices.dto.request.notificationtemplate;
 
 import com.bondhub.notificationservices.enums.NotificationChannel;
-import com.bondhub.notificationservices.enums.NotificationType;
+import com.bondhub.common.enums.NotificationType;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 

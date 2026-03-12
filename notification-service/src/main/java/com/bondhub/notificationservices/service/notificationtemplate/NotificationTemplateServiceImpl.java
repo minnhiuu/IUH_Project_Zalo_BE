@@ -6,7 +6,7 @@ import com.bondhub.notificationservices.dto.request.notificationtemplate.CreateT
 import com.bondhub.notificationservices.dto.request.notificationtemplate.UpdateTemplateRequest;
 import com.bondhub.notificationservices.dto.response.notificationtemplate.NotificationTemplateResponse;
 import com.bondhub.notificationservices.enums.NotificationChannel;
-import com.bondhub.notificationservices.enums.NotificationType;
+import com.bondhub.common.enums.NotificationType;
 import com.bondhub.notificationservices.mapper.NotificationTemplateMapper;
 import com.bondhub.notificationservices.model.NotificationTemplate;
 import com.bondhub.notificationservices.repository.NotificationTemplateRepository;

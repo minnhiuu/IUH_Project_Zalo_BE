@@ -1,8 +1,8 @@
 package com.bondhub.notificationservices.service.notification.assembler;
 
 import com.bondhub.notificationservices.dto.request.notification.CreateFriendRequestNotificationRequest;
-import com.bondhub.notificationservices.enums.NotificationType;
-import com.bondhub.notificationservices.event.RawNotificationEvent;
+import com.bondhub.common.enums.NotificationType;
+import com.bondhub.common.event.notification.RawNotificationEvent;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;

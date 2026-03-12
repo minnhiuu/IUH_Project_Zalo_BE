@@ -1,6 +1,6 @@
 package com.bondhub.notificationservices.service.preference;
 
-import com.bondhub.notificationservices.enums.NotificationType;
+import com.bondhub.common.enums.NotificationType;
 
 public interface UserPreferenceService {
 

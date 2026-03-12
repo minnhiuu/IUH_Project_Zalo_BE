@@ -1,7 +1,7 @@
 package com.bondhub.notificationservices.batch;
 
 import com.bondhub.notificationservices.event.BatchedNotificationEvent;
-import com.bondhub.notificationservices.event.RawNotificationEvent;
+import com.bondhub.common.event.notification.RawNotificationEvent;
 import com.bondhub.notificationservices.publisher.ReadyNotificationPublisher;
 import com.bondhub.notificationservices.service.preference.UserPreferenceService;
 import com.fasterxml.jackson.core.JsonProcessingException;

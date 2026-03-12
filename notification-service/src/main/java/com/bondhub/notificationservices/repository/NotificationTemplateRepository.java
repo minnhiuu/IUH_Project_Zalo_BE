@@ -1,7 +1,7 @@
 package com.bondhub.notificationservices.repository;
 
 import com.bondhub.notificationservices.enums.NotificationChannel;
-import com.bondhub.notificationservices.enums.NotificationType;
+import com.bondhub.common.enums.NotificationType;
 import com.bondhub.notificationservices.model.NotificationTemplate;
 import org.springframework.data.mongodb.repository.MongoRepository;
 

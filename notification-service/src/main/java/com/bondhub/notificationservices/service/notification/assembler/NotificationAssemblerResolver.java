@@ -2,7 +2,7 @@ package com.bondhub.notificationservices.service.notification.assembler;
 
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
-import com.bondhub.notificationservices.enums.NotificationType;
+import com.bondhub.common.enums.NotificationType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 

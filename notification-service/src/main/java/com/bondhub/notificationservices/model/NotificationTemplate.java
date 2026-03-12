@@ -2,7 +2,7 @@ package com.bondhub.notificationservices.model;
 
 import com.bondhub.common.model.BaseModel;
 import com.bondhub.notificationservices.enums.NotificationChannel;
-import com.bondhub.notificationservices.enums.NotificationType;
+import com.bondhub.common.enums.NotificationType;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
 import org.springframework.data.mongodb.core.index.CompoundIndex;

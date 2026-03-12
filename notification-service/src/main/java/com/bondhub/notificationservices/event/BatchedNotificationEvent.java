@@ -1,6 +1,6 @@
 package com.bondhub.notificationservices.event;
 
-import com.bondhub.notificationservices.enums.NotificationType;
+import com.bondhub.common.enums.NotificationType;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
 

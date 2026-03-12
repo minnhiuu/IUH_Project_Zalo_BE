@@ -6,8 +6,8 @@ import com.bondhub.notificationservices.dto.request.notification.CreateFriendReq
 import com.bondhub.notificationservices.dto.response.notification.*;
 import com.bondhub.notificationservices.dto.response.notificationtemplate.NotificationTemplateResponse;
 import com.bondhub.notificationservices.enums.NotificationChannel;
-import com.bondhub.notificationservices.enums.NotificationType;
-import com.bondhub.notificationservices.event.RawNotificationEvent;
+import com.bondhub.common.enums.NotificationType;
+import com.bondhub.common.event.notification.RawNotificationEvent;
 import com.bondhub.notificationservices.mapper.NotificationMapper;
 import com.bondhub.notificationservices.model.Notification;
 import com.bondhub.notificationservices.model.UserNotificationState;

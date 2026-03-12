@@ -1,6 +1,6 @@
 package com.bondhub.notificationservices.pipeline;
 
-import com.bondhub.notificationservices.event.RawNotificationEvent;
+import com.bondhub.common.event.notification.RawNotificationEvent;
 import com.bondhub.notificationservices.batch.BatcherService;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;

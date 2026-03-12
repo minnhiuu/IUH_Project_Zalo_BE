@@ -1,6 +1,6 @@
 package com.bondhub.notificationservices.dto.response.notification;
 
-import com.bondhub.notificationservices.enums.NotificationType;
+import com.bondhub.common.enums.NotificationType;
 import lombok.Builder;
 
 import java.time.LocalDateTime;

@@ -2,7 +2,7 @@ package com.bondhub.notificationservices.listener;
 
 import com.bondhub.notificationservices.config.NotificationKafkaTopicConfig;
 import com.bondhub.notificationservices.event.BatchedNotificationEvent;
-import com.bondhub.notificationservices.event.RawNotificationEvent;
+import com.bondhub.common.event.notification.RawNotificationEvent;
 import com.bondhub.notificationservices.pipeline.NotificationBatcherStep;
 import com.bondhub.notificationservices.pipeline.UserPreferenceCheckerStep;
 import com.bondhub.notificationservices.pipeline.UserValidatorStep;

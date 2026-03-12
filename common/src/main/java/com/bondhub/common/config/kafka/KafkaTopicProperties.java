@@ -14,6 +14,7 @@ public class KafkaTopicProperties {
     private AccountEvents accountEvents = new AccountEvents();
     private UserEvents userEvents = new UserEvents();
     private MessageEvents messageEvents = new MessageEvents();
+    private NotificationEvents notificationEvents = new NotificationEvents();
 
     @Getter
     @Setter
@@ -41,6 +42,12 @@ public class KafkaTopicProperties {
     @Setter
     public static class MessageEvents {
 
+    }
+
+    @Getter
+    @Setter
+    public static class NotificationEvents {
+        private String raw = "noti.raw";
     }
 
     @Getter

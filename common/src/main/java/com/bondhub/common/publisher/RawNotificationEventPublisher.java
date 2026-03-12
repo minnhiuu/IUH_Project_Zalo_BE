@@ -1,14 +1,12 @@
-package com.bondhub.notificationservices.publisher;
+package com.bondhub.common.publisher;
 
-import com.bondhub.notificationservices.config.NotificationKafkaTopicConfig;
+import com.bondhub.common.config.kafka.KafkaTopicProperties;
 import com.bondhub.common.event.notification.RawNotificationEvent;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 
@@ -16,20 +14,22 @@ import org.springframework.stereotype.Component;
 @Slf4j
 @RequiredArgsConstructor
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
-public class RawNotificationPublisher {
+@ConditionalOnBean(KafkaTemplate.class)
+public class RawNotificationEventPublisher {
 
     KafkaTemplate<String, Object> kafkaTemplate;
-    NotificationKafkaTopicConfig topicConfig;
+    KafkaTopicProperties topicProperties;
 
     public void publish(RawNotificationEvent event) {
         try {
-            String topic = topicConfig.getRaw();
+            String topic = topicProperties.getNotificationEvents().getRaw();
             kafkaTemplate.send(topic, event.getRecipientId(), event);
-            log.debug("[Queue1] Published raw event: type={}, recipient={}",
+            log.debug("[Notification] Published raw event: type={}, recipient={}",
                     event.getType(), event.getRecipientId());
         } catch (Exception e) {
-            log.error("[Queue1] Failed to publish raw event: type={}, recipient={}",
+            log.error("[Notification] Failed to publish raw event: type={}, recipient={}",
                     event.getType(), event.getRecipientId(), e);
+            throw e;
         }
     }
 }

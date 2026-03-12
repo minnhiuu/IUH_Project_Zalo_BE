@@ -1,6 +1,6 @@
 package com.bondhub.notificationservices.service.preference;
 
-import com.bondhub.notificationservices.enums.NotificationType;
+import com.bondhub.common.enums.NotificationType;
 import org.springframework.stereotype.Service;
 
 @Service

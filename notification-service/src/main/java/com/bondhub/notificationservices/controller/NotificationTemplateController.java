@@ -5,7 +5,7 @@ import com.bondhub.notificationservices.dto.request.notificationtemplate.CreateT
 import com.bondhub.notificationservices.dto.request.notificationtemplate.UpdateTemplateRequest;
 import com.bondhub.notificationservices.dto.response.notificationtemplate.NotificationTemplateResponse;
 import com.bondhub.notificationservices.enums.NotificationChannel;
-import com.bondhub.notificationservices.enums.NotificationType;
+import com.bondhub.common.enums.NotificationType;
 import com.bondhub.notificationservices.service.notificationtemplate.NotificationTemplateService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;

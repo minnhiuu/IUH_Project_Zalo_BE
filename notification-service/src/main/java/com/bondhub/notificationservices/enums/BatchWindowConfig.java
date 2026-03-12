@@ -1,5 +1,6 @@
 package com.bondhub.notificationservices.enums;
 
+import com.bondhub.common.enums.NotificationType;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
