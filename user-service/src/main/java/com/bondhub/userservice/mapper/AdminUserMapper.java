@@ -1,10 +1,10 @@
 package com.bondhub.userservice.mapper;
 
-import com.bondhub.userservice.dto.response.AccountResponse;
+import com.bondhub.userservice.dto.response.user.AccountResponse;
 import com.bondhub.userservice.dto.response.AuditResponse;
 import com.bondhub.userservice.dto.response.UserAdminDetailResponse;
 import com.bondhub.userservice.dto.response.UserAdminResponse;
-import com.bondhub.userservice.dto.response.UserResponse;
+import com.bondhub.userservice.dto.response.user.UserResponse;
 import com.bondhub.userservice.model.User;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;

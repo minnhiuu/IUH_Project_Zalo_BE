@@ -100,12 +100,6 @@ public class AccountController {
         return ResponseEntity.ok(ApiResponse.successWithoutData());
     }
 
-    @PostMapping("/internal/batch")
-    public ResponseEntity<ApiResponse<List<AccountResponse>>> getAccountsByIds(@RequestBody List<String> ids) {
-        log.info("[Internal] REST request to batch fetch accounts, count={}", ids.size());
-        return ResponseEntity.ok(ApiResponse.success(accountService.getAccountsByIds(ids)));
-    }
-
     @GetMapping("/exists/email/{email}")
     public ResponseEntity<ApiResponse<Boolean>> existsByEmail(@PathVariable String email) {
         log.info("REST request to check if account exists by email: {}", email);

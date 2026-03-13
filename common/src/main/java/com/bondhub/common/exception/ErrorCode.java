@@ -75,7 +75,7 @@ public enum ErrorCode {
 
         // Admin / ban errors
         CANNOT_BAN_YOURSELF(HttpStatus.BAD_REQUEST, 2208, "error.cannot.ban.yourself"),
-        CANNOT_BAN_ADMIN(HttpStatus.FORBIDDEN, 2209, "error.cannot.ban.admin")
+        CANNOT_BAN_ADMIN(HttpStatus.FORBIDDEN, 2209, "error.cannot.ban.admin"),
 
         // Elasticsearch errors (23xx)
         EL_INDEX_NOT_FOUND(HttpStatus.NOT_FOUND, 2301, "error.el.index.not.found"),

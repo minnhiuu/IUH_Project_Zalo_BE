@@ -393,23 +393,4 @@ public class UserServiceImpl implements UserService {
                         .build()
         ));
     }
-
-
-    @Override
-    public void recordLastLogin(String accountId) {
-        userRepository.findByAccountId(accountId).ifPresent(user -> {
-            user.setLastLoginAt(LocalDateTime.now());
-            userRepository.save(user);
-            log.debug("Recorded last login for accountId={}, userId={}", accountId, user.getId());
-        });
-    }
-
-    @Override
-    public void syncBanStatus(String accountId, boolean banned) {
-        userRepository.findByAccountId(accountId).ifPresent(user -> {
-            user.setActive(!banned);
-            userRepository.save(user);
-            log.info("Synced ban status for accountId={}, banned={}", accountId, banned);
-        });
-    }
 }

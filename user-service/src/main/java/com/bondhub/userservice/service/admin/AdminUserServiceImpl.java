@@ -8,7 +8,7 @@ import com.bondhub.common.exception.ErrorCode;
 import com.bondhub.common.utils.S3Util;
 import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.userservice.client.AuthServiceClient;
-import com.bondhub.userservice.dto.response.AccountResponse;
+import com.bondhub.userservice.dto.response.user.AccountResponse;
 import com.bondhub.userservice.dto.response.UserActivityLogResponse;
 import com.bondhub.userservice.dto.response.UserAdminDetailResponse;
 import com.bondhub.userservice.dto.response.UserAdminResponse;

@@ -133,13 +133,6 @@ public interface AccountService {
      */
     void unbanAccount(String id);
 
-    /**
-     * Batch fetch multiple accounts by their IDs.
-     *
-     * @param ids list of account IDs
-     * @return list of account responses
-     */
-    List<AccountResponse> getAccountsByIds(List<String> ids);
 
 
 }

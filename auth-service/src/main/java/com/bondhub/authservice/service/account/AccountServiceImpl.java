@@ -201,12 +201,4 @@ public class AccountServiceImpl implements AccountService {
         accountRepository.save(account);
         log.info("Account unbanned: id={}", id);
     }
-
-    @Override
-    public List<AccountResponse> getAccountsByIds(List<String> ids) {
-        if (ids == null || ids.isEmpty()) return List.of();
-        return accountRepository.findAllById(ids).stream()
-                .map(accountMapper::toResponse)
-                .collect(java.util.stream.Collectors.toList());
-    }
 }

@@ -1,5 +1,6 @@
 package com.bondhub.userservice.dto.response;
 
+import com.bondhub.userservice.dto.response.user.UserResponse;
 import lombok.Builder;
 
 /**
