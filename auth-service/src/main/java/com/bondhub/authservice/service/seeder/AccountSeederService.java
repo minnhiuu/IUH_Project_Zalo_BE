@@ -6,6 +6,6 @@ import java.util.concurrent.CompletableFuture;
 public interface AccountSeederService {
     Map<String, Object> seedAccounts(int count);
 
-
+    void seedAccountsAsync(int count);
 }
 

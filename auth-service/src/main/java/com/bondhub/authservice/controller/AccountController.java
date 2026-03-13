@@ -40,6 +40,13 @@ public class AccountController {
         return ResponseEntity.ok(ApiResponse.success(accountResponse));
     }
 
+    @PostMapping("/batch")
+    public ResponseEntity<ApiResponse<List<AccountResponse>>> getAccountsByIds(@RequestBody List<String> ids) {
+        log.info("REST request to get accounts by batch ids: {} accounts", ids.size());
+        List<AccountResponse> accountResponses = accountService.getAccountsByIds(ids);
+        return ResponseEntity.ok(ApiResponse.success(accountResponses));
+    }
+
     @GetMapping("/email/{email}")
     public ResponseEntity<ApiResponse<AccountResponse>> getAccountByEmail(@PathVariable String email) {
         log.info("REST request to get account by email: {}", email);

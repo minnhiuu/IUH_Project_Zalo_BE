@@ -7,12 +7,20 @@ import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.data.mongodb.repository.Query;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 @Repository
 public interface UserRepository extends MongoRepository<User, String> {
 
     Optional<User> findByAccountId(String accountId);
+
+    List<User> findAllByOrderByIdAsc(Pageable pageable);
+
+    List<User> findByIdGreaterThanOrderByIdAsc(String id, Pageable pageable);
+
+    List<User> findByLastModifiedAtAfter(LocalDateTime lastModifiedAt);
 
     boolean existsById(String id);
 
@@ -28,4 +36,3 @@ public interface UserRepository extends MongoRepository<User, String> {
 
     Page<User> findByActiveAndFullNameContainingIgnoreCase(Boolean active, String fullName, Pageable pageable);
 }
-

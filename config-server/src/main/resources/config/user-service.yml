@@ -17,6 +17,16 @@ spring:
       uri: ${MONGODB_URI_USERS}
       auto-index-creation: true
       uuid-representation: standard
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT}
+      password: ${REDIS_PASSWORD}
+      timeout: 5000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
 
   # Kafka Configuration for User Service
   kafka:
@@ -85,6 +95,28 @@ aws:
   s3:
     bucket:
       name: ${AWS_S3_BUCKET_NAME}
+
+# Elasticsearch Configuration
+elasticsearch:
+  # Bulk indexing settings
+  sync:
+    batch-size: 500 # Number of documents per batch
+    max-retry: 3 # Max retry attempts for failed batches
+    parallelism: ${ELASTICSEARCH_PARALLELISM:0} # 0 = auto-detect CPU cores
+
+  # Real-time indexing settings
+  index:
+    realtime-threads: 2 # Thread pool size for real-time indexing
+    async-timeout-seconds: 30 # Timeout for async operations
+
+  # Index settings
+  alias: users # Main index alias
+
+  # Monitoring settings (for future use)
+  monitoring:
+    enabled: true
+    log-slow-operations: true
+    slow-operation-threshold-ms: 1000
 
 # SpringDoc OpenAPI Configuration
 springdoc:

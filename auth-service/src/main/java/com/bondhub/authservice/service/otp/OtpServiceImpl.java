@@ -7,16 +7,13 @@ import com.bondhub.authservice.repository.redis.OtpCooldownRepository;
 import com.bondhub.authservice.repository.redis.OtpRepository;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
+import com.bondhub.common.utils.HashUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
-import java.util.HexFormat;
 
 @Service
 @RequiredArgsConstructor
@@ -153,16 +150,7 @@ public class OtpServiceImpl implements OtpService {
 
     @Override
     public String hashOtp(String otp) {
-        if (otp == null) {
-            return null;
-        }
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(otp.getBytes(StandardCharsets.UTF_8));
-            return HexFormat.of().formatHex(hash);
-        } catch (NoSuchAlgorithmException e) {
-            throw new RuntimeException("SHA-256 algorithm not available", e);
-        }
+        return HashUtil.hashSha256(otp);
     }
 
     /**

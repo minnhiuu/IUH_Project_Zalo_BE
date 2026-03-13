@@ -1,0 +1,96 @@
+server:
+  port: 8087
+
+spring:
+  application:
+    name: search-service
+
+  messages:
+    basename: i18n/messages, i18n/messages-search
+
+  data:
+    mongodb:
+      uri: ${MONGODB_URI_SEARCH}
+      auto-index-creation: true
+      uuid-representation: standard
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD}
+      timeout: 5000ms
+
+  # Kafka Consumer configuration for search indexing events
+  kafka:
+    consumer:
+      group-id: search-service-group
+      client-id: search-service-consumer
+      max-poll-records: 200
+
+    listener:
+      concurrency: 3
+      ack-mode: manual
+
+# Service-specific logging overrides
+logging:
+  level:
+    root: INFO
+    com.bondhub.searchservice: DEBUG
+    org.springframework.data.elasticsearch: DEBUG
+    org.springframework.web: INFO
+  file:
+    name: logs/search-service.log
+    max-size: 10MB
+    max-history: 30
+    total-size-cap: 1GB
+
+# Service-specific resilience4j overrides
+resilience4j:
+  circuitbreaker:
+    instances:
+      searchService:
+        base-config: default
+
+  retry:
+    instances:
+      searchService:
+        base-config: default
+
+  timelimiter:
+    instances:
+      searchService:
+        base-config: default
+
+# Service-specific security configuration
+bondhub:
+  security:
+    public-endpoints:
+      - /search/**
+
+# Elasticsearch Search Service Configuration
+elasticsearch:
+  # Bulk indexing settings
+  sync:
+    batch-size: 500
+    max-retry: 3
+    parallelism: 0 # 0 = auto-detect CPU cores
+
+  # Index settings
+  index:
+    realtime-threads: 2
+    async-timeout-seconds: 30
+
+  # Monitoring settings
+  monitoring:
+    enabled: true
+    log-slow-operations: true
+    slow-operation-threshold-ms: 1000
+
+# SpringDoc OpenAPI Configuration
+springdoc:
+  api-docs:
+    enabled: true
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html
+  show-actuator: false

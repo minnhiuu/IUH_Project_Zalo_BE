@@ -2,6 +2,8 @@ package com.bondhub.friendservice.repository;
 
 import com.bondhub.friendservice.model.FriendShip;
 import com.bondhub.friendservice.model.enums.FriendStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.data.mongodb.repository.Query;
 import org.springframework.stereotype.Repository;
@@ -12,22 +14,22 @@ import java.util.Optional;
 @Repository
 public interface FriendShipRepository extends MongoRepository<FriendShip, String> {
     
-    List<FriendShip> findByReceivedAndFriendStatus(String userId, FriendStatus status);
+    // Paginated queries
+    Page<FriendShip> findByRequestedAndFriendStatusOrderByCreatedAtDesc(String userId, FriendStatus status, Pageable pageable);
     
-    List<FriendShip> findByRequestedAndFriendStatus(String userId, FriendStatus status);
+    Page<FriendShip> findByReceivedAndFriendStatusOrderByCreatedAtDesc(String userId, FriendStatus status, Pageable pageable);
     
-    Optional<FriendShip> findByRequestedAndReceived(String requesterId, String receiverId);
-    
-    List<FriendShip> findByRequestedOrReceived(String userId1, String userId2);
-    
+    // Non-paginated queries (for backward compatibility)
     List<FriendShip> findByRequestedAndFriendStatusOrderByCreatedAtDesc(String userId, FriendStatus status);
     
     List<FriendShip> findByReceivedAndFriendStatusOrderByCreatedAtDesc(String userId, FriendStatus status);
     
-    
-    @Query("{ $or: [ " +
-           "{ 'requested': ?0, 'received': ?1 }, " +
-           "{ 'requested': ?1, 'received': ?0 } " +
+    @Query("{ $and: [ " +
+           "{ $or: [ " +
+           "  { 'requested': ?0, 'received': ?1 }, " +
+           "  { 'requested': ?1, 'received': ?0 } " +
+           "] }, " +
+           "{ 'friendStatus': { $in: ['PENDING', 'ACCEPTED'] } } " +
            "] }")
     Optional<FriendShip> findFriendshipBetweenUsers(String userId1, String userId2);
     
@@ -35,13 +37,13 @@ public interface FriendShipRepository extends MongoRepository<FriendShip, String
            "{ $or: [ { 'requested': ?0 }, { 'received': ?0 } ] }, " +
            "{ 'friendStatus': 'ACCEPTED' } " +
            "] }")
-    List<FriendShip> findAllFriendsByUserId(String userId);
+    Page<FriendShip> findAllFriendsByUserId(String userId, Pageable pageable);
     
-    @Query(value = "{ $and: [ " +
+    @Query("{ $and: [ " +
            "{ $or: [ { 'requested': ?0 }, { 'received': ?0 } ] }, " +
            "{ 'friendStatus': 'ACCEPTED' } " +
-           "] }", count = true)
-    Long countFriendsByUserId(String userId);
+           "] }")
+    List<FriendShip> findAllFriendsByUserId(String userId);
     
     @Query("{ $and: [ " +
            "{ $or: [ " +

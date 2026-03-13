@@ -5,5 +5,7 @@ import lombok.Builder;
 @Builder
 public record UserCreateRequest(
     String accountId,
-    String fullName
+    String fullName,
+    String phoneNumber,
+    String role
 ) {}

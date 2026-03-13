@@ -1,6 +1,7 @@
 package com.bondhub.friendservice.service.friendship;
 
 import com.bondhub.common.dto.ApiResponse;
+import com.bondhub.common.dto.PageResponse;
 import com.bondhub.common.dto.client.userservice.user.response.UserSummaryResponse;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
@@ -21,6 +22,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
 import java.util.stream.Collectors;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 
 @Service
 @Slf4j
@@ -37,7 +41,7 @@ public class FriendshipServiceImpl implements FriendshipService {
     public FriendRequestResponse sendFriendRequest(FriendRequestSendRequest request) {
         String currentUserId = securityUtil.getCurrentUserId();
         String receiverId = request.receiverId();
-        
+
         log.info("User {} sending friend request to {}", currentUserId, receiverId);
 
         validateUserExists(receiverId);
@@ -48,7 +52,7 @@ public class FriendshipServiceImpl implements FriendshipService {
 
         Optional<FriendShip> existingFriendship = friendShipRepository
                 .findFriendshipBetweenUsers(currentUserId, receiverId);
-        
+
         if (existingFriendship.isPresent()) {
             FriendShip friendship = existingFriendship.get();
             if (friendship.getFriendStatus() == FriendStatus.ACCEPTED) {
@@ -92,7 +96,7 @@ public class FriendshipServiceImpl implements FriendshipService {
 
         friendShip.setFriendStatus(FriendStatus.ACCEPTED);
         friendShip = friendShipRepository.save(friendShip);
-        
+
         log.info("Friend request {} accepted successfully", friendshipId);
         UserSummaryResponse requester = getUserSummary(friendShip.getRequested());
         UserSummaryResponse receiver = getUserSummary(friendShip.getReceived());
@@ -158,78 +162,88 @@ public class FriendshipServiceImpl implements FriendshipService {
     }
 
     @Override
-    public List<FriendRequestResponse> getReceivedFriendRequests() {
+    public PageResponse<List<FriendRequestResponse>> getReceivedFriendRequests(Pageable pageable) {
         String currentUserId = securityUtil.getCurrentUserId();
-        log.info("Fetching received friend requests for user {}", currentUserId);
+        log.info("Fetching received friend requests for user {} with pagination: {}", currentUserId, pageable);
 
-        List<FriendShip> requests = friendShipRepository
-                .findByReceivedAndFriendStatusOrderByCreatedAtDesc(currentUserId, FriendStatus.PENDING);
+        Page<FriendShip> requestsPage = friendShipRepository
+                .findByReceivedAndFriendStatusOrderByCreatedAtDesc(currentUserId, FriendStatus.PENDING, pageable);
 
-        return requests.stream()
-                .map(friendShip -> {
-                    UserSummaryResponse requester = getUserSummary(friendShip.getRequested());
-                    UserSummaryResponse receiver = getUserSummary(friendShip.getReceived());
-                    return friendShipMapper.toFriendRequestResponse(friendShip, requester, receiver);
-                })
+        List<String> requesterIds = requestsPage.getContent().stream()
+                .map(FriendShip::getRequested)
                 .toList();
+
+        Map<String, UserSummaryResponse> userMap = fetchUserSummariesInBatch(requesterIds);
+
+        return PageResponse.fromPage(requestsPage, friendShip -> {
+            UserSummaryResponse requester = userMap.get(friendShip.getRequested());
+            UserSummaryResponse receiver = userMap.get(friendShip.getReceived());
+            return friendShipMapper.toFriendRequestResponse(friendShip, requester, receiver);
+        });
     }
 
     @Override
-    public List<FriendRequestResponse> getSentFriendRequests() {
+    public PageResponse<List<FriendRequestResponse>> getSentFriendRequests(Pageable pageable) {
         String currentUserId = securityUtil.getCurrentUserId();
-        log.info("Fetching sent friend requests for user {}", currentUserId);
+        log.info("Fetching sent friend requests for user {} with pagination: {}", currentUserId, pageable);
 
-        List<FriendShip> requests = friendShipRepository
-                .findByRequestedAndFriendStatusOrderByCreatedAtDesc(currentUserId, FriendStatus.PENDING);
+        Page<FriendShip> requestsPage = friendShipRepository
+                .findByRequestedAndFriendStatusOrderByCreatedAtDesc(currentUserId, FriendStatus.PENDING, pageable);
 
-        return requests.stream()
-                .map(friendShip -> {
-                    UserSummaryResponse requester = getUserSummary(friendShip.getRequested());
-                    UserSummaryResponse receiver = getUserSummary(friendShip.getReceived());
-                    return friendShipMapper.toFriendRequestResponse(friendShip, requester, receiver);
-                })
+        List<String> receiverIds = requestsPage.getContent().stream()
+                .map(FriendShip::getReceived)
                 .toList();
+
+        Map<String, UserSummaryResponse> userMap = fetchUserSummariesInBatch(receiverIds);
+
+        return PageResponse.fromPage(requestsPage, friendShip -> {
+            UserSummaryResponse requester = userMap.get(friendShip.getRequested());
+            UserSummaryResponse receiver = userMap.get(friendShip.getReceived());
+            return friendShipMapper.toFriendRequestResponse(friendShip, requester, receiver);
+        });
     }
 
     @Override
-    public List<FriendResponse> getMyFriends() {
+    public PageResponse<List<FriendResponse>> getMyFriends(Pageable pageable) {
         String currentUserId = securityUtil.getCurrentUserId();
-        log.info("Fetching friends list for user {}", currentUserId);
+        log.info("Fetching friends list for user {} with pagination: {}", currentUserId, pageable);
 
-        List<FriendShip> friendships = friendShipRepository.findAllFriendsByUserId(currentUserId);
+        Page<FriendShip> friendshipsPage = friendShipRepository.findAllFriendsByUserId(currentUserId, pageable);
 
-        return friendships.stream()
-                .map(friendship -> {
-                    String friendId = friendship.getRequested().equals(currentUserId)
-                            ? friendship.getReceived()
-                            : friendship.getRequested();
-                    UserSummaryResponse friend = getUserSummary(friendId);
-                    Integer mutualCount = getMutualFriendsCount(friendId);
-                    return friendShipMapper.toFriendResponse(friend, friendship, mutualCount);
-                })
+        List<String> friendIds = friendshipsPage.getContent().stream()
+                .map(friendship -> friendship.getRequested().equals(currentUserId)
+                        ? friendship.getReceived()
+                        : friendship.getRequested())
                 .toList();
-    }
 
-    @Override
-    public List<FriendResponse> getFriendsByUserId(String userId) {
-        List<FriendShip> friendships = friendShipRepository.findAllFriendsByUserId(userId);
+        Map<String, UserSummaryResponse> userMap = fetchUserSummariesInBatch(friendIds);
 
-        return friendships.stream()
-                .map(friendship -> {
-                    String friendId = friendship.getRequested().equals(userId)
-                            ? friendship.getReceived()
-                            : friendship.getRequested();
-                    UserSummaryResponse friend = getUserSummary(friendId);
-                    Integer mutualCount = getMutualFriendsCount(friendId);
-                    return friendShipMapper.toFriendResponse(friend, friendship, mutualCount);
-                })
-                .toList();
+        Map<String, Long> mutualFriendsMap = calculateMutualFriendsInBatch(currentUserId, friendIds);
+
+        return PageResponse.fromPage(friendshipsPage, friendship -> {
+            String friendId = friendship.getRequested().equals(currentUserId)
+                    ? friendship.getReceived()
+                    : friendship.getRequested();
+            UserSummaryResponse friend = userMap.get(friendId);
+            Integer mutualCount = mutualFriendsMap.getOrDefault(friendId, 0L).intValue();
+            return friendShipMapper.toFriendResponse(friend, friendship, mutualCount);
+        });
     }
 
     @Override
     public FriendshipStatusResponse checkFriendshipStatus(String userId) {
         String currentUserId = securityUtil.getCurrentUserId();
         log.info("Checking friendship status between {} and {}", currentUserId, userId);
+
+        if (currentUserId == null || currentUserId.isEmpty() || userId == null || userId.isEmpty()) {
+            log.warn("Invalid userId for friendship check: currentUserId={}, userId={}", currentUserId, userId);
+            return FriendshipStatusResponse.builder()
+                    .areFriends(false)
+                    .status(null)
+                    .friendshipId(null)
+                    .requestedBy(null)
+                    .build();
+        }
 
         Optional<FriendShip> friendship = friendShipRepository
                 .findFriendshipBetweenUsers(currentUserId, userId);
@@ -254,17 +268,9 @@ public class FriendshipServiceImpl implements FriendshipService {
 
     @Override
     public MutualFriendsResponse getMutualFriends(String userId) {
-        String currentUserId = securityUtil.getCurrentUserId();
-        log.info("Fetching mutual friends between {} and {}", currentUserId, userId);
+        log.info("Fetching mutual friends with user {}", userId);
 
-        List<FriendShip> currentUserFriends = friendShipRepository.findAllFriendsByUserId(currentUserId);
-        Set<String> currentUserFriendIds = extractFriendIds(currentUserFriends, currentUserId);
-
-        List<FriendShip> targetUserFriends = friendShipRepository.findAllFriendsByUserId(userId);
-        Set<String> targetUserFriendIds = extractFriendIds(targetUserFriends, userId);
-
-        Set<String> mutualFriendIds = new HashSet<>(currentUserFriendIds);
-        mutualFriendIds.retainAll(targetUserFriendIds);
+        Set<String> mutualFriendIds = findMutualFriendIds(userId);
 
         List<FriendResponse> mutualFriends = mutualFriendIds.stream()
                 .map(friendId -> {
@@ -281,19 +287,23 @@ public class FriendshipServiceImpl implements FriendshipService {
 
     @Override
     public Integer getMutualFriendsCount(String userId) {
+        log.info("Counting mutual friends with user {}", userId);
+        return findMutualFriendIds(userId).size();
+    }
+
+    private Set<String> findMutualFriendIds(String targetUserId) {
         String currentUserId = securityUtil.getCurrentUserId();
-        log.info("Counting mutual friends between {} and {}", currentUserId, userId);
 
         List<FriendShip> currentUserFriends = friendShipRepository.findAllFriendsByUserId(currentUserId);
         Set<String> currentUserFriendIds = extractFriendIds(currentUserFriends, currentUserId);
 
-        List<FriendShip> targetUserFriends = friendShipRepository.findAllFriendsByUserId(userId);
-        Set<String> targetUserFriendIds = extractFriendIds(targetUserFriends, userId);
+        List<FriendShip> targetUserFriends = friendShipRepository.findAllFriendsByUserId(targetUserId);
+        Set<String> targetUserFriendIds = extractFriendIds(targetUserFriends, targetUserId);
 
         Set<String> mutualFriendIds = new HashSet<>(currentUserFriendIds);
         mutualFriendIds.retainAll(targetUserFriendIds);
 
-        return mutualFriendIds.size();
+        return mutualFriendIds;
     }
 
     // Helper methods
@@ -313,8 +323,7 @@ public class FriendshipServiceImpl implements FriendshipService {
         } catch (Exception e) {
             log.error("Failed to fetch user summary for userId: {}", userId, e);
         }
-        
-        // Return minimal user info if service call fails
+
         return UserSummaryResponse.builder()
                 .id(userId)
                 .fullName("Unknown User")
@@ -332,5 +341,52 @@ public class FriendshipServiceImpl implements FriendshipService {
             log.error("Failed to validate user: {}", userId, e);
             throw new AppException(ErrorCode.USER_NOT_FOUND);
         }
+    }
+
+    private Map<String, UserSummaryResponse> fetchUserSummariesInBatch(List<String> userIds) {
+        if (userIds == null || userIds.isEmpty()) {
+            return new HashMap<>();
+        }
+
+        try {
+            ApiResponse<Map<String, UserSummaryResponse>> response = userServiceClient.getUsersByIds(userIds);
+            if (response != null && response.data() != null) {
+                return response.data();
+            }
+        } catch (Exception e) {
+            log.error("Failed to batch fetch user summaries: {}", userIds, e);
+        }
+
+        return userIds.stream()
+                .collect(Collectors.toMap(
+                        id -> id,
+                        id -> UserSummaryResponse.builder()
+                                .id(id)
+                                .fullName("Unknown User")
+                                .avatar(null)
+                                .build()
+                ));
+    }
+
+    private Map<String, Long> calculateMutualFriendsInBatch(String currentUserId, List<String> friendIds) {
+        String currentUserIdStr = currentUserId;
+
+        List<FriendShip> currentUserFriendships = friendShipRepository.findAllFriendsByUserId(currentUserIdStr);
+        Set<String> currentUserFriendSet = extractFriendIds(currentUserFriendships, currentUserIdStr);
+
+        Map<String, Long> mutualCountMap = new HashMap<>();
+
+        for (String friendId : friendIds) {
+            List<FriendShip> targetFriendships = friendShipRepository.findAllFriendsByUserId(friendId);
+            Set<String> targetFriendSet = extractFriendIds(targetFriendships, friendId);
+
+            long mutualCount = targetFriendSet.stream()
+                    .filter(currentUserFriendSet::contains)
+                    .count();
+
+            mutualCountMap.put(friendId, mutualCount);
+        }
+
+        return mutualCountMap;
     }
 }

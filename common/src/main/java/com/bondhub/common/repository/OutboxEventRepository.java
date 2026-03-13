@@ -6,6 +6,7 @@ import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.data.mongodb.repository.Query;
 import org.springframework.stereotype.Repository;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -21,4 +22,12 @@ public interface OutboxEventRepository extends MongoRepository<OutboxEvent, Stri
     List<OutboxEvent> findByStatusAndRetryCountGreaterThanEqual(OutboxEvent.OutboxEventStatus status, int retryCount);
     
     Optional<OutboxEvent> findTopByAggregateIdAndEventTypeOrderByCreatedAtDesc(String aggregateId, EventType eventType);
+
+    @Query("{ 'eventType': { $in: ?0 }, 'status': ?1 }")
+    List<OutboxEvent> findByEventTypeInAndStatus(List<EventType> eventTypes, OutboxEvent.OutboxEventStatus status);
+
+    @Query("{ 'eventType': { $in: ?0 }, 'status': ?1, 'updatedAt': { $lt: ?2 } }")
+    List<OutboxEvent> findByEventTypeInAndStatusAndUpdatedAtBefore(List<EventType> eventTypes, OutboxEvent.OutboxEventStatus status, Instant beforeTime);
+
+    long countByEventTypeInAndStatus(List<EventType> userIndexRequested, OutboxEvent.OutboxEventStatus outboxEventStatus);
 }

@@ -1,36 +1,31 @@
 package com.bondhub.userservice.controller;
 
 import com.bondhub.common.dto.ApiResponse;
-import com.bondhub.userservice.dto.request.UserCreateRequest;
-import com.bondhub.userservice.dto.request.UserUpdateRequest;
-import com.bondhub.userservice.dto.request.AvatarUpdateRequest;
-import com.bondhub.userservice.dto.request.BackgroundUpdateRequest;
-import com.bondhub.userservice.dto.request.BioUpdateRequest;
-import com.bondhub.userservice.dto.response.UserImageResponse;
-import com.bondhub.userservice.dto.response.UserProfileResponse;
-import com.bondhub.userservice.dto.response.UserResponse;
-import com.bondhub.common.dto.PageResponse;
 import com.bondhub.common.dto.client.userservice.user.response.UserSummaryResponse;
-import com.bondhub.userservice.model.elasticsearch.UserIndex;
+import com.bondhub.userservice.dto.request.BioUpdateRequest;
+import com.bondhub.userservice.dto.request.user.AvatarUpdateRequest;
+import com.bondhub.userservice.dto.request.user.BackgroundUpdateRequest;
+import com.bondhub.userservice.dto.request.user.UserCreateRequest;
+import com.bondhub.userservice.dto.request.user.UserUpdateRequest;
+import com.bondhub.userservice.dto.response.user.UserImageResponse;
+import com.bondhub.userservice.dto.response.user.UserProfileResponse;
+import com.bondhub.userservice.dto.response.user.UserResponse;
 import com.bondhub.userservice.service.user.UserService;
-import com.bondhub.userservice.service.user.UserSearchService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/users")
 @RequiredArgsConstructor
 public class UserController {
     private final UserService userService;
-    private final UserSearchService userSearchService;
 
     @PostMapping
     public ResponseEntity<ApiResponse<UserResponse>> createUser(@Valid @RequestBody UserCreateRequest request) {
@@ -100,10 +95,9 @@ public class UserController {
         return ResponseEntity.ok(ApiResponse.successWithoutData());
     }
 
-    @GetMapping("/search")
-    public ResponseEntity<ApiResponse<PageResponse<List<UserSummaryResponse>>>> searchUsers(
-            @RequestParam String keyword,
-            @PageableDefault(size = 10) Pageable pageable) {
-        return ResponseEntity.ok(ApiResponse.success(userSearchService.searchUsers(keyword, pageable)));
+    @PostMapping("/batch")
+    public ResponseEntity<ApiResponse<Map<String, UserSummaryResponse>>> getUsersByIds(
+            @RequestBody List<String> userIds) {
+        return ResponseEntity.ok(ApiResponse.success(userService.getUsersByIds(userIds)));
     }
 }

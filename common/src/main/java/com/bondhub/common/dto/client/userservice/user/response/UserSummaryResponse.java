@@ -6,5 +6,6 @@ import lombok.Builder;
 public record UserSummaryResponse(
     String id,
     String fullName,
-    String avatar
+    String avatar,
+    String phoneNumber
 ) {}

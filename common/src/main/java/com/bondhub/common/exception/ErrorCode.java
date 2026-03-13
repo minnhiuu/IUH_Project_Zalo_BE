@@ -18,6 +18,11 @@ public enum ErrorCode {
         AUTH_DEVICE_ID_REQUIRED(HttpStatus.BAD_REQUEST, 1007, "error.auth.device.id.required"),
         AUTH_DEVICE_MISMATCH(HttpStatus.FORBIDDEN, 1008, "error.auth.device.mismatch"),
         AUTH_SESSION_KICKED(HttpStatus.UNAUTHORIZED, 1009, "error.auth.session.kicked"),
+        QR_SESSION_EXPIRED(HttpStatus.BAD_REQUEST, 1010, "error.qr.session.expired"),
+        QR_SESSION_INVALID_STATE(HttpStatus.CONFLICT, 1011, "error.qr.session.invalid.state"),
+        QR_SESSION_UNAUTHORIZED(HttpStatus.FORBIDDEN, 1012, "error.qr.session.unauthorized"),
+        AUTH_INVALID_OLD_PASSWORD(HttpStatus.BAD_REQUEST, 1013, "error.auth.invalid.old.password"),
+        AUTH_NEW_PASSWORD_SAME_AS_OLD(HttpStatus.BAD_REQUEST, 1014, "error.auth.new.password.same.as.old"),
         AUTH_ACCOUNT_BANNED(HttpStatus.FORBIDDEN, 1013, "error.auth.account.banned"),
 
         // User account errors (2xxx)
@@ -43,18 +48,19 @@ public enum ErrorCode {
         PERM_NOT_FOUND(HttpStatus.NOT_FOUND, 2102, "error.perm.not.found"),
         PERMISSION_IN_USE(HttpStatus.CONFLICT, 2103, "error.permission.in.use"),
 
-        // VALIDATION (22xx)
-        VALIDATION_ERROR(HttpStatus.BAD_REQUEST, 2200, "error.validation.error"),
-        PROMOTION_CODE_REQUIRED(HttpStatus.BAD_REQUEST, 2201, "error.promotion.code.required"),
-        INVALID_STATUS(HttpStatus.BAD_REQUEST, 2202, "error.invalid.status"),
-        INVALID_DATE_ATTRIBUTE_PAIR(HttpStatus.BAD_REQUEST, 2203, "error.invalid.date.attribute.pair"),
-        INVALID_YEAR_ATTRIBUTE_PAIR(HttpStatus.BAD_REQUEST, 2204, "error.invalid.year.attribute.pair"),
-        INVALID_OPERATION(HttpStatus.BAD_REQUEST, 2205, "error.invalid.operation"),
-        INVALID_PROMOTION_CONDITION(HttpStatus.BAD_REQUEST, 2206, "error.invalid.promotion.condition"),
-        ACC_PASSWORD_MISMATCH(HttpStatus.BAD_REQUEST, 2207, "error.acc.password.mismatch"),
-        QR_SESSION_EXPIRED(HttpStatus.BAD_REQUEST, 1010, "error.qr.session.expired"),
-        QR_SESSION_INVALID_STATE(HttpStatus.CONFLICT, 1011, "error.qr.session.invalid.state"),
-        QR_SESSION_UNAUTHORIZED(HttpStatus.FORBIDDEN, 1012, "error.qr.session.unauthorized"),
+        // Device errors (22xx)
+        DEV_DEVICE_NOT_FOUND(HttpStatus.NOT_FOUND, 2211, "error.dev.device.not.found"),
+        DEV_SESSION_ID_ALREADY_USED(HttpStatus.CONFLICT, 2212, "error.dev.session.id.already.used"),
+
+        // VALIDATION (23xx)
+        VALIDATION_ERROR(HttpStatus.BAD_REQUEST, 2300, "error.validation.error"),
+        PROMOTION_CODE_REQUIRED(HttpStatus.BAD_REQUEST, 2301, "error.promotion.code.required"),
+        INVALID_STATUS(HttpStatus.BAD_REQUEST, 2302, "error.invalid.status"),
+        INVALID_DATE_ATTRIBUTE_PAIR(HttpStatus.BAD_REQUEST, 2303, "error.invalid.date.attribute.pair"),
+        INVALID_YEAR_ATTRIBUTE_PAIR(HttpStatus.BAD_REQUEST, 2304, "error.invalid.year.attribute.pair"),
+        INVALID_OPERATION(HttpStatus.BAD_REQUEST, 2305, "error.invalid.operation"),
+        INVALID_PROMOTION_CONDITION(HttpStatus.BAD_REQUEST, 2306, "error.invalid.promotion.condition"),
+        ACC_PASSWORD_MISMATCH(HttpStatus.BAD_REQUEST, 2307, "error.acc.password.mismatch"),
 
         // Friendship errors (3xxx)
         FRIEND_REQUEST_NOT_FOUND(HttpStatus.NOT_FOUND, 3001, "error.friend.request.not.found"),
@@ -71,6 +77,15 @@ public enum ErrorCode {
         CANNOT_BAN_YOURSELF(HttpStatus.BAD_REQUEST, 2208, "error.cannot.ban.yourself"),
         CANNOT_BAN_ADMIN(HttpStatus.FORBIDDEN, 2209, "error.cannot.ban.admin")
 
+        // Elasticsearch errors (23xx)
+        EL_INDEX_NOT_FOUND(HttpStatus.NOT_FOUND, 2301, "error.el.index.not.found"),
+        EL_CLUSTER_UNHEALTHY(HttpStatus.INTERNAL_SERVER_ERROR, 2302, "error.el.cluster.unhealthy"),
+        EL_DOCUMENT_NOT_FOUND(HttpStatus.NOT_FOUND, 2303, "error.el.document.not.found"),
+        EL_REINDEX_IN_PROGRESS(HttpStatus.CONFLICT, 2304, "error.el.reindex.in.progress"),
+
+        // DLQ errors (24xx)
+        DLQ_EVENT_NOT_FOUND(HttpStatus.NOT_FOUND, 2401, "error.dlq.event.not.found"),
+        DLQ_RETRY_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, 2402, "error.dlq.retry.failed")
         ;
 
         private final HttpStatus httpStatus;
