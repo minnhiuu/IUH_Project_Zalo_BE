@@ -13,5 +13,7 @@ public enum EventType {
     USER_CREATED,
     USER_UPDATED,
     USER_DELETED,
-    USER_INDEX
+
+    USER_INDEX_REQUESTED,
+    USER_INDEX_DELETED
 }

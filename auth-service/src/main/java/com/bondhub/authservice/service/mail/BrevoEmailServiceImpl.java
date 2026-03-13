@@ -1,5 +1,6 @@
 package com.bondhub.authservice.service.mail;
 
+import com.bondhub.authservice.config.MailTemplate;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
@@ -26,9 +27,6 @@ public class BrevoEmailServiceImpl implements MailService {
     @Value("${brevo.api-key}")
     String brevoApiKey;
 
-    @Value("${brevo.template.otp-verification-id}")
-    Long otpTemplateId;
-
     @Value("${BREVO_MAIL}")
     String fromEmail;
 
@@ -36,11 +34,13 @@ public class BrevoEmailServiceImpl implements MailService {
     String senderName;
 
     @Override
-    public void sendOtpEmail(String email, String otp, String accountId) {
+    public void sendOtpEmail(String email, String otp, String templateId, String accountId) {
         try {
+            Long parsedTemplateId = Long.valueOf(templateId);
+
             log.info("=== BREVO EMAIL DEBUG INFO ===");
             log.info("Sending OTP email via Brevo template to: {}", email);
-            log.info("Template ID: {}", otpTemplateId);
+            log.info("Template ID: {}", parsedTemplateId);
             log.info("From: {} <{}>", senderName, fromEmail);
             log.info("OTP: {}", otp);
             log.info("Account ID: {}", accountId);
@@ -75,7 +75,7 @@ public class BrevoEmailServiceImpl implements MailService {
             SendSmtpEmail sendSmtpEmail = new SendSmtpEmail();
             sendSmtpEmail.setSender(sender);
             sendSmtpEmail.setTo(List.of(recipient));
-            sendSmtpEmail.setTemplateId(otpTemplateId);
+            sendSmtpEmail.setTemplateId(parsedTemplateId);
             sendSmtpEmail.setParams(templateParams);
 
             // Send email
@@ -100,63 +100,6 @@ public class BrevoEmailServiceImpl implements MailService {
 
     @Override
     public void sendPasswordResetOtpEmail(String email, String otp) {
-        try {
-            log.info("=== BREVO PASSWORD RESET EMAIL DEBUG INFO ===");
-            log.info("Sending Password Reset OTP email via Brevo to: {}", email);
-            log.info("Template ID: {}", otpTemplateId);
-            log.info("From: {} <{}>", senderName, fromEmail);
-            log.info("OTP: {}", otp);
-
-            // Configure Brevo API client
-            ApiClient defaultClient = Configuration.getDefaultApiClient();
-            ApiKeyAuth apiKey = (ApiKeyAuth) defaultClient.getAuthentication("api-key");
-            apiKey.setApiKey(brevoApiKey);
-
-            // Create transactional emails API instance
-            TransactionalEmailsApi apiInstance = new TransactionalEmailsApi();
-
-            // Create sender
-            SendSmtpEmailSender sender = new SendSmtpEmailSender();
-            sender.setName(senderName);
-            sender.setEmail(fromEmail);
-
-            // Create recipient
-            SendSmtpEmailTo recipient = new SendSmtpEmailTo();
-            recipient.setEmail(email);
-
-            // Create template parameters
-            Map<String, Object> templateParams = new HashMap<>();
-            templateParams.put("otpCode", otp);
-            templateParams.put("accountId", "Password Reset Request");
-            templateParams.put("companyName", "BondHub");
-            templateParams.put("companyTagline", "Connecting people through shared bonds");
-            templateParams.put("supportEmail", "support@bondhub.com");
-            templateParams.put("currentYear", String.valueOf(java.time.Year.now().getValue()));
-
-            // Create email object
-            SendSmtpEmail sendSmtpEmail = new SendSmtpEmail();
-            sendSmtpEmail.setSender(sender);
-            sendSmtpEmail.setTo(List.of(recipient));
-            sendSmtpEmail.setTemplateId(otpTemplateId);
-            sendSmtpEmail.setParams(templateParams);
-
-            // Send email
-            CreateSmtpEmail result = apiInstance.sendTransacEmail(sendSmtpEmail);
-
-            log.info("✅ Password Reset OTP email sent successfully via Brevo");
-            log.info("Message ID: {}", result.getMessageId());
-
-        } catch (ApiException e) {
-            log.error("❌ Brevo API error while sending Password Reset OTP email to: {}", email);
-            log.error("Status code: {}", e.getCode());
-            log.error("Reason: {}", e.getResponseBody());
-            log.error("Response headers: {}", e.getResponseHeaders());
-
-            throw new RuntimeException("Failed to send Password Reset OTP email via Brevo: " + e.getMessage(), e);
-        } catch (Exception e) {
-            log.error("❌ Unexpected error while sending Password Reset OTP email to: {}", email);
-            log.error("Error: {}", e.getMessage(), e);
-            throw new RuntimeException("Failed to send Password Reset OTP email", e);
-        }
+        sendOtpEmail(email, otp, MailTemplate.FORGOT_PASSWORD_OTP_TEMPLATE_ID, "Password Reset Request");
     }
 }

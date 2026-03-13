@@ -1,13 +1,6 @@
 package com.bondhub.authservice.controller;
 
-import com.bondhub.authservice.dto.auth.request.ForgotPasswordRequest;
-import com.bondhub.authservice.dto.auth.request.LoginRequest;
-import com.bondhub.authservice.dto.auth.request.LogoutRequest;
-import com.bondhub.authservice.dto.auth.request.RefreshRequest;
-import com.bondhub.authservice.dto.auth.request.RegisterInitRequest;
-import com.bondhub.authservice.dto.auth.request.RegisterRequest;
-import com.bondhub.authservice.dto.auth.request.RegisterVerifyRequest;
-import com.bondhub.authservice.dto.auth.request.ResetPasswordRequest;
+import com.bondhub.authservice.dto.auth.request.*;
 import com.bondhub.authservice.dto.auth.response.ForgotPasswordResponse;
 import com.bondhub.authservice.dto.auth.response.RegisterInitResponse;
 import com.bondhub.authservice.dto.auth.response.TokenResponse;
@@ -83,18 +76,15 @@ public class AuthController {
 
         try {
             RegisterInitResponse response = authenticationService.initiateRegistration(request);
-            log.info("🟢 Service response: {}", response);
-            
+
             ApiResponse<RegisterInitResponse> apiResponse = ApiResponse.success(response);
-            log.info("🟢 ApiResponse created: code={}, message={}, data={}", 
-                apiResponse.code(), apiResponse.message(), apiResponse.data());
 
             ResponseEntity<ApiResponse<RegisterInitResponse>> responseEntity = ResponseEntity.ok(apiResponse);
-            log.info("🟢 ResponseEntity created with status: {}", responseEntity.getStatusCode());
-            
+            log.info(" ResponseEntity created with status: {}", responseEntity.getStatusCode());
+
             return responseEntity;
         } catch (Exception e) {
-            log.error("🔴 ERROR in controller: ", e);
+            log.error("ERROR in controller: ", e);
             throw e;
         }
     }
@@ -157,12 +147,37 @@ public class AuthController {
 
         TokenResponse tokenResponse = authenticationService.resetPassword(request, userAgent, ipAddress);
 
+        if (Boolean.TRUE.equals(request.logoutOtherDevices())) {
+            authenticationService.logoutAllOtherDevices(tokenResponse.refreshToken());
+        }
+
         // Set refresh token in HttpOnly cookie
         ResponseCookie cookie = cookieUtil.createRefreshTokenCookie(
                 tokenResponse.refreshToken(), tokenResponse.refreshTokenExpirationMs());
         httpResponse.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
 
         return ResponseEntity.ok(ApiResponse.success(tokenResponse));
+    }
+
+    /**
+     * CHANGE PASSWORD - For authenticated users
+     * Updates password without requiring OTP
+     */
+    @PostMapping("/change-password")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ApiResponse<Void>> changePassword(
+            @Valid @RequestBody ChangePasswordRequest request,
+            @CookieValue(value = CookieUtil.REFRESH_TOKEN_COOKIE_NAME, required = false) String cookieRefreshToken) {
+
+        log.info("POST /auth/change-password - Password change request");
+
+        authenticationService.changePassword(request);
+
+        if (Boolean.TRUE.equals(request.logoutOtherDevices())) {
+            authenticationService.logoutAllOtherDevices(cookieRefreshToken);
+        }
+
+        return ResponseEntity.ok(ApiResponse.successWithoutData());
     }
 
     @PostMapping("/refresh")
@@ -214,6 +229,38 @@ public class AuthController {
         // Clear cookie
         ResponseCookie cookie = cookieUtil.clearRefreshTokenCookie();
         httpResponse.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
+
+        return ResponseEntity.ok(ApiResponse.success(null));
+    }
+
+    @PostMapping("/logout-others")
+    public ResponseEntity<ApiResponse<Void>> logoutOtherDevices(
+            @RequestBody(required = false) LogoutRequest request,
+            @CookieValue(value = CookieUtil.REFRESH_TOKEN_COOKIE_NAME, required = false) String cookieRefreshToken) {
+
+        log.info("POST /auth/logout-others - Logout all other devices request");
+
+        String refreshToken = (request != null && request.refreshToken() != null)
+                ? request.refreshToken()
+                : cookieRefreshToken;
+
+        authenticationService.logoutAllOtherDevices(refreshToken);
+
+        return ResponseEntity.ok(ApiResponse.success(null));
+    }
+
+    @PostMapping("/logout-device")
+    public ResponseEntity<ApiResponse<Void>> logoutDevice(
+            @Valid @RequestBody LogoutDeviceRequest request,
+            @CookieValue(value = CookieUtil.REFRESH_TOKEN_COOKIE_NAME, required = false) String cookieRefreshToken) {
+
+        log.info("POST /auth/logout-device - Logout specific device request");
+
+        String refreshToken = (request != null && request.refreshToken() != null)
+                ? request.refreshToken()
+                : cookieRefreshToken;
+
+        authenticationService.logoutDevice(request.sessionId(), refreshToken);
 
         return ResponseEntity.ok(ApiResponse.success(null));
     }

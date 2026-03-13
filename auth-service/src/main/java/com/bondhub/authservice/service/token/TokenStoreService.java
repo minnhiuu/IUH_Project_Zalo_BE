@@ -11,12 +11,12 @@ public interface TokenStoreService {
          * Blacklist an access token (JTI)
          *
          * @param jti         JWT ID
-         * @param userId      User ID associated with the token
+         * @param accountId   Account ID associated with the token
          * @param phoneNumber User phone number (for tracking)
          * @param ttlSeconds  Time to live in seconds (remaining validity of the token)
          * @param reason      Reason for blacklisting (e.g., "Logout", "Security Alert")
          */
-        void blacklistAccessToken(String jti, String userId, String phoneNumber, long ttlSeconds, String reason);
+        void blacklistAccessToken(String jti, String accountId, String phoneNumber, long ttlSeconds, String reason);
 
         /**
          * Check if an access token is blacklisted
@@ -30,7 +30,7 @@ public interface TokenStoreService {
          * Create a new refresh token session
          *
          * @param sessionId    Unique session ID
-         * @param userId       User ID
+         * @param accountId    Account ID
          * @param phoneNumber  User phone number
          * @param deviceId     Device ID (from client)
          * @param deviceType   Device type (WEB, MOBILE, etc.)
@@ -41,11 +41,12 @@ public interface TokenStoreService {
          */
         void createRefreshSession(
                         String sessionId,
-                        String userId,
+                        String accountId,
                         String phoneNumber,
                         String deviceId,
                         DeviceType deviceType,
                         String refreshToken,
+                        String accessTokenJti,
                         String userAgent,
                         String ipAddress,
                         long ttlSeconds);
@@ -92,12 +93,36 @@ public interface TokenStoreService {
         void revokeRefreshSession(String sessionId);
 
         /**
+         * Revoke a refresh session AND blacklist its paired access token.
+         * <p>
+         * Use this instead of {@link #revokeRefreshSession(String)} when forcing a
+         * device logout so the still-valid access token is invalidated immediately.
+         * </p>
+         *
+         * @param sessionId        Session ID to revoke
+         * @param accountId        Account ID (for blacklist metadata)
+         * @param accessTokenTtlMs Remaining TTL of the access token in milliseconds
+         *                         (pass 0 or negative to skip blacklisting expired
+         *                         tokens)
+         */
+        void revokeAndBlacklistSession(String sessionId, String accountId, long accessTokenTtlMs);
+
+        /**
          * Revoke all refresh sessions for a user (e.g., "Logout all devices")
          *
-         * @param userId User ID
+         * @param accountId Account ID
          * @return Number of sessions revoked
          */
-        int revokeAllUserRefreshSessions(String userId);
+        int revokeAllUserRefreshSessions(String accountId);
+
+        /**
+         * Revoke all refresh sessions for a user EXCEPT the current one
+         *
+         * @param accountId         Account ID
+         * @param excludedSessionId The session ID to keep active
+         * @return List of revoked session IDs
+         */
+        java.util.List<String> revokeAllUserRefreshSessionsExcept(String accountId, String excludedSessionId);
 
         /**
          * Hash a string using SHA-256

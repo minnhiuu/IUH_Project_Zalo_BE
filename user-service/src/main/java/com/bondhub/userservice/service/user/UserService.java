@@ -1,27 +1,22 @@
 package com.bondhub.userservice.service.user;
 
 import com.bondhub.common.dto.client.userservice.user.response.UserSummaryResponse;
-import com.bondhub.userservice.dto.request.AvatarUpdateRequest;
-import com.bondhub.userservice.dto.request.BackgroundUpdateRequest;
+import com.bondhub.userservice.dto.request.user.AvatarUpdateRequest;
+import com.bondhub.userservice.dto.request.user.BackgroundUpdateRequest;
 import com.bondhub.userservice.dto.request.BioUpdateRequest;
-import com.bondhub.userservice.dto.request.UserCreateRequest;
-import com.bondhub.userservice.dto.request.UserIndexRequest;
-import com.bondhub.userservice.dto.request.UserUpdateRequest;
-import com.bondhub.userservice.dto.response.UserImageResponse;
-import com.bondhub.userservice.dto.response.UserProfileResponse;
-import com.bondhub.userservice.dto.response.UserResponse;
-import org.springframework.web.multipart.MultipartFile;
+import com.bondhub.userservice.dto.request.user.UserCreateRequest;
+import com.bondhub.userservice.dto.request.user.UserUpdateRequest;
+import com.bondhub.userservice.dto.response.user.UserImageResponse;
+import com.bondhub.userservice.dto.response.user.UserProfileResponse;
+import com.bondhub.userservice.dto.response.user.UserResponse;
 
-import java.util.List;
-
+import java.util.List;import java.util.Map;
 public interface UserService {
     UserResponse createUser(UserCreateRequest request);
 
     UserResponse getUserById(String id);
 
     UserResponse getUserByAccountId(String accountId);
-
-    UserSummaryResponse getUserSummaryByAccountId(String accountId);
 
     UserProfileResponse getMyUserWithAccountInfo();
 
@@ -37,7 +32,7 @@ public interface UserService {
 
     UserProfileResponse updateBio(BioUpdateRequest request);
 
-    void indexUserToElasticsearch(UserIndexRequest request);
-
     void deleteUser(String id);
+
+    Map<String, UserSummaryResponse> getUsersByIds(List<String> userIds);
 }

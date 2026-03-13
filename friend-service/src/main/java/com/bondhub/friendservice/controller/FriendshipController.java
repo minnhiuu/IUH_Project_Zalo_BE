@@ -1,6 +1,7 @@
 package com.bondhub.friendservice.controller;
 
 import com.bondhub.common.dto.ApiResponse;
+import com.bondhub.common.dto.PageResponse;
 import com.bondhub.friendservice.dto.request.FriendRequestSendRequest;
 import com.bondhub.friendservice.dto.response.*;
 import com.bondhub.friendservice.service.friendship.FriendshipService;
@@ -8,6 +9,8 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -60,21 +63,30 @@ public class FriendshipController {
     }
 
     @GetMapping("/requests/received")
-    @Operation(summary = "Get received friend requests", description = "Get all pending friend requests received")
-    public ResponseEntity<ApiResponse<List<FriendRequestResponse>>> getReceivedFriendRequests() {
-        return ResponseEntity.ok(ApiResponse.success(friendshipService.getReceivedFriendRequests()));
+    @Operation(summary = "Get received friend requests", description = "Get all pending friend requests received with pagination")
+    public ResponseEntity<ApiResponse<PageResponse<List<FriendRequestResponse>>>> getReceivedFriendRequests(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        Pageable pageable = PageRequest.of(page, size);
+        return ResponseEntity.ok(ApiResponse.success(friendshipService.getReceivedFriendRequests(pageable)));
     }
 
     @GetMapping("/requests/sent")
-    @Operation(summary = "Get sent friend requests", description = "Get all pending friend requests sent")
-    public ResponseEntity<ApiResponse<List<FriendRequestResponse>>> getSentFriendRequests() {
-        return ResponseEntity.ok(ApiResponse.success(friendshipService.getSentFriendRequests()));
+    @Operation(summary = "Get sent friend requests", description = "Get all pending friend requests sent with pagination")
+    public ResponseEntity<ApiResponse<PageResponse<List<FriendRequestResponse>>>> getSentFriendRequests(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        Pageable pageable = PageRequest.of(page, size);
+        return ResponseEntity.ok(ApiResponse.success(friendshipService.getSentFriendRequests(pageable)));
     }
 
     @GetMapping("/friends")
-    @Operation(summary = "Get my friends", description = "Get all accepted friends")
-    public ResponseEntity<ApiResponse<List<FriendResponse>>> getMyFriends() {
-        return ResponseEntity.ok(ApiResponse.success(friendshipService.getMyFriends()));
+    @Operation(summary = "Get my friends", description = "Get all accepted friends with pagination")
+    public ResponseEntity<ApiResponse<PageResponse<List<FriendResponse>>>> getMyFriends(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        Pageable pageable = PageRequest.of(page, size);
+        return ResponseEntity.ok(ApiResponse.success(friendshipService.getMyFriends(pageable)));
     }
 
     @GetMapping("/status/{userId}")

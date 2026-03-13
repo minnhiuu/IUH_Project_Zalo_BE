@@ -44,6 +44,15 @@ public interface AccountService {
     AccountResponse getAccountById(String id);
 
     /**
+     * Retrieves multiple accounts by their IDs.
+     * Used for batch operations to optimize performance.
+     *
+     * @param ids list of account IDs to fetch
+     * @return list of account response DTOs, empty list if none found
+     */
+    List<AccountResponse> getAccountsByIds(List<String> ids);
+
+    /**
      * Retrieves an account by email address.
      *
      * @param email the email address to search for, must not be null

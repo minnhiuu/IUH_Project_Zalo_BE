@@ -11,7 +11,7 @@ import org.springframework.data.mongodb.repository.config.EnableMongoRepositorie
 @EnableFeignClients
 @EnableMongoAuditing
 @ComponentScan(basePackages = { "com.bondhub.fileservice", "com.bondhub.common" })
-@EnableMongoRepositories(basePackages = { "com.bondhub.fileservice.repository", "com.bondhub.common.repository" })
+@EnableMongoRepositories(basePackages = { "com.bondhub.common.repository" })
 public class FileServiceApplication {
 
     public static void main(String[] args) {

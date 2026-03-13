@@ -1,7 +1,9 @@
 package com.bondhub.friendservice.service.friendship;
 
+import com.bondhub.common.dto.PageResponse;
 import com.bondhub.friendservice.dto.request.FriendRequestSendRequest;
 import com.bondhub.friendservice.dto.response.*;
+import org.springframework.data.domain.Pageable;
 
 import java.util.List;
 
@@ -17,13 +19,11 @@ public interface FriendshipService {
     
     void unfriend(String friendId);
     
-    List<FriendRequestResponse> getReceivedFriendRequests();
+    PageResponse<List<FriendRequestResponse>> getReceivedFriendRequests(Pageable pageable);
    
-    List<FriendRequestResponse> getSentFriendRequests();
+    PageResponse<List<FriendRequestResponse>> getSentFriendRequests(Pageable pageable);
     
-    List<FriendResponse> getMyFriends();
-    
-    List<FriendResponse> getFriendsByUserId(String userId);
+    PageResponse<List<FriendResponse>> getMyFriends(Pageable pageable);
     
     FriendshipStatusResponse checkFriendshipStatus(String userId);
     

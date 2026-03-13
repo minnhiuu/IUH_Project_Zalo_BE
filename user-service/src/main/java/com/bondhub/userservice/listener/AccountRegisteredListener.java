@@ -1,14 +1,14 @@
 package com.bondhub.userservice.listener;
 
 import com.bondhub.common.config.kafka.KafkaTopicProperties;
-import com.bondhub.common.enums.Role;
 import com.bondhub.common.event.account.AccountRegisteredEvent;
 import com.bondhub.common.model.kafka.EventType;
 import com.bondhub.common.publisher.OutboxEventPublisher;
 import com.bondhub.common.event.user.UserCreatedEvent;
-import com.bondhub.userservice.dto.request.UserCreateRequest;
-import com.bondhub.userservice.dto.request.UserIndexRequest;
-import com.bondhub.userservice.dto.response.UserResponse;
+import com.bondhub.userservice.dto.request.user.UserCreateRequest;
+import com.bondhub.userservice.dto.response.user.UserResponse;
+import com.bondhub.userservice.dto.request.elasticsearch.UserIndexRequest;
+import com.bondhub.userservice.publisher.UserIndexEventPublisher;
 import com.bondhub.userservice.service.user.UserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,6 +29,7 @@ public class AccountRegisteredListener {
     private final UserService userService;
     private final KafkaTopicProperties kafkaTopicProperties;
     private final OutboxEventPublisher outboxEventPublisher;
+    private final UserIndexEventPublisher  userIndexEventPublisher;
 
     @KafkaListener(
             topics = "#{kafkaTopicProperties.accountEvents.registered}",
@@ -46,24 +47,18 @@ public class AccountRegisteredListener {
                 topic, partition, offset, event.getAccountId());
 
         try {
-            // Create user with fullName and accountId
+            // Create user with fullName, accountId, phoneNumber and role
             UserCreateRequest request = UserCreateRequest.builder()
                     .accountId(event.getAccountId())
                     .fullName(event.getFullName())
+                    .phoneNumber(event.getPhoneNumber())
+                    .role("USER")
                     .build();
 
             UserResponse userResponse = userService.createUser(request);
 
             log.info("✅ User created successfully for accountId: {}, userId: {}", 
                     event.getAccountId(), userResponse.id());
-
-            // Index to Elasticsearch with phoneNumber from event and role=USER
-            UserIndexRequest indexRequest = UserIndexRequest.builder()
-                    .userId(userResponse.id())
-                    .phoneNumber(event.getPhoneNumber())
-                    .role(Role.USER)
-                    .build();
-            userService.indexUserToElasticsearch(indexRequest);
 
             // Publish USER_CREATED event back to complete the saga
             UserCreatedEvent userCreatedEvent = UserCreatedEvent.builder()
