@@ -38,5 +38,8 @@ CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
 # JWT Configuration (fallback - should be configured in config-server)
 jwt:
   secret: ${JWT_SECRET}
-  access-token-expiration: ${JWT_ACCESS_EXPIRATION}
-  refresh-token-expiration: ${JWT_REFRESH_EXPIRATION}
+  access:
+    expiration: ${JWT_ACCESS_EXPIRATION}
+  refresh:
+    expiration-web: ${JWT_REFRESH_EXPIRATION}
+    expiration-mobile: ${JWT_REFRESH_EXPIRATION}

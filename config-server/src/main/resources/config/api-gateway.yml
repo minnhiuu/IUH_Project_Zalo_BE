@@ -61,6 +61,13 @@ spring:
               filters:
                 - RewritePath=/file/v3/api-docs, /v3/api-docs
 
+            - id: friend-service-docs
+              uri: lb://friend-service
+              predicates:
+                - Path=/friend/v3/api-docs/**
+              filters:
+                - RewritePath=/friend/v3/api-docs, /v3/api-docs
+
             - id: search-service-docs
               uri: lb://search-service
               predicates:
@@ -164,6 +171,18 @@ spring:
                     name: searchServiceCircuitBreaker
                     fallbackUri: forward:/fallback/search-service
 
+            # Friend Service Routes (Protected - JWT required)
+            - id: friend-service
+              uri: lb://friend-service
+              predicates:
+                - Path=/api/friendships/**
+              filters:
+                - RewritePath=/api/friendships/(?<segment>.*), /friendships/${segment}
+                - name: CircuitBreaker
+                  args:
+                    name: friendServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/friend-service
+
           # Global CORS Configuration
           globalCors:
             cors-configurations:
@@ -259,6 +278,8 @@ resilience4j:
         base-config: default
       fileServiceCircuitBreaker:
         base-config: default
+      friendServiceCircuitBreaker:
+        base-config: default
 
   timelimiter:
     configs:
@@ -277,6 +298,8 @@ resilience4j:
       notificationServiceCircuitBreaker:
         base-config: default
       fileServiceCircuitBreaker:
+        base-config: default
+      friendServiceCircuitBreaker:
         base-config: default
 
   # Retry Configuration
@@ -304,6 +327,8 @@ resilience4j:
       notificationServiceRetry:
         base-config: default
         max-attempts: 2
+      friendServiceRetry:
+        base-config: default
 
   # Rate Limiter Configuration
   ratelimiter:
@@ -326,6 +351,9 @@ resilience4j:
       notificationServiceRateLimiter:
         base-config: default
         limit-for-period: 60
+      friendServiceRateLimiter:
+        base-config: default
+        limit-for-period: 100
 
   # Bulkhead Configuration
   bulkhead:
@@ -346,6 +374,9 @@ resilience4j:
       notificationServiceBulkhead:
         base-config: default
         max-concurrent-calls: 15
+      friendServiceBulkhead:
+        base-config: default
+        max-concurrent-calls: 20
 
 # Management and Monitoring
 management:
@@ -406,6 +437,8 @@ springdoc:
         url: /notification/v3/api-docs
       - name: File Service
         url: /file/v3/api-docs
+      - name: Friend Service
+        url: /friend/v3/api-docs
       - name: Search Service
         url: /search/v3/api-docs
     # Enable "Try it out" functionality

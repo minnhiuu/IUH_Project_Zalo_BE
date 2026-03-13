@@ -1,6 +1,7 @@
 package com.bondhub.userservice.controller;
 
 import com.bondhub.common.dto.ApiResponse;
+import com.bondhub.common.dto.client.userservice.user.response.UserSummaryResponse;
 import com.bondhub.userservice.dto.request.BioUpdateRequest;
 import com.bondhub.userservice.dto.request.user.AvatarUpdateRequest;
 import com.bondhub.userservice.dto.request.user.BackgroundUpdateRequest;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/users")
@@ -91,5 +93,11 @@ public class UserController {
     public ResponseEntity<ApiResponse<Void>> deleteUser(@PathVariable String id) {
         userService.deleteUser(id);
         return ResponseEntity.ok(ApiResponse.successWithoutData());
+    }
+
+    @PostMapping("/batch")
+    public ResponseEntity<ApiResponse<Map<String, UserSummaryResponse>>> getUsersByIds(
+            @RequestBody List<String> userIds) {
+        return ResponseEntity.ok(ApiResponse.success(userService.getUsersByIds(userIds)));
     }
 }

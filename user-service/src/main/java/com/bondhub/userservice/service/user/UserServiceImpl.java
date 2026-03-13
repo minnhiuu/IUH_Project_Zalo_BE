@@ -2,6 +2,7 @@ package com.bondhub.userservice.service.user;
 
 import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.common.dto.client.fileservice.FileUploadResponse;
+import com.bondhub.common.dto.client.userservice.user.response.UserSummaryResponse;
 import com.bondhub.common.enums.Role;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
@@ -32,7 +33,10 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import org.springframework.transaction.annotation.Transactional;
 
@@ -352,6 +356,26 @@ public class UserServiceImpl implements UserService {
         } catch (Exception e) {
             log.error("Failed to delete user from Elasticsearch index: {}", id, e);
         }
+    }
+
+    @Override
+    public Map<String, UserSummaryResponse> getUsersByIds(List<String> userIds) {
+        log.info("Fetching batch users: {}", userIds);
+        if (userIds == null || userIds.isEmpty()) {
+            return new HashMap<>();
+        }
+
+        List<User> users = userRepository.findAllById(userIds);
+        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+        
+        return users.stream().collect(Collectors.toMap(
+                User::getId,
+                user -> UserSummaryResponse.builder()
+                        .id(user.getId())
+                        .fullName(user.getFullName())
+                        .avatar(user.getAvatar() != null ? baseUrl + user.getAvatar() : null)
+                        .build()
+        ));
     }
 
 }

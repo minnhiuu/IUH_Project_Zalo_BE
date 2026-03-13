@@ -52,6 +52,8 @@ public class SecurityPaths {
             "/notification/v3/api-docs/**",
             "/file/v3/api-docs",
             "/file/v3/api-docs/**",
+            "/friend/v3/api-docs",
+            "/friend/v3/api-docs/**",
 
             // Actuator endpoints
             "/actuator/health",

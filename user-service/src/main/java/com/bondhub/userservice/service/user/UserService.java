@@ -10,8 +10,7 @@ import com.bondhub.userservice.dto.response.user.UserImageResponse;
 import com.bondhub.userservice.dto.response.user.UserProfileResponse;
 import com.bondhub.userservice.dto.response.user.UserResponse;
 
-import java.util.List;
-
+import java.util.List;import java.util.Map;
 public interface UserService {
     UserResponse createUser(UserCreateRequest request);
 
@@ -34,4 +33,6 @@ public interface UserService {
     UserProfileResponse updateBio(BioUpdateRequest request);
 
     void deleteUser(String id);
+
+    Map<String, UserSummaryResponse> getUsersByIds(List<String> userIds);
 }
