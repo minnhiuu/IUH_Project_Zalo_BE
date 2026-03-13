@@ -67,6 +67,21 @@ public class UserSetting {
 
     @Data
     public static class NotificationSettings {
+        // Effective notification values for current device (resolved in service); fallback defaults.
+        private boolean allowNotifications = true;
+        private boolean notifSound = true;
+        private boolean notifVibration = true;
+        private boolean notifMessages = true;
+        private boolean notifGroups = true;
+        private boolean notifFriendRequests = true;
+
+        private DoNotDisturbSettings doNotDisturb = new DoNotDisturbSettings();
+        // Per-device notification section keyed by deviceId.
+        private Map<String, DeviceNotificationSettings> notificationSettingsByDeviceId = new HashMap<>();
+    }
+
+    @Data
+    public static class DeviceNotificationSettings {
         private boolean allowNotifications = true;
         private boolean notifSound = true;
         private boolean notifVibration = true;

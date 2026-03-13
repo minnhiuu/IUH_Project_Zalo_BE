@@ -48,6 +48,7 @@ public class UserSettingServiceImpl implements UserSettingService {
         log.info("Fetching settings for current user: {}", userId);
         UserSetting userSetting = userSettingRepository.getUserSettingByUserId(userId);
         applyCurrentDeviceLanguage(userSetting.getLanguageAndInterface());
+        applyCurrentDeviceNotificationPreference(userSetting.getNotificationSettings());
         return UserSettingResponse.fromUserSetting(userSetting);
     }
 
@@ -102,6 +103,34 @@ public class UserSettingServiceImpl implements UserSettingService {
     public UserSettingResponse updateNotificationSettingsSection(UserSetting.NotificationSettings request) {
         String userId = getCurrentUserId();
         log.info("Updating notificationSettings section for userId: {}", userId);
+
+        UserSetting.NotificationSettings current = userSettingRepository.getNestedSetting(
+                userId,
+                "notificationSettings",
+                UserSetting.NotificationSettings.class);
+
+        if (current == null) {
+            current = new UserSetting.NotificationSettings();
+        }
+        if (request == null) {
+            request = new UserSetting.NotificationSettings();
+        }
+
+        HashMap<String, UserSetting.DeviceNotificationSettings> notificationSettingsByDeviceId = new HashMap<>();
+        if (current.getNotificationSettingsByDeviceId() != null) {
+            notificationSettingsByDeviceId.putAll(current.getNotificationSettingsByDeviceId());
+        }
+        if (request.getNotificationSettingsByDeviceId() != null) {
+            notificationSettingsByDeviceId.putAll(request.getNotificationSettingsByDeviceId());
+        }
+
+        String deviceId = getCurrentDeviceId();
+        if (deviceId != null && !deviceId.isBlank()) {
+            notificationSettingsByDeviceId.put(deviceId, toDeviceNotificationSettings(request, deviceId));
+        }
+
+        request.setNotificationSettingsByDeviceId(notificationSettingsByDeviceId);
+
         userSettingRepository.updateSettingSection(userId, "notificationSettings", request);
         return getMySettings();
     }
@@ -201,8 +230,12 @@ public class UserSettingServiceImpl implements UserSettingService {
     public UserSetting.NotificationSettings getNotificationSettings() {
         String userId = getCurrentUserId();
         log.info("Fetching notification settings for userId: {}", userId);
-        return userSettingRepository.getNestedSetting(userId, "notificationSettings",
-                UserSetting.NotificationSettings.class);
+        UserSetting.NotificationSettings settings = userSettingRepository.getNestedSetting(
+            userId,
+            "notificationSettings",
+            UserSetting.NotificationSettings.class);
+        applyCurrentDeviceNotificationPreference(settings);
+        return settings;
     }
 
     @Override
@@ -308,6 +341,66 @@ public class UserSettingServiceImpl implements UserSettingService {
         if (deviceLanguage != null) {
             settings.setLanguage(deviceLanguage);
         }
+    }
+
+    private void applyCurrentDeviceNotificationPreference(UserSetting.NotificationSettings settings) {
+        if (settings == null || settings.getNotificationSettingsByDeviceId() == null
+                || settings.getNotificationSettingsByDeviceId().isEmpty()) {
+            return;
+        }
+
+        String deviceId = getCurrentDeviceId();
+        if (deviceId == null || deviceId.isBlank()) {
+            return;
+        }
+
+        UserSetting.DeviceNotificationSettings deviceSettings = settings.getNotificationSettingsByDeviceId().get(deviceId);
+        if (deviceSettings == null) {
+            return;
+        }
+
+        settings.setAllowNotifications(deviceSettings.isAllowNotifications());
+        settings.setNotifSound(deviceSettings.isNotifSound());
+        settings.setNotifVibration(deviceSettings.isNotifVibration());
+        settings.setNotifMessages(deviceSettings.isNotifMessages());
+        settings.setNotifGroups(deviceSettings.isNotifGroups());
+        settings.setNotifFriendRequests(deviceSettings.isNotifFriendRequests());
+        if (deviceSettings.getDoNotDisturb() != null) {
+            settings.setDoNotDisturb(deviceSettings.getDoNotDisturb());
+        }
+    }
+
+    private UserSetting.DeviceNotificationSettings toDeviceNotificationSettings(
+            UserSetting.NotificationSettings request,
+            String deviceId
+    ) {
+        if (request == null) {
+            return new UserSetting.DeviceNotificationSettings();
+        }
+
+        if (request.getNotificationSettingsByDeviceId() != null
+                && !request.getNotificationSettingsByDeviceId().isEmpty()) {
+            UserSetting.DeviceNotificationSettings byDeviceId = request.getNotificationSettingsByDeviceId().get(deviceId);
+            if (byDeviceId != null) {
+                return byDeviceId;
+            }
+
+            if (request.getNotificationSettingsByDeviceId().size() == 1) {
+                return request.getNotificationSettingsByDeviceId().values().iterator().next();
+            }
+        }
+
+        UserSetting.DeviceNotificationSettings deviceSettings = new UserSetting.DeviceNotificationSettings();
+        deviceSettings.setAllowNotifications(request.isAllowNotifications());
+        deviceSettings.setNotifSound(request.isNotifSound());
+        deviceSettings.setNotifVibration(request.isNotifVibration());
+        deviceSettings.setNotifMessages(request.isNotifMessages());
+        deviceSettings.setNotifGroups(request.isNotifGroups());
+        deviceSettings.setNotifFriendRequests(request.isNotifFriendRequests());
+        if (request.getDoNotDisturb() != null) {
+            deviceSettings.setDoNotDisturb(request.getDoNotDisturb());
+        }
+        return deviceSettings;
     }
 
     private String getCurrentDeviceId() {
