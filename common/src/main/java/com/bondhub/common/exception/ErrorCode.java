@@ -23,6 +23,7 @@ public enum ErrorCode {
         QR_SESSION_UNAUTHORIZED(HttpStatus.FORBIDDEN, 1012, "error.qr.session.unauthorized"),
         AUTH_INVALID_OLD_PASSWORD(HttpStatus.BAD_REQUEST, 1013, "error.auth.invalid.old.password"),
         AUTH_NEW_PASSWORD_SAME_AS_OLD(HttpStatus.BAD_REQUEST, 1014, "error.auth.new.password.same.as.old"),
+        AUTH_ACCOUNT_BANNED(HttpStatus.FORBIDDEN, 1013, "error.auth.account.banned"),
 
         // User account errors (2xxx)
         ACC_PHONE_NUMBER_ALREADY_USED(HttpStatus.CONFLICT, 2001, "error.acc.phone.number.already.used"),
@@ -72,6 +73,9 @@ public enum ErrorCode {
         NOT_AUTHORIZED_TO_CANCEL(HttpStatus.FORBIDDEN, 3008, "error.friend.not.authorized.to.cancel"),
         FRIEND_REQUEST_NOT_PENDING(HttpStatus.BAD_REQUEST, 3009, "error.friend.request.not.pending"),
 
+        // Admin / ban errors
+        CANNOT_BAN_YOURSELF(HttpStatus.BAD_REQUEST, 2208, "error.cannot.ban.yourself"),
+        CANNOT_BAN_ADMIN(HttpStatus.FORBIDDEN, 2209, "error.cannot.ban.admin"),
 
         // Elasticsearch errors (23xx)
         EL_INDEX_NOT_FOUND(HttpStatus.NOT_FOUND, 2301, "error.el.index.not.found"),

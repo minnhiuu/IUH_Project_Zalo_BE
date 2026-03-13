@@ -189,6 +189,16 @@ public class TokenStoreServiceImpl implements TokenStoreService {
     }
 
     @Override
+    public void updateSessionAccessToken(String sessionId, String accessTokenJti, Long accessTokenExpiresAt) {
+        refreshSessionRepository.findById(sessionId).ifPresent(session -> {
+            session.setAccessTokenJti(accessTokenJti);
+            session.setAccessTokenExpiresAt(accessTokenExpiresAt);
+            refreshSessionRepository.save(session);
+            log.debug("Session access token updated: sessionId={}, jti={}", sessionId, accessTokenJti);
+        });
+    }
+
+    @Override
     public void revokeRefreshSession(String sessionId) {
         refreshSessionRepository.findById(sessionId).ifPresent(session -> {
             session.setRevoked(true);

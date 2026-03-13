@@ -77,7 +77,7 @@ public class AuthenticationServiceImpl implements AuthenticationService {
         }
 
         if (!account.getEnabled()) {
-            throw new AppException(ErrorCode.AUTH_UNAUTHENTICATED);
+            throw new AppException(ErrorCode.AUTH_ACCOUNT_BANNED);
         }
 
         String userId = null;
@@ -89,6 +89,13 @@ public class AuthenticationServiceImpl implements AuthenticationService {
             }
         } catch (Exception e) {
             log.error("Failed to fetch user profile via API for accountId: {}", account.getId(), e);
+        }
+
+        // Record last login timestamp (non-blocking, best-effort)
+        try {
+            userServiceClient.recordLastLogin(account.getId());
+        } catch (Exception e) {
+            log.warn("Failed to record last login for accountId={}: {}", account.getId(), e.getMessage());
         }
 
         return tokenProvider.generateFullTokenResponse(
@@ -151,7 +158,7 @@ public class AuthenticationServiceImpl implements AuthenticationService {
                 .orElseThrow(() -> new AppException(ErrorCode.ACC_ACCOUNT_NOT_FOUND));
 
         if (!account.getEnabled()) {
-            throw new AppException(ErrorCode.AUTH_UNAUTHENTICATED);
+            throw new AppException(ErrorCode.AUTH_ACCOUNT_BANNED);
         }
 
         tokenStoreService.revokeRefreshSession(sessionId);

@@ -11,6 +11,7 @@ import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.userservice.client.AuthServiceClient;
 import com.bondhub.userservice.client.FileServiceClient;
 import com.bondhub.userservice.dto.request.BioUpdateRequest;
+import com.bondhub.userservice.dto.request.elasticsearch.UserIndexRequest;
 import com.bondhub.userservice.dto.request.user.UserCreateRequest;
 import com.bondhub.userservice.dto.request.user.UserUpdateRequest;
 import com.bondhub.userservice.dto.request.user.AvatarUpdateRequest;
@@ -23,7 +24,6 @@ import com.bondhub.userservice.mapper.UserMapper;
 import com.bondhub.userservice.mapper.UserProfileMapper;
 import com.bondhub.userservice.model.User;
 import com.bondhub.userservice.publisher.UserIndexEventPublisher;
-import com.bondhub.userservice.dto.request.elasticsearch.UserIndexRequest;
 import com.bondhub.userservice.repository.UserRepository;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
@@ -32,6 +32,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
@@ -153,8 +154,23 @@ public class UserServiceImpl implements UserService {
     @Override
     public List<UserResponse> getAllUsers() {
         log.info("Fetching all users");
+        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+
         return userRepository.findAll().stream()
-                .map(userMapper::toUserResponse)
+                .map(user -> {
+                    UserResponse response = userMapper.toUserResponse(user);
+                    return UserResponse.builder()
+                            .id(response.id())
+                            .fullName(response.fullName())
+                            .dob(response.dob())
+                            .bio(response.bio())
+                            .gender(response.gender())
+                            .accountInfo(response.accountInfo())
+                            .avatar(response.avatar() != null ? baseUrl + response.avatar() : null)
+                            .background(response.background() != null ? baseUrl + response.background() : null)
+                            .backgroundY(response.backgroundY())
+                            .build();
+                })
                 .toList();
     }
 
@@ -367,7 +383,7 @@ public class UserServiceImpl implements UserService {
 
         List<User> users = userRepository.findAllById(userIds);
         String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
-        
+
         return users.stream().collect(Collectors.toMap(
                 User::getId,
                 user -> UserSummaryResponse.builder()
@@ -377,5 +393,4 @@ public class UserServiceImpl implements UserService {
                         .build()
         ));
     }
-
 }

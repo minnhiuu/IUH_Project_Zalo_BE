@@ -33,11 +33,13 @@ public class RefreshTokenSession {
 
     String refreshTokenHash;
     String accessTokenJti; // JTI of the paired access token – used to blacklist on force-logout
+    Long accessTokenExpiresAt;
     String userAgentHash;
     String ipHash;
 
     Long issuedAt;
     Long expiresAt;
+
     @Builder.Default
     Boolean revoked = false;
 

@@ -35,4 +35,5 @@ public interface UserService {
     void deleteUser(String id);
 
     Map<String, UserSummaryResponse> getUsersByIds(List<String> userIds);
+
 }

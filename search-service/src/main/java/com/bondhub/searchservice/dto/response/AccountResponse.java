@@ -7,5 +7,6 @@ public record AccountResponse(
     String id,
     String phoneNumber,
     String email,
-    String role
+    String role,
+    Boolean isVerified
 ) {}

@@ -9,12 +9,12 @@ public record UserProfileResponse(
     String id,
     String phoneNumber,
     String email,
+    String role,
     String fullName,
     String bio,
     Gender gender,
     LocalDate dob,
     String avatar,
     String background,
-    Double backgroundY,
-    String role
+    Double backgroundY
 ) {}

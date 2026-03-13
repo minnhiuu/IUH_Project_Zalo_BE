@@ -4,6 +4,7 @@ import com.bondhub.authservice.dto.account.request.AccountCreateRequest;
 import com.bondhub.authservice.dto.account.response.AccountResponse;
 import com.bondhub.authservice.dto.account.request.AccountUpdateRequest;
 import com.bondhub.common.dto.ApiResponse;
+import com.bondhub.common.exception.AppException;
 
 import java.util.List;
 
@@ -116,5 +117,23 @@ public interface AccountService {
      * @return true if account exists, false otherwise
      */
     boolean existsByPhoneNumber(String phoneNumber);
+
+    /**
+     * Bans an account by disabling it.
+     *
+     * @param id     the account id
+     * @param reason the ban reason
+     */
+    void banAccount(String id, String reason);
+
+    /**
+     * Unbans an account by re-enabling it.
+     *
+     * @param id the account id
+     */
+    void unbanAccount(String id);
+
+
+
 }
 

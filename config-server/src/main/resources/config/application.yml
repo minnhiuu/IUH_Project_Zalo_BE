@@ -15,7 +15,7 @@ spring:
 
   # ==================== KAFKA CONFIGURATION ====================
   kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
 
     # Common Producer Configuration
     producer:

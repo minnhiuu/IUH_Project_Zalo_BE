@@ -12,4 +12,8 @@ public interface UserInternalService {
     UserSyncResponse getUserById(String userId);
 
     List<UserSyncResponse> getUsersBatch(String lastId, int size);
+
+    void recordLastLogin(String accountId);
+
+    void syncBanStatus(String accountId, boolean banned);
 }

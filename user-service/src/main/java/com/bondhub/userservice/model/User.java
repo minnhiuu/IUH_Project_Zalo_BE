@@ -5,12 +5,14 @@ import com.bondhub.userservice.model.enums.Gender;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
+import lombok.experimental.SuperBuilder;
+import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
-import org.springframework.data.mongodb.core.mapping.Field;
 import org.springframework.data.mongodb.core.mapping.FieldType;
 import org.springframework.data.mongodb.core.mapping.MongoId;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Set;
 
 @Document("users")
@@ -18,7 +20,7 @@ import java.util.Set;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
+@SuperBuilder
 @FieldDefaults(level = AccessLevel.PRIVATE)
 @EqualsAndHashCode(onlyExplicitlyIncluded = true, callSuper = false)
 @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -32,11 +34,13 @@ public class User extends BaseModel {
     String bio;
 
     Gender gender;
-    @Field(targetType = FieldType.OBJECT_ID)
     String accountId;
     Set<String> pinnedConversations;
 
     String avatar;
     String background;
     Double backgroundY;
+
+    /** Updated on every successful login (set by auth-service via internal API) */
+    LocalDateTime lastLoginAt;
 }

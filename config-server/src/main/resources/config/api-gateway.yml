@@ -114,12 +114,35 @@ spring:
                     fallbackUri: forward:/fallback/file-service
 
             # User Service Routes (Protected - JWT required)
+            - id: user-service-audit-logs
+              uri: lb://user-service
+              predicates:
+                - Path=/api/audit-logs,/api/audit-logs/**
+              filters:
+                - RewritePath=/api/(?<segment>.*), /${segment}
+                - name: CircuitBreaker
+                  args:
+                    name: userServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/user-service
+
             - id: user-service
               uri: lb://user-service
               predicates:
                 - Path=/api/users/**
               filters:
                 - RewritePath=/api/users/(?<segment>.*), /users/${segment}
+                - name: CircuitBreaker
+                  args:
+                    name: userServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/user-service
+
+            # Admin Routes (Protected - ADMIN role required)
+            - id: user-service-admin
+              uri: lb://user-service
+              predicates:
+                - Path=/api/admin/**
+              filters:
+                - RewritePath=/api/admin/(?<segment>.*), /admin/${segment}
                 - name: CircuitBreaker
                   args:
                     name: userServiceCircuitBreaker

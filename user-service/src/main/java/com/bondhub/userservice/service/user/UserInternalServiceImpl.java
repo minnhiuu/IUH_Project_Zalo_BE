@@ -17,6 +17,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
@@ -79,6 +80,24 @@ public class UserInternalServiceImpl implements UserInternalService {
         return users.stream()
                 .map(this::mapToSyncResponse)
                 .toList();
+    }
+
+    @Override
+    public void recordLastLogin(String accountId) {
+        userRepository.findByAccountId(accountId).ifPresent(user -> {
+            user.setLastLoginAt(LocalDateTime.now());
+            userRepository.save(user);
+            log.debug("Recorded last login for accountId={}, userId={}", accountId, user.getId());
+        });
+    }
+
+    @Override
+    public void syncBanStatus(String accountId, boolean banned) {
+        userRepository.findByAccountId(accountId).ifPresent(user -> {
+            user.setActive(!banned);
+            userRepository.save(user);
+            log.info("Synced ban status for accountId={}, banned={}", accountId, banned);
+        });
     }
 
     private UserSyncResponse mapToSyncResponse(User user) {

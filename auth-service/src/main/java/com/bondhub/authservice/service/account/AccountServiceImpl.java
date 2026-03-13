@@ -6,6 +6,7 @@ import com.bondhub.authservice.dto.account.request.AccountUpdateRequest;
 import com.bondhub.authservice.mapper.AccountMapper;
 import com.bondhub.authservice.model.Account;
 import com.bondhub.authservice.repository.AccountRepository;
+import com.bondhub.authservice.service.token.TokenStoreService;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
 import lombok.AccessLevel;
@@ -26,6 +27,7 @@ public class AccountServiceImpl implements AccountService {
     AccountRepository accountRepository;
     AccountMapper accountMapper;
     PasswordEncoder passwordEncoder;
+    TokenStoreService tokenStoreService;
 
     @Override
     public AccountResponse createAccount(AccountCreateRequest request) {
@@ -175,5 +177,28 @@ public class AccountServiceImpl implements AccountService {
         boolean exists = accountRepository.existsByPhoneNumber(phoneNumber);
         log.info("Account with phone number {} exists: {}", phoneNumber, exists);
         return exists;
+    }
+
+    @Override
+    public void banAccount(String id, String reason) {
+        log.info("Banning account id={}, reason={}", id, reason);
+        Account account = accountRepository.findById(id)
+                .orElseThrow(() -> new AppException(ErrorCode.ACC_ACCOUNT_NOT_FOUND));
+        account.setEnabled(false);
+        account.setActive(false);
+        accountRepository.save(account);
+        int revoked = tokenStoreService.revokeAllUserRefreshSessions(id);
+        log.info("Account banned: id={}, revokedSessions={}", id, revoked);
+    }
+
+    @Override
+    public void unbanAccount(String id) {
+        log.info("Unbanning account id={}", id);
+        Account account = accountRepository.findById(id)
+                .orElseThrow(() -> new AppException(ErrorCode.ACC_ACCOUNT_NOT_FOUND));
+        account.setEnabled(true);
+        account.setActive(true);
+        accountRepository.save(account);
+        log.info("Account unbanned: id={}", id);
     }
 }

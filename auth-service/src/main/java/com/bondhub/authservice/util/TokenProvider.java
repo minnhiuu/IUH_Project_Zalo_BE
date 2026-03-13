@@ -88,6 +88,10 @@ public class TokenProvider {
             log.warn("Failed to save device in MongoDB for accountId: {}, reason: {}", account.getId(), e.getMessage());
         }
 
+        long accessTokenTtlSeconds = jwtUtil.getAccessTokenExpirationSeconds();
+        tokenStoreService.updateSessionAccessToken(sessionId, accessTokenJti,
+                System.currentTimeMillis() + (accessTokenTtlSeconds * 1000));
+
         return TokenResponse.of(accessToken, refreshToken, refreshExpirationMs);
     }
 }

@@ -25,6 +25,8 @@ public record AccountResponse(
         String phoneNumber,
         String email,
         String role,
+        Boolean enabled,
+        Boolean isVerified,
         LocalDateTime createdAt,
         LocalDateTime lastModifiedAt,
         String createdBy,
