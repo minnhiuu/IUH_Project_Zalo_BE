@@ -2,6 +2,7 @@ package com.bondhub.authservice.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -19,6 +20,7 @@ import java.util.List;
  * Configures stateless JWT authentication
  */
 @Configuration
+@EnableMethodSecurity // Enable @PreAuthorize, @PostAuthorize
 public class SecurityConfig {
 
     @Bean
@@ -33,9 +35,11 @@ public class SecurityConfig {
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/auth/**").permitAll()
+                        .requestMatchers("/internal/**").permitAll() // Internal service-to-service communication
+                        .requestMatchers("/auth/**", "/accounts/**").permitAll()
                         .requestMatchers("/actuator/**").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
+                        .requestMatchers("/error").permitAll()
                         .anyRequest().authenticated());
         return http.build();
     }

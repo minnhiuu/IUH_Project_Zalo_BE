@@ -1,0 +1,18 @@
+package com.bondhub.userservice.model.enums;
+
+
+public enum UserAction {
+    USER_CREATED,
+    USER_UPDATED,
+    PROFILE_UPDATED,
+    AVATAR_UPDATED,
+    BACKGROUND_UPDATED,
+    PASSWORD_CHANGED,
+    EMAIL_VERIFIED,
+    PHONE_VERIFIED,
+    ACCOUNT_LOCKED,
+    ACCOUNT_UNLOCKED,
+    LOGIN_SUCCESS,
+    LOGIN_FAILED,
+    LOGOUT
+}

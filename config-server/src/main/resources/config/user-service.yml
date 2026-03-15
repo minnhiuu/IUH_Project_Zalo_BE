@@ -4,55 +4,51 @@ server:
 spring:
   application:
     name: user-service
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
 
-    data:
-      mongodb:
-        uri: ${MONGODB_URI_USERS:mongodb://root:rootpassword123@127.0.0.1:27017/bondhub_user?authSource=admin}
-        auto-index-creation: true
-        uuid-representation: standard
+  messages:
+    basename: i18n/messages, i18n/messages-user
 
-# Eureka Client Configuration
-eureka:
-  client:
-    service-url:
-      defaultZone: ${EUREKA_SERVER_URL:http://localhost:8761/eureka/}
-    register-with-eureka: true
-    fetch-registry: true
-    registry-fetch-interval-seconds: 30
-  instance:
-    prefer-ip-address: true
-    instance-id: ${spring.application.name}:${spring.application.instance_id:${random.value}}
-    lease-renewal-interval-in-seconds: 30
-    lease-expiration-duration-in-seconds: 90
-    metadata-map:
-      version: 0.0.1-SNAPSHOT
-      environment: ${spring.profiles.active:default}
+  data:
+    mongodb:
+      uri: ${MONGODB_URI_USERS}
+      auto-index-creation: true
+      uuid-representation: standard
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT}
+      password: ${REDIS_PASSWORD}
+      timeout: 5000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
 
-# Management and Monitoring
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info,metrics,prometheus,refresh,env
-      base-path: /actuator
-  endpoint:
-    health:
-      show-details: when-authorized
-      probes:
-        enabled: true
-  metrics:
-    export:
-      prometheus:
-        enabled: true
-    tags:
-      application: ${spring.application.name}
-  health:
-    livenessstate:
-      enabled: true
-    readinessstate:
-      enabled: true
+  # Kafka Configuration for User Service
+  kafka:
+    # Producer configuration for user events
+    producer:
+      client-id: user-service-producer
+      retries: 3
+      properties:
+        max.in.flight.requests.per.connection: 5
 
-# Logging Configuration
+    # Consumer configuration for incoming events (if needed)
+    consumer:
+      group-id: user-service-group
+      client-id: user-service-consumer
+      max-poll-records: 100
+
+    # Listener configuration
+    listener:
+      concurrency: 2
+      ack-mode: manual
+
+# Service-specific logging overrides
 logging:
   level:
     root: INFO
@@ -61,36 +57,73 @@ logging:
     org.springframework.security: DEBUG
     org.hibernate.SQL: DEBUG
     org.hibernate.type.descriptor.sql.BasicBinder: TRACE
-  pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
-    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
   file:
     name: logs/user-service.log
     max-size: 10MB
     max-history: 30
     total-size-cap: 1GB
 
-# Resilience4j Circuit Breaker (if needed)
+# Service-specific resilience4j overrides
 resilience4j:
   circuitbreaker:
     instances:
       userService:
-        register-health-indicator: true
-        sliding-window-size: 10
-        minimum-number-of-calls: 5
-        permitted-number-of-calls-in-half-open-state: 3
-        wait-duration-in-open-state: 30s
-        failure-rate-threshold: 50
-        slow-call-rate-threshold: 100
-        slow-call-duration-threshold: 3s
+        base-config: default
 
   retry:
     instances:
       userService:
-        max-attempts: 3
-        wait-duration: 1s
+        base-config: default
 
   timelimiter:
     instances:
       userService:
-        timeout-duration: 5s
+        base-config: default
+
+# Service-specific security configuration
+bondhub:
+  security:
+    public-endpoints:
+      - /users
+
+# AWS S3 Configuration
+cloud:
+  aws:
+    region:
+      static: ${AWS_REGION}
+aws:
+  s3:
+    bucket:
+      name: ${AWS_S3_BUCKET_NAME}
+
+# Elasticsearch Configuration
+elasticsearch:
+  # Bulk indexing settings
+  sync:
+    batch-size: 500 # Number of documents per batch
+    max-retry: 3 # Max retry attempts for failed batches
+    parallelism: ${ELASTICSEARCH_PARALLELISM:0} # 0 = auto-detect CPU cores
+
+  # Real-time indexing settings
+  index:
+    realtime-threads: 2 # Thread pool size for real-time indexing
+    async-timeout-seconds: 30 # Timeout for async operations
+
+  # Index settings
+  alias: users # Main index alias
+
+  # Monitoring settings (for future use)
+  monitoring:
+    enabled: true
+    log-slow-operations: true
+    slow-operation-threshold-ms: 1000
+
+# SpringDoc OpenAPI Configuration
+springdoc:
+  api-docs:
+    enabled: true
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html
+  show-actuator: false

@@ -5,31 +5,34 @@ import com.bondhub.common.model.BaseModel;
 import com.bondhub.common.enums.Role;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
+import lombok.experimental.SuperBuilder;
 import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.mapping.FieldType;
 import org.springframework.data.mongodb.core.mapping.MongoId;
-
-import java.util.Set;
 
 @Document("accounts")
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
+@SuperBuilder
 @FieldDefaults(level = AccessLevel.PRIVATE)
 @EqualsAndHashCode(onlyExplicitlyIncluded = true, callSuper = false)
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class Account extends BaseModel {
     @EqualsAndHashCode.Include
-    @MongoId
+    @MongoId(FieldType.OBJECT_ID)
     String id;
 
+    String email;
     String phoneNumber;
+
     String password;
 
-    String email;
+    Role role;
 
-    Set<Role> roles;
+    @Builder.Default
+    Boolean isVerified = false;
 
     @Builder.Default
     Boolean enabled = true;

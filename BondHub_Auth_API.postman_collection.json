@@ -11,13 +11,49 @@
       "name": "Authentication",
       "item": [
         {
-          "name": "Register New Account",
+          "name": "Register Step 1: Initiate",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "if (pm.response.code === 201) {",
+                  "if (pm.response.code === 200) {",
+                  "    var jsonData = pm.response.json();",
+                  "    console.log(\"OTP sent to: \" + jsonData.data.email);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "raw": "{\n  \"email\": \"testuser@example.com\",\n  \"password\": \"Password123!\",\n  \"confirmPassword\": \"Password123!\",\n  \"fullName\": \"John Doe\",\n  \"phoneNumber\": \"1234567890\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/register",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "register"]
+            },
+            "description": "Step 1 of Registration. Validates input, generates OTP, and sends email. Returns confirmation message."
+          },
+          "response": []
+        },
+        {
+          "name": "Register Step 2: Verify & Complete",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
                   "    var jsonData = pm.response.json();",
                   "    if (jsonData.data && jsonData.data.access_token) {",
                   "        pm.environment.set(\"access_token\", jsonData.data.access_token);",
@@ -40,20 +76,79 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"testuser@example.com\",\n  \"password\": \"Password123!\",\n  \"phoneNumber\": \"1234567890\"\n}"
+              "raw": "{\n  \"email\": \"testuser@example.com\",\n  \"otp\": \"123456\",\n  \"deviceId\": \"web-device-001\",\n  \"deviceType\": \"WEB\"\n}"
             },
             "url": {
-              "raw": "{{base_url}}/api/auth/register",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "auth",
-                "register"
-              ]
+              "raw": "{{base_url}}/api/auth/register/verify",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "register", "verify"]
             },
-            "description": "Register a new user account. Returns access token and refresh token."
+            "description": "Step 2 of Registration. Verifies OTP, creates account, and returns tokens."
+          },
+          "response": []
+        },
+        {
+          "name": "Forgot Password (Step 1)",
+          "event": [],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"testuser@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/forgot-password",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "forgot-password"]
+            },
+            "description": "Initiate password reset. Sends OTP to email."
+          },
+          "response": []
+        },
+        {
+          "name": "Reset Password (Step 2)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var jsonData = pm.response.json();",
+                  "    if (jsonData.data && jsonData.data.access_token) {",
+                  "        pm.environment.set(\"access_token\", jsonData.data.access_token);",
+                  "        pm.environment.set(\"refresh_token\", jsonData.data.refresh_token);",
+                  "        console.log(\"Tokens saved to environment\");",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"testuser@example.com\",\n  \"otp\": \"123456\",\n  \"newPassword\": \"NewPassword123!\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/reset-password",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "reset-password"]
+            },
+            "description": "Complete password reset. Verifies OTP, updates password, and returns new tokens."
           },
           "response": []
         },
@@ -91,14 +186,8 @@
             },
             "url": {
               "raw": "{{base_url}}/api/auth/login",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "auth",
-                "login"
-              ]
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "login"]
             },
             "description": "Login with phone number and password. Returns JWT access token and refresh token."
           },
@@ -137,16 +226,33 @@
             },
             "url": {
               "raw": "{{base_url}}/api/auth/refresh",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "auth",
-                "refresh"
-              ]
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "refresh"]
             },
             "description": "Refresh the access token using the refresh token. The refresh token remains the same."
+          },
+          "response": []
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refresh_token}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/logout",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "logout"]
+            },
+            "description": "Logout user using refresh token."
           },
           "response": []
         },
@@ -157,14 +263,8 @@
             "header": [],
             "url": {
               "raw": "{{base_url}}/api/auth/validate?token={{access_token}}",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "auth",
-                "validate"
-              ],
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "validate"],
               "query": [
                 {
                   "key": "token",
@@ -195,14 +295,8 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/users/me",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "users",
-                "me"
-              ]
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "me"]
             },
             "description": "Example of a protected endpoint. Requires valid JWT token in Authorization header."
           },
@@ -215,14 +309,8 @@
             "header": [],
             "url": {
               "raw": "{{base_url}}/api/users/me",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "users",
-                "me"
-              ]
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "me"]
             },
             "description": "Test accessing a protected endpoint without token. Should return 401 Unauthorized."
           },
@@ -342,7 +430,15 @@
             "url": {
               "raw": "{{base_url}}/api/users/test/security/users/{{user_id}}/profile",
               "host": ["{{base_url}}"],
-              "path": ["api", "users", "test", "security", "users", "{{user_id}}", "profile"]
+              "path": [
+                "api",
+                "users",
+                "test",
+                "security",
+                "users",
+                "{{user_id}}",
+                "profile"
+              ]
             },
             "description": "@PreAuthorize('#userId == authentication.principal.id') - User can only access their own profile. Set {{user_id}} in environment."
           },
@@ -362,7 +458,14 @@
             "url": {
               "raw": "{{base_url}}/api/users/test/security/users/{{user_id}}",
               "host": ["{{base_url}}"],
-              "path": ["api", "users", "test", "security", "users", "{{user_id}}"]
+              "path": [
+                "api",
+                "users",
+                "test",
+                "security",
+                "users",
+                "{{user_id}}"
+              ]
             },
             "description": "@PreAuthorize('hasRole(ADMIN) or #userId == authentication.principal.id') - ADMIN can delete anyone, USER can only delete themselves."
           },
@@ -390,6 +493,490 @@
         }
       ],
       "description": "Security context filter test endpoints - demonstrates @PreAuthorize, role-based access, and security context functionality"
+    },
+    {
+      "name": "i18n Testing",
+      "item": [
+        {
+          "name": "Trigger Error (Default/EN)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/users/me",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "me"]
+            },
+            "description": "Trigger an error (401 Unauthorized) without specifying a language. Should return English message by default."
+          },
+          "response": []
+        },
+        {
+          "name": "Trigger Error (Vietnamese)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept-Language",
+                "value": "vi",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/users/me",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "me"]
+            },
+            "description": "Trigger an error (401 Unauthorized) with Accept-Language: vi. Should return Vietnamese message."
+          },
+          "response": []
+        }
+      ],
+      "description": "Tests for Internationalization (i18n)"
+    },
+    {
+      "name": "User Service",
+      "item": [
+        {
+          "name": "Create User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Manual User\",\n  \"dob\": \"2000-01-01\",\n  \"bio\": \"Created manually\",\n  \"gender\": \"MALE\",\n  \"accountId\": \"manual_account_id\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/users",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users"]
+            },
+            "description": "Create a new user profile manually."
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Users",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/users",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users"]
+            },
+            "description": "Retrieve a list of all users."
+          },
+          "response": []
+        },
+        {
+          "name": "Get User By ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/users/{{user_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "{{user_id}}"]
+            },
+            "description": "Retrieve a specific user by ID. Set user_id in environment or replace in URL."
+          },
+          "response": []
+        },
+        {
+          "name": "Update User",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Updated Name\",\n  \"dob\": \"1990-01-01\",\n  \"bio\": \"Updated Bio\",\n  \"gender\": \"FEMALE\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/users/{{user_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "{{user_id}}"]
+            },
+            "description": "Update an existing user profile."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete User",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/users/{{user_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "{{user_id}}"]
+            },
+            "description": "Delete a user profile by ID."
+          },
+          "response": []
+        }
+      ],
+      "description": "CRUD endpoints for User Service"
+    },
+    {
+      "name": "User Settings",
+      "item": [
+        {
+          "name": "Get My Settings",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/users/settings/me",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "settings", "me"]
+            },
+            "description": "Retrieve all settings for the currently authenticated user."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Settings By User ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/users/settings/{{user_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "settings", "{{user_id}}"]
+            },
+            "description": "Retrieve all settings for a specific user (admin only)."
+          },
+          "response": []
+        },
+        {
+          "name": "Get General Settings",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/users/settings/me/general",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "settings", "me", "general"]
+            },
+            "description": "Retrieve only general settings for current user."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Privacy Settings",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/users/settings/me/privacy",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "settings", "me", "privacy"]
+            },
+            "description": "Retrieve only privacy settings for current user."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Notification Settings",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/users/settings/me/notification",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "settings", "me", "notification"]
+            },
+            "description": "Retrieve only notification settings for current user."
+          },
+          "response": []
+        },
+        {
+          "name": "Update General Settings",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"showAllFriends\": true,\n  \"languageEn\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/users/settings/general",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "settings", "general"]
+            },
+            "description": "Update general settings (language, friend visibility)."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Security Settings",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"twoFactorEnabled\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/users/settings/security",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "settings", "security"]
+            },
+            "description": "Update security settings (two-factor authentication)."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Privacy Settings",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"showDob\": false,\n  \"showActiveStatus\": true,\n  \"showReadStatus\": true,\n  \"canText\": \"FRIENDS_ONLY\",\n  \"canCall\": \"FRIENDS_ONLY\",\n  \"showPosts\": true,\n  \"showPostAfter\": null,\n  \"allowSearchOnPhoneNumber\": false\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/users/settings/privacy",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "settings", "privacy"]
+            },
+            "description": "Update privacy settings (visibility, contact permissions)."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Sync Settings",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"syncSuggestion\": true,\n  \"showSyncProgress\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/users/settings/sync",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "settings", "sync"]
+            },
+            "description": "Update synchronization settings."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Appearance Settings",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"theme\": false\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/users/settings/appearance",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "settings", "appearance"]
+            },
+            "description": "Update appearance settings (theme: true=light, false=dark)."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Message Settings",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quickResponseEnable\": false,\n  \"separatePriorityAndOtherEnable\": true,\n  \"showTypingStatus\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/users/settings/message",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "settings", "message"]
+            },
+            "description": "Update message-related settings (typing status, quick response)."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Notification Settings",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"notifyNewMessageFromDirect\": true,\n  \"previewNewMessageFromDirect\": true,\n  \"notifyNewMessageFromGroup\": false,\n  \"notifyCall\": true,\n  \"notifyNewPostFromFriend\": true,\n  \"notifyDOB\": true,\n  \"notifyNewMessage\": true,\n  \"shakeOnNewMessage\": false,\n  \"previewNewMessage\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/users/settings/notification",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "settings", "notification"]
+            },
+            "description": "Update notification preferences."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Utilities Settings",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"stickerSuggestion\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/users/settings/utilities",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "settings", "utilities"]
+            },
+            "description": "Update utilities settings (sticker suggestions)."
+          },
+          "response": []
+        },
+        {
+          "name": "Reset Settings to Defaults",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/users/settings/me/reset",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "settings", "me", "reset"]
+            },
+            "description": "Reset all settings to their default values."
+          },
+          "response": []
+        }
+      ],
+      "description": "User Settings endpoints for managing user preferences with efficient MongoDB dot notation updates"
     }
   ],
   "variable": [

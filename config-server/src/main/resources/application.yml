@@ -16,12 +16,15 @@ spring:
         # Override configuration on the server side
         override-none: false
         override-system-properties: false
+  # Disable Kafka for infrastructure service
+  kafka:
+    enabled: false
 
 # Eureka Client Configuration (if using service discovery)
 eureka:
   client:
     service-url:
-      defaultZone: ${EUREKA_SERVER_URL:http://localhost:8761/eureka/}
+      defaultZone: ${EUREKA_SERVER_URL}
     register-with-eureka: true
     fetch-registry: true
   instance:
@@ -51,19 +54,7 @@ logging:
     root: INFO
     org.springframework.cloud.config: DEBUG
     com.bondhub: DEBUG
-  pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
-    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
   file:
     name: logs/config-server.log
     max-size: 10MB
     max-history: 30
-
-# Application Info
-info:
-  app:
-    name: ${spring.application.name}
-    description: Spring Cloud Config Server for BondHub Microservices
-    version: 0.0.1-SNAPSHOT
-    encoding: ${project.build.sourceEncoding:UTF-8}
-    java.version: ${java.version:17}

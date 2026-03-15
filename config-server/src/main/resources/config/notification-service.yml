@@ -5,92 +5,72 @@ spring:
   application:
     name: notification-service
 
+  messages:
+    basename: i18n/messages, i18n/messages-notification
+
   # MongoDB Configuration
   data:
     mongodb:
-      uri: ${MONGODB_URI_NOTIFICATIONS:mongodb://root:rootpassword123@127.0.0.1:27017/bondhub_messages?authSource=admin}
+      uri: ${MONGODB_URI_NOTIFICATIONS}
       auto-index-creation: true
       uuid-representation: standard
 
-# Eureka Client Configuration
-eureka:
-  client:
-    service-url:
-      defaultZone: ${EUREKA_SERVER_URL:http://localhost:8761/eureka/}
-    register-with-eureka: true
-    fetch-registry: true
-    registry-fetch-interval-seconds: 30
-  instance:
-    prefer-ip-address: true
-    instance-id: ${spring.application.name}:${spring.application.instance_id:${random.value}}
-    lease-renewal-interval-in-seconds: 30
-    lease-expiration-duration-in-seconds: 90
-    metadata-map:
-      version: 0.0.1-SNAPSHOT
-      environment: ${spring.profiles.active:default}
+  # Kafka Configuration for Notification Service
+  kafka:
+    # Producer configuration for notification status events
+    producer:
+      client-id: notification-service-producer
+      retries: 3
 
-# Management and Monitoring
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info,metrics,prometheus,refresh,env
-      base-path: /actuator
-  endpoint:
-    health:
-      show-details: when-authorized
-      probes:
-        enabled: true
-  metrics:
-    export:
-      prometheus:
-        enabled: true
-    tags:
-      application: ${spring.application.name}
-  health:
-    livenessstate:
-      enabled: true
-    readinessstate:
-      enabled: true
+    # Consumer configuration for incoming notification requests
+    consumer:
+      group-id: notification-service-group
+      client-id: notification-service-consumer
+      max-poll-records: 50
+      properties:
+        max.poll.interval.ms: 600000 # 10 minutes for processing notifications
 
-# Logging Configuration
+    # Listener configuration
+    listener:
+      concurrency: 2
+      ack-mode: manual
+
+# Service-specific logging overrides
 logging:
   level:
-    root: INFO
     com.bondhub.notificationservices: DEBUG
-    org.springframework.web: INFO
-    org.springframework.data.mongodb: DEBUG
     org.springframework.mail: DEBUG
-  pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
-    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
   file:
     name: logs/notification-service.log
-    max-size: 10MB
-    max-history: 30
-    total-size-cap: 1GB
 
-# Resilience4j Circuit Breaker
+# Service-specific resilience4j overrides
 resilience4j:
   circuitbreaker:
     instances:
       notificationService:
-        register-health-indicator: true
-        sliding-window-size: 10
-        minimum-number-of-calls: 5
-        permitted-number-of-calls-in-half-open-state: 3
-        wait-duration-in-open-state: 30s
-        failure-rate-threshold: 50
-        slow-call-rate-threshold: 100
-        slow-call-duration-threshold: 3s
+        base-config: default
 
   retry:
     instances:
       notificationService:
-        max-attempts: 3
-        wait-duration: 1s
+        base-config: default
 
   timelimiter:
     instances:
       notificationService:
-        timeout-duration: 5s
+        base-config: default
+
+# Service-specific security configuration
+bondhub:
+  security:
+    public-endpoints: []
+
+# SpringDoc OpenAPI Configuration
+springdoc:
+  api-docs:
+    enabled: true
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html
+  show-actuator: false

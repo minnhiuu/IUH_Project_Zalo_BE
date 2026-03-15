@@ -12,3 +12,13 @@ spring:
         initial-interval: 1000
         max-interval: 2000
         multiplier: 1.1
+
+# JWT Configuration
+jwt:
+  secret: ${JWT_SECRET}
+  access:
+    expiration: ${JWT_ACCESS_EXPIRATION} # 1 hour in milliseconds
+  refresh:
+    expiration-web: ${JWT_REFRESH_WEB_EXPIRATION} # 14 days in milliseconds
+    expiration-mobile: ${JWT_REFRESH_MOBILE_EXPIRATION} # 365 days in milliseconds
+

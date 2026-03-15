@@ -1,0 +1,42 @@
+{
+  "index": {
+    "number_of_shards": 1,
+    "number_of_replicas": 0
+  },
+  "analysis": {
+    "filter": {
+      "name_edge_ngram": {
+        "type": "edge_ngram",
+        "min_gram": 2,
+        "max_gram": 10
+      },
+      "vietnamese_stop": {
+        "type": "stop",
+        "stopwords": []
+      }
+    },
+    "normalizer": {
+      "lowercase_normalizer": {
+        "type": "custom",
+        "filter": ["lowercase", "asciifolding"]
+      }
+    },
+    "analyzer": {
+      "name_index_analyzer": {
+        "type": "custom",
+        "tokenizer": "icu_tokenizer",
+        "filter": ["icu_folding", "lowercase", "name_edge_ngram"]
+      },
+      "name_search_analyzer": {
+        "type": "custom",
+        "tokenizer": "icu_tokenizer",
+        "filter": ["icu_folding", "lowercase"]
+      },
+      "name_fuzzy_analyzer": {
+        "type": "custom",
+        "tokenizer": "standard",
+        "filter": ["icu_folding", "lowercase", "asciifolding"]
+      }
+    }
+  }
+}

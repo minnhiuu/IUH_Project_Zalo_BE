@@ -4,6 +4,7 @@ import com.bondhub.authservice.dto.account.request.AccountCreateRequest;
 import com.bondhub.authservice.dto.account.response.AccountResponse;
 import com.bondhub.authservice.dto.account.request.AccountUpdateRequest;
 import com.bondhub.common.dto.ApiResponse;
+import com.bondhub.common.exception.AppException;
 
 import java.util.List;
 
@@ -28,65 +29,54 @@ public interface AccountService {
      * </p>
      *
      * @param request the account creation request DTO, must not be null
-     * @return {@link ApiResponse} containing the created account response DTO with generated ID
-     *         <ul>
-     *           <li>Success (code 1000): Account created successfully</li>
-     *           <li>Error (code 1001): Email already exists</li>
-     *           <li>Error (code 1002): Phone number already exists</li>
-     *           <li>Error (code 5000): Server error during creation</li>
-     *         </ul>
+     * @return the created account response DTO with generated ID
+     * @throws AppException if email already exists (ACC_EMAIL_ALREADY_USED)
+     *                      or if phone number already exists (ACC_PHONE_NUMBER_ALREADY_USED)
      */
-    ApiResponse<AccountResponse> createAccount(AccountCreateRequest request);
+    AccountResponse createAccount(AccountCreateRequest request);
 
     /**
      * Retrieves an account by its unique identifier.
      *
      * @param id the unique identifier of the account, must not be null
-     * @return {@link ApiResponse} containing the account response DTO if found
-     *         <ul>
-     *           <li>Success (code 1000): Account found</li>
-     *           <li>Error (code 1003): Account not found</li>
-     *           <li>Error (code 5000): Server error during retrieval</li>
-     *         </ul>
+     * @return the account response DTO if found
+     * @throws AppException if account not found (ACC_ACCOUNT_NOT_FOUND)
      */
-    ApiResponse<AccountResponse> getAccountById(String id);
+    AccountResponse getAccountById(String id);
+
+    /**
+     * Retrieves multiple accounts by their IDs.
+     * Used for batch operations to optimize performance.
+     *
+     * @param ids list of account IDs to fetch
+     * @return list of account response DTOs, empty list if none found
+     */
+    List<AccountResponse> getAccountsByIds(List<String> ids);
 
     /**
      * Retrieves an account by email address.
      *
      * @param email the email address to search for, must not be null
-     * @return {@link ApiResponse} containing the account response DTO if found
-     *         <ul>
-     *           <li>Success (code 1000): Account found</li>
-     *           <li>Error (code 1003): Account not found</li>
-     *           <li>Error (code 5000): Server error during retrieval</li>
-     *         </ul>
+     * @return the account response DTO if found
+     * @throws AppException if account not found (ACC_ACCOUNT_NOT_FOUND)
      */
-    ApiResponse<AccountResponse> getAccountByEmail(String email);
+    AccountResponse getAccountByEmail(String email);
 
     /**
      * Retrieves an account by phone number.
      *
      * @param phoneNumber the phone number to search for, must not be null
-     * @return {@link ApiResponse} containing the account response DTO if found
-     *         <ul>
-     *           <li>Success (code 1000): Account found</li>
-     *           <li>Error (code 1003): Account not found</li>
-     *           <li>Error (code 5000): Server error during retrieval</li>
-     *         </ul>
+     * @return the account response DTO if found
+     * @throws AppException if account not found (ACC_ACCOUNT_NOT_FOUND)
      */
-    ApiResponse<AccountResponse> getAccountByPhoneNumber(String phoneNumber);
+    AccountResponse getAccountByPhoneNumber(String phoneNumber);
 
     /**
      * Retrieves all accounts in the system.
      *
-     * @return {@link ApiResponse} containing a list of all account response DTOs
-     *         <ul>
-     *           <li>Success (code 1000): List of accounts (may be empty)</li>
-     *           <li>Error (code 5000): Server error during retrieval</li>
-     *         </ul>
+     * @return a list of all account response DTOs (may be empty)
      */
-    ApiResponse<List<AccountResponse>> getAllAccounts();
+    List<AccountResponse> getAllAccounts();
 
     /**
      * Updates an existing account with new information.
@@ -97,52 +87,53 @@ public interface AccountService {
      *
      * @param id the unique identifier of the account to update, must not be null
      * @param request the account update request DTO containing updated information
-     * @return {@link ApiResponse} containing the updated account response DTO
-     *         <ul>
-     *           <li>Success (code 1000): Account updated successfully</li>
-     *           <li>Error (code 1001): New email already exists for another account</li>
-     *           <li>Error (code 1002): New phone number already exists for another account</li>
-     *           <li>Error (code 1003): Account not found</li>
-     *           <li>Error (code 5000): Server error during update</li>
-     *         </ul>
+     * @return the updated account response DTO
+     * @throws AppException if account not found (ACC_ACCOUNT_NOT_FOUND),
+     *                      email already exists (ACC_EMAIL_ALREADY_USED),
+     *                      or phone number already exists (ACC_PHONE_NUMBER_ALREADY_USED)
      */
-    ApiResponse<AccountResponse> updateAccount(String id, AccountUpdateRequest request);
+    AccountResponse updateAccount(String id, AccountUpdateRequest request);
 
     /**
      * Deletes an account from the system.
      *
      * @param id the unique identifier of the account to delete, must not be null
-     * @return {@link ApiResponse} with no data
-     *         <ul>
-     *           <li>Success (code 1000): Account deleted successfully</li>
-     *           <li>Error (code 1003): Account not found</li>
-     *           <li>Error (code 5000): Server error during deletion</li>
-     *         </ul>
+     * @throws AppException if account not found (ACC_ACCOUNT_NOT_FOUND)
      */
-    ApiResponse<Void> deleteAccount(String id);
+    void deleteAccount(String id);
 
     /**
      * Checks if an account with the specified email exists.
      *
      * @param email the email address to check, must not be null
-     * @return {@link ApiResponse} containing a boolean value
-     *         <ul>
-     *           <li>Success (code 1000): true if account exists, false otherwise</li>
-     *           <li>Error (code 5000): Server error during check</li>
-     *         </ul>
+     * @return true if account exists, false otherwise
      */
-    ApiResponse<Boolean> existsByEmail(String email);
+    boolean existsByEmail(String email);
 
     /**
      * Checks if an account with the specified phone number exists.
      *
      * @param phoneNumber the phone number to check, must not be null
-     * @return {@link ApiResponse} containing a boolean value
-     *         <ul>
-     *           <li>Success (code 1000): true if account exists, false otherwise</li>
-     *           <li>Error (code 5000): Server error during check</li>
-     *         </ul>
+     * @return true if account exists, false otherwise
      */
-    ApiResponse<Boolean> existsByPhoneNumber(String phoneNumber);
+    boolean existsByPhoneNumber(String phoneNumber);
+
+    /**
+     * Bans an account by disabling it.
+     *
+     * @param id     the account id
+     * @param reason the ban reason
+     */
+    void banAccount(String id, String reason);
+
+    /**
+     * Unbans an account by re-enabling it.
+     *
+     * @param id the account id
+     */
+    void unbanAccount(String id);
+
+
+
 }
 
