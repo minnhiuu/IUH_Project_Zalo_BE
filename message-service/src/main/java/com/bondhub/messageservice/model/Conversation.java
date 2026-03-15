@@ -10,6 +10,8 @@ import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.Map;
 
 @Data
 @SuperBuilder
@@ -28,4 +30,6 @@ public class Conversation extends BaseModel {
     String lastMessage;
     @Indexed(direction = IndexDirection.DESCENDING)
     LocalDateTime lastMessageTime;
+    @Builder.Default
+    Map<String, Integer> unreadCounts = new HashMap<>();
 }

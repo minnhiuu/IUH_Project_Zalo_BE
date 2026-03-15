@@ -15,6 +15,7 @@ import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -54,5 +55,12 @@ public class ChatController {
             @RequestParam(defaultValue = "20") int size) {
         return ResponseEntity.ok(ApiResponse.success(
                 chatRoomService.getUserConversations(page, size)));
+    }
+
+    @PutMapping("/conversations/{chatId}/read")
+    @Operation(summary = "Mark a conversation as read")
+    public ResponseEntity<ApiResponse<Void>> markAsRead(@PathVariable String chatId) {
+        chatRoomService.markAsRead(chatId);
+        return ResponseEntity.ok(ApiResponse.success(null));
     }
 }

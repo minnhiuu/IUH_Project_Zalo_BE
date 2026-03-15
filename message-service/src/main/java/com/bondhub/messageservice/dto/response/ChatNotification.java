@@ -18,5 +18,6 @@ public record ChatNotification(
     String recipientId,
     String content,
     String clientMessageId,
-    LocalDateTime timestamp
+    LocalDateTime timestamp,
+    Integer unreadCount
 ) {}

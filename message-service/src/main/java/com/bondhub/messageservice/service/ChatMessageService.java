@@ -22,6 +22,7 @@ import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
+import org.springframework.data.mongodb.core.FindAndModifyOptions;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -123,8 +124,22 @@ public class ChatMessageService {
         Query query = new Query(Criteria.where("chatId").is(savedMsg.getChatId()));
         Update update = new Update()
                 .set("lastMessage", previewContent)
-                .set("lastMessageTime", savedMsg.getCreatedAt());
-        mongoTemplate.updateFirst(query, update, Conversation.class);
+                .set("lastMessageTime", savedMsg.getCreatedAt())
+                .inc("unreadCounts." + savedMsg.getRecipientId(), 1);
+
+        Conversation updatedRoom = mongoTemplate.findAndModify(
+                query, 
+                update, 
+                FindAndModifyOptions.options().returnNew(true), 
+                Conversation.class
+        );
+
+        Integer recipientUnreadCount = updatedRoom != null 
+                ? updatedRoom.getUnreadCounts().getOrDefault(savedMsg.getRecipientId(), 0) 
+                : 1;
+        Integer senderUnreadCount = updatedRoom != null 
+                ? updatedRoom.getUnreadCounts().getOrDefault(savedMsg.getSenderId(), 0) 
+                : 0;
 
         log.info("[Chat] Sending real-time message to: {}", savedMsg.getRecipientId());
 
@@ -141,6 +156,7 @@ public class ChatMessageService {
                         .content(savedMsg.getContent())
                         .clientMessageId(savedMsg.getClientMessageId())
                         .timestamp(savedMsg.getCreatedAt())
+                        .unreadCount(recipientUnreadCount)
                         .build());
 
         if (!message.getSenderId().equals(message.getRecipientId())) {
@@ -158,6 +174,7 @@ public class ChatMessageService {
                             .content(savedMsg.getContent())
                             .clientMessageId(savedMsg.getClientMessageId())
                             .timestamp(savedMsg.getCreatedAt())
+                            .unreadCount(senderUnreadCount)
                             .build());
         }
     }

@@ -112,6 +112,7 @@ public class ChatRoomService {
                                 .lastSeenAt(partner.getLastUpdatedAt())
                                 .lastMessage(room.getLastMessage())
                                 .lastMessageTime(room.getLastMessageTime())
+                                .unreadCount(room.getUnreadCounts() != null ? room.getUnreadCounts().getOrDefault(userId, 0) : 0)
                                 .build();
         }
 
@@ -158,7 +159,23 @@ public class ChatRoomService {
                                         .lastSeenAt(partner.getLastUpdatedAt())
                                         .lastMessage(room.getLastMessage())
                                         .lastMessageTime(room.getLastMessageTime())
+                                        .unreadCount(room.getUnreadCounts() != null ? room.getUnreadCounts().getOrDefault(currentUserId, 0) : 0)
                                         .build();
                 });
+        }
+
+        public void markAsRead(String chatId) {
+                String currentUserId = securityUtil.getCurrentUserId();
+                Conversation room = chatRoomRepository.findByChatId(chatId)
+                        .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
+
+                if (!room.getSenderId().equals(currentUserId) && !room.getRecipientId().equals(currentUserId)) {
+                        throw new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND);
+                }
+
+                if (room.getUnreadCounts() != null && room.getUnreadCounts().getOrDefault(currentUserId, 0) > 0) {
+                        room.getUnreadCounts().put(currentUserId, 0);
+                        chatRoomRepository.save(room);
+                }
         }
 }
