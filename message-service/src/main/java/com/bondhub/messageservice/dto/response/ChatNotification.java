@@ -17,5 +17,6 @@ public record ChatNotification(
     String senderAvatar,
     String recipientId,
     String content,
-    LocalDateTime timestamp // Added new field
+    String clientMessageId,
+    LocalDateTime timestamp
 ) {}

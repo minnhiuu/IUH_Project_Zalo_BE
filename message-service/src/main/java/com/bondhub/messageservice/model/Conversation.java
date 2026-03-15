@@ -5,27 +5,27 @@ import lombok.*;
 import lombok.experimental.FieldDefaults;
 import lombok.experimental.SuperBuilder;
 import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.IndexDirection;
+import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
+
+import java.time.LocalDateTime;
 
 @Data
 @SuperBuilder
 @NoArgsConstructor
 @AllArgsConstructor
-@Document(collection = "chat_messages")
-@org.springframework.data.mongodb.core.index.CompoundIndex(name = "chatId_createdAt_idx", def = "{'chatId': 1, 'createdAt': -1}")
+@Document(collection = "chat_rooms")
 @FieldDefaults(level = AccessLevel.PRIVATE)
 @EqualsAndHashCode(callSuper = true)
-public class ChatMessage extends BaseModel {
+public class Conversation extends BaseModel {
     @Id
     String id;
+    @Indexed(unique = true)
     String chatId;
     String senderId;
-    String senderName;
-    String senderAvatar;
     String recipientId;
-    String content;
-    public enum MessageType {
-        CHAT, JOIN, LEAVE, IMAGE, FILE
-    }
-    MessageType type;
+    String lastMessage;
+    @Indexed(direction = IndexDirection.DESCENDING)
+    LocalDateTime lastMessageTime;
 }

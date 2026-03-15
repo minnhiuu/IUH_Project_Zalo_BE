@@ -1,12 +1,13 @@
 package com.bondhub.messageservice.repository;
 
-import com.bondhub.messageservice.model.ChatMessage;
+import com.bondhub.messageservice.model.Message;
 import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.stereotype.Repository;
 
-import java.util.List;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 @Repository
-public interface ChatMessageRepository extends MongoRepository<ChatMessage, String> {
-    List<ChatMessage> findByChatId(String chatId);
+public interface ChatMessageRepository extends MongoRepository<Message, String> {
+    Page<Message> findByChatId(String chatId, Pageable pageable);
 }

@@ -1,31 +1,30 @@
 package com.bondhub.messageservice.model;
 
 import com.bondhub.common.model.BaseModel;
+import com.bondhub.messageservice.model.enums.MessageType;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
 import lombok.experimental.SuperBuilder;
 import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.index.IndexDirection;
-import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
-
-import java.time.LocalDateTime;
 
 @Data
 @SuperBuilder
 @NoArgsConstructor
 @AllArgsConstructor
-@Document(collection = "chat_rooms")
+@Document(collection = "chat_messages")
+@org.springframework.data.mongodb.core.index.CompoundIndex(name = "chatId_createdAt_idx", def = "{'chatId': 1, 'createdAt': -1}")
 @FieldDefaults(level = AccessLevel.PRIVATE)
 @EqualsAndHashCode(callSuper = true)
-public class ChatRoom extends BaseModel {
+public class Message extends BaseModel {
     @Id
     String id;
-    @Indexed(unique = true)
     String chatId;
     String senderId;
+    String senderName;
+    String senderAvatar;
     String recipientId;
-    String lastMessage;
-    @Indexed(direction = IndexDirection.DESCENDING)
-    LocalDateTime lastMessageTime;
+    String content;
+    String clientMessageId;
+    MessageType type;
 }

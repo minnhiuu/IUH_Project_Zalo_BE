@@ -38,11 +38,11 @@ public class UserPresenceController {
         userPresenceService.disconnect(user.getId());
     }
 
-    @GetMapping("/online")
-    @Operation(summary = "Get list of online users")
-    public ResponseEntity<ApiResponse<List<ChatUser>>> findConnectedUsers() {
-        return ResponseEntity.ok(ApiResponse.success(
-                userPresenceService.findConnectedUsers()
-        ));
-    }
+    // @GetMapping("/online")
+    // @Operation(summary = "Get list of online users")
+    // public ResponseEntity<ApiResponse<List<ChatUser>>> findConnectedUsers() {
+    // return ResponseEntity.ok(ApiResponse.success(
+    // userPresenceService.findConnectedUsers()
+    // ));
+    // }
 }

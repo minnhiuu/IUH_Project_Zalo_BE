@@ -73,3 +73,13 @@ springdoc:
     enabled: true
     path: /swagger-ui.html
   show-actuator: false
+
+# AWS S3 Configuration
+cloud:
+  aws:
+    region:
+      static: ${AWS_REGION}
+aws:
+  s3:
+    bucket:
+      name: ${AWS_S3_BUCKET_NAME}

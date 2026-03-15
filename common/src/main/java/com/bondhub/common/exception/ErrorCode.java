@@ -85,7 +85,10 @@ public enum ErrorCode {
 
         // DLQ errors (24xx)
         DLQ_EVENT_NOT_FOUND(HttpStatus.NOT_FOUND, 2401, "error.dlq.event.not.found"),
-        DLQ_RETRY_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, 2402, "error.dlq.retry.failed")
+        DLQ_RETRY_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, 2402, "error.dlq.retry.failed"),
+
+        // Chat errors (4xxx)
+        CHAT_ROOM_NOT_FOUND(HttpStatus.NOT_FOUND, 4001, "error.chat.room.not.found")
         ;
 
         private final HttpStatus httpStatus;

@@ -1,16 +1,26 @@
 package com.bondhub.messageservice.service;
 
+import com.bondhub.common.utils.S3Util;
 import com.bondhub.common.utils.SecurityUtil;
+import com.bondhub.common.exception.AppException;
+import com.bondhub.common.exception.ErrorCode;
 import com.bondhub.messageservice.dto.response.ConversationResponse;
 import com.bondhub.messageservice.event.UserSyncEvent;
-import com.bondhub.messageservice.model.ChatRoom;
+import com.bondhub.messageservice.model.Conversation;
 import com.bondhub.messageservice.model.ChatUser;
 import com.bondhub.messageservice.repository.ChatRoomRepository;
 import com.bondhub.messageservice.repository.ChatUserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import com.bondhub.common.dto.PageResponse;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -28,6 +38,12 @@ public class ChatRoomService {
         private final SecurityUtil securityUtil;
         private final ApplicationEventPublisher eventPublisher;
 
+        @Value("${aws.s3.bucket.name}")
+        private String bucketName;
+
+        @Value("${cloud.aws.region.static}")
+        private String region;
+
         public String generateChatRoomId(String senderId, String recipientId) {
                 return (senderId.compareTo(recipientId) < 0)
                                 ? String.format("%s_%s", senderId, recipientId)
@@ -42,17 +58,17 @@ public class ChatRoomService {
 
                 return chatRoomRepository
                                 .findByChatId(chatId)
-                                .map(ChatRoom::getChatId)
+                                .map(Conversation::getChatId)
                                 .or(() -> {
                                         if (createNewRoomIfNotExists) {
-                                                ChatRoom chatRoom = ChatRoom
+                                                Conversation conversation = Conversation
                                                                 .builder()
                                                                 .chatId(chatId)
                                                                 .senderId(senderId)
                                                                 .recipientId(recipientId)
                                                                 .build();
 
-                                                chatRoomRepository.save(chatRoom);
+                                                chatRoomRepository.save(conversation);
 
                                                 return Optional.of(chatId);
                                         }
@@ -61,11 +77,11 @@ public class ChatRoomService {
                                 });
         }
 
-        public ChatRoom createInitialChatRoom(String userA, String userB, LocalDateTime timestamp) {
+        public Conversation createInitialChatRoom(String userA, String userB, LocalDateTime timestamp) {
                 String chatId = generateChatRoomId(userA, userB);
 
                 return chatRoomRepository.findByChatId(chatId).orElseGet(() -> {
-                        ChatRoom newRoom = ChatRoom.builder()
+                        Conversation newRoom = Conversation.builder()
                                         .chatId(chatId)
                                         .senderId(userA)
                                         .recipientId(userB)
@@ -79,17 +95,19 @@ public class ChatRoomService {
 
         public ConversationResponse getConversationForUser(String userId, String partnerId) {
                 String chatId = generateChatRoomId(userId, partnerId);
-                ChatRoom room = chatRoomRepository.findByChatId(chatId)
-                        .orElseThrow(() -> new RuntimeException("Room not found"));
+                Conversation room = chatRoomRepository.findByChatId(chatId)
+                        .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
                 
                 ChatUser partner = chatUserRepository.findById(partnerId)
                                 .orElseGet(() -> ChatUser.builder().id(partnerId).fullName("Người dùng mới").build());
+
+                String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
 
                 return ConversationResponse.builder()
                                 .chatId(room.getChatId())
                                 .partnerId(partnerId)
                                 .partnerName(partner.getFullName())
-                                .partnerAvatar(partner.getAvatar())
+                                .partnerAvatar(partner.getAvatar() != null ? baseUrl + partner.getAvatar() : null)
                                 .partnerStatus(partner.getStatus())
                                 .lastSeenAt(partner.getLastUpdatedAt())
                                 .lastMessage(room.getLastMessage())
@@ -97,14 +115,18 @@ public class ChatRoomService {
                                 .build();
         }
 
-        public List<ConversationResponse> getUserConversations() {
+        public PageResponse<List<ConversationResponse>> getUserConversations(int page, int size) {
                 String currentUserId = securityUtil.getCurrentUserId();
-                List<ChatRoom> rooms = chatRoomRepository.findAllRoomsByUserId(currentUserId);
-                if (rooms.isEmpty())
-                        return List.of();
+                
+                Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "lastMessageTime"));
+                Page<Conversation> roomsPage = chatRoomRepository.findAllRoomsByUserId(currentUserId, pageable);
+                
+                if (roomsPage.isEmpty()) {
+                        return PageResponse.empty(pageable);
+                }
 
                 // 1. Lấy tất cả partnerId
-                Set<String> allPartnerIds = rooms.stream()
+                Set<String> allPartnerIds = roomsPage.getContent().stream()
                                 .map(room -> room.getSenderId().equals(currentUserId) ? room.getRecipientId()
                                                 : room.getSenderId())
                                 .collect(Collectors.toSet());
@@ -120,7 +142,8 @@ public class ChatRoomService {
                                 .forEach(id -> eventPublisher.publishEvent(new UserSyncEvent(id)));
 
                 // 4. Map sang Response
-                return rooms.stream().map(room -> {
+                String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+                return PageResponse.fromPage(roomsPage, room -> {
                         String partnerId = room.getSenderId().equals(currentUserId) ? room.getRecipientId()
                                         : room.getSenderId();
                         ChatUser partner = partnerMap.getOrDefault(partnerId,
@@ -130,12 +153,12 @@ public class ChatRoomService {
                                         .chatId(room.getChatId())
                                         .partnerId(partnerId)
                                         .partnerName(partner.getFullName())
-                                        .partnerAvatar(partner.getAvatar())
+                                        .partnerAvatar(partner.getAvatar() != null ? baseUrl + partner.getAvatar() : null)
                                         .partnerStatus(partner.getStatus())
                                         .lastSeenAt(partner.getLastUpdatedAt())
                                         .lastMessage(room.getLastMessage())
                                         .lastMessageTime(room.getLastMessageTime())
                                         .build();
-                }).toList();
+                });
         }
 }

@@ -1,19 +1,21 @@
 package com.bondhub.messageservice.repository;
 
-import com.bondhub.messageservice.model.ChatRoom;
+import com.bondhub.messageservice.model.Conversation;
 import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.data.mongodb.repository.Query;
 import org.springframework.stereotype.Repository;
 
-import java.util.List;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+
 import java.util.Optional;
 
 @Repository
-public interface ChatRoomRepository extends MongoRepository<ChatRoom, String> {
-    Optional<ChatRoom> findBySenderIdAndRecipientId(String senderId, String recipientId);
+public interface ChatRoomRepository extends MongoRepository<Conversation, String> {
+    Optional<Conversation> findBySenderIdAndRecipientId(String senderId, String recipientId);
 
-    Optional<ChatRoom> findByChatId(String chatId);
+    Optional<Conversation> findByChatId(String chatId);
 
-    @Query(value = "{ '$or': [ { 'senderId': ?0 }, { 'recipientId': ?0 } ] }", sort = "{ 'lastMessageTime' : -1 }")
-    List<ChatRoom> findAllRoomsByUserId(String userId);
+    @Query(value = "{ '$or': [ { 'senderId': ?0 }, { 'recipientId': ?0 } ] }")
+    Page<Conversation> findAllRoomsByUserId(String userId, Pageable pageable);
 }
