@@ -1,4 +1,4 @@
-package com.bondhub.messageservice.service;
+package com.bondhub.messageservice.service.message;
 
 import com.bondhub.common.dto.client.userservice.user.response.UserSummaryResponse;
 import com.bondhub.common.utils.S3Util;
@@ -13,6 +13,7 @@ import com.bondhub.messageservice.model.ChatUser;
 import com.bondhub.messageservice.model.enums.MessageType;
 import com.bondhub.messageservice.repository.ChatMessageRepository;
 import com.bondhub.messageservice.repository.ChatUserRepository;
+import com.bondhub.messageservice.service.conversation.ConversationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -37,10 +38,10 @@ import java.util.List;
 @Service
 @RequiredArgsConstructor
 @Slf4j
-public class ChatMessageService {
+public class MessageServiceImpl implements MessageService {
     private final ChatMessageRepository chatMessageRepository;
     private final ChatUserRepository chatUserRepository;
-    private final ChatRoomService chatRoomService;
+    private final ConversationService conversationService;
     private final SimpMessagingTemplate messagingTemplate;
     private final SecurityUtil securityUtil;
     private final UserServiceClient userServiceClient;
@@ -52,8 +53,9 @@ public class ChatMessageService {
     @Value("${cloud.aws.region.static}")
     private String region;
 
+    @Override
     public Message save(Message message) {
-        var chatId = chatRoomService
+        var chatId = conversationService
                 .getChatRoomId(message.getSenderId(), message.getRecipientId(), true)
                 .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
         message.setChatId(chatId);
@@ -82,9 +84,10 @@ public class ChatMessageService {
         return chatUserRepository.save(mirrorUser);
     }
 
+    @Override
     public PageResponse<List<MessageResponse>> findChatMessages(String recipientId, int page, int size) {
         String currentUserId = securityUtil.getCurrentUserId();
-        var chatId = chatRoomService.getChatRoomId(currentUserId, recipientId, false);
+        var chatId = conversationService.getChatRoomId(currentUserId, recipientId, false);
 
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
 
@@ -110,6 +113,7 @@ public class ChatMessageService {
                 .build());
     }
 
+    @Override
     public void sendMessage(Message message) {
         Message savedMsg = save(message);
         String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
@@ -124,21 +128,22 @@ public class ChatMessageService {
         Query query = new Query(Criteria.where("chatId").is(savedMsg.getChatId()));
         Update update = new Update()
                 .set("lastMessage", previewContent)
+                .set("lastMessageId", savedMsg.getId())
                 .set("lastMessageTime", savedMsg.getCreatedAt())
                 .inc("unreadCounts." + savedMsg.getRecipientId(), 1);
 
         Conversation updatedRoom = mongoTemplate.findAndModify(
-                query, 
-                update, 
-                FindAndModifyOptions.options().returnNew(true), 
+                query,
+                update,
+                FindAndModifyOptions.options().returnNew(true),
                 Conversation.class
         );
 
-        Integer recipientUnreadCount = updatedRoom != null 
-                ? updatedRoom.getUnreadCounts().getOrDefault(savedMsg.getRecipientId(), 0) 
+        Integer recipientUnreadCount = updatedRoom != null
+                ? updatedRoom.getUnreadCounts().getOrDefault(savedMsg.getRecipientId(), 0)
                 : 1;
-        Integer senderUnreadCount = updatedRoom != null 
-                ? updatedRoom.getUnreadCounts().getOrDefault(savedMsg.getSenderId(), 0) 
+        Integer senderUnreadCount = updatedRoom != null
+                ? updatedRoom.getUnreadCounts().getOrDefault(savedMsg.getSenderId(), 0)
                 : 0;
 
         log.info("[Chat] Sending real-time message to: {}", savedMsg.getRecipientId());

@@ -12,18 +12,6 @@ spring:
         initial-interval: 1000
         max-interval: 2000
         multiplier: 1.1
-  data:
-    mongodb:
-      uri: ${MONGODB_URI_MESSAGES:mongodb://localhost:27017/bondhub_messages}
-  kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
-
-eureka:
-  client:
-    service-url:
-      defaultZone: ${EUREKA_SERVER_URL:http://localhost:8761/eureka/}
-  instance:
-    prefer-ip-address: true
 
 server:
   port: 8084

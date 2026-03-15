@@ -5,20 +5,15 @@ import com.bondhub.common.dto.PageResponse;
 import com.bondhub.messageservice.dto.response.ConversationResponse;
 import com.bondhub.messageservice.dto.response.MessageResponse;
 import com.bondhub.messageservice.model.Message;
-import com.bondhub.messageservice.service.ChatMessageService;
-import com.bondhub.messageservice.service.ChatRoomService;
+import com.bondhub.messageservice.service.message.MessageService;
+import com.bondhub.messageservice.service.conversation.ConversationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.security.Principal;
 import java.util.List;
@@ -29,13 +24,13 @@ import java.util.List;
 @Tag(name = "Chat", description = "Real-time chat API")
 public class ChatController {
 
-    private final ChatMessageService chatMessageService;
-    private final ChatRoomService chatRoomService;
+    private final MessageService messageService;
+    private final ConversationService conversationService;
 
     @MessageMapping("/chat")
     public void processMessage(@Payload Message message, Principal principal) {
         message.setSenderId(principal.getName());
-        chatMessageService.sendMessage(message);
+        messageService.sendMessage(message);
     }
 
     @GetMapping("/{recipientId}")
@@ -45,7 +40,7 @@ public class ChatController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         return ResponseEntity.ok(ApiResponse.success(
-                chatMessageService.findChatMessages(recipientId, page, size)));
+                messageService.findChatMessages(recipientId, page, size)));
     }
 
     @GetMapping("/conversations")
@@ -54,13 +49,13 @@ public class ChatController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         return ResponseEntity.ok(ApiResponse.success(
-                chatRoomService.getUserConversations(page, size)));
+                conversationService.getUserConversations(page, size)));
     }
 
     @PutMapping("/conversations/{chatId}/read")
     @Operation(summary = "Mark a conversation as read")
     public ResponseEntity<ApiResponse<Void>> markAsRead(@PathVariable String chatId) {
-        chatRoomService.markAsRead(chatId);
+        conversationService.markAsRead(chatId);
         return ResponseEntity.ok(ApiResponse.success(null));
     }
 }

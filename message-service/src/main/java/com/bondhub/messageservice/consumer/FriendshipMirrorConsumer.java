@@ -3,7 +3,7 @@ package com.bondhub.messageservice.consumer;
 import com.bondhub.common.enums.FriendshipAction;
 import com.bondhub.common.event.friend.FriendshipChangedEvent;
 import com.bondhub.messageservice.model.ChatUser;
-import com.bondhub.messageservice.service.ChatRoomService;
+import com.bondhub.messageservice.service.conversation.ConversationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.mongodb.core.MongoTemplate;
@@ -22,7 +22,7 @@ import java.sql.Timestamp;
 public class FriendshipMirrorConsumer {
 
     private final MongoTemplate mongoTemplate;
-    private final ChatRoomService chatRoomService;
+    private final ConversationService conversationService;
     private final SimpMessagingTemplate messagingTemplate;
 
     @KafkaListener(topics = "${kafka.topics.friend-events.friendship-changed}", groupId = "${spring.kafka.consumer.group-id}")
@@ -37,14 +37,14 @@ public class FriendshipMirrorConsumer {
         updateFriendList(event.userB(), event.userA(), event.action());
 
         if (event.action() == FriendshipAction.ADDED) {
-            chatRoomService.createInitialChatRoom(
+            conversationService.createInitialChatRoom(
                 event.userA(),
                 event.userB(),
                 new Timestamp(event.timestamp()).toLocalDateTime()
             );
             
-            ConversationResponse convForA = chatRoomService.getConversationForUser(event.userA(), event.userB());
-            ConversationResponse convForB = chatRoomService.getConversationForUser(event.userB(), event.userA());
+            ConversationResponse convForA = conversationService.getConversationForUser(event.userA(), event.userB());
+            ConversationResponse convForB = conversationService.getConversationForUser(event.userB(), event.userA());
             
             // Notify both users to refresh their conversation list via JSON payload
             messagingTemplate.convertAndSendToUser(event.userA(), "/queue/conversations", convForA);

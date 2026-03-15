@@ -1,20 +1,14 @@
 package com.bondhub.messageservice.controller;
 
-import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.messageservice.model.ChatUser;
-import com.bondhub.messageservice.service.UserPresenceService;
-import io.swagger.v3.oas.annotations.Operation;
+import com.bondhub.messageservice.service.userpresence.UserPresenceService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.ResponseEntity;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.stereotype.Controller;
-import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
-
-import java.util.List;
 
 @Controller
 @RequiredArgsConstructor

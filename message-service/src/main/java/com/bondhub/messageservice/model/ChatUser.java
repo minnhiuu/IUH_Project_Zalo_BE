@@ -26,11 +26,14 @@ public class ChatUser {
     Status status;
     String avatar;
     LocalDateTime lastUpdatedAt;
-    
+
     @Indexed
     @Builder.Default
     Set<String> friendIds = new HashSet<>();
-    
+
     @Builder.Default
     boolean isInvisible = false;
+
+    @Builder.Default
+    boolean showSeenStatus = true;
 }

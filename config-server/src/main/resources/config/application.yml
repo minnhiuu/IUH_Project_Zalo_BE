@@ -65,6 +65,7 @@ kafka:
       created: user.created
       updated: user.updated
       deleted: user.deleted
+      privacy-changed: user.privacy.changed
     
     # Friend Events
     friend-events:

@@ -43,6 +43,7 @@ public class KafkaTopicProperties {
 
         private String indexRequested = "user.search.index-requested";
         private String indexDeleted = "user.search.index-deleted";
+        private String privacyChanged = "user.privacy.changed";
     }
 
     @Getter

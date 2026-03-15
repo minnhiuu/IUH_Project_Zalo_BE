@@ -1,4 +1,4 @@
-package com.bondhub.messageservice.service;
+package com.bondhub.messageservice.service.userpresence;
 
 import com.bondhub.common.enums.Status;
 import com.bondhub.common.dto.ApiResponse;
@@ -17,12 +17,13 @@ import java.util.Set;
 @Service
 @RequiredArgsConstructor
 @Slf4j
-public class UserPresenceService {
+public class UserPresenceServiceImpl implements UserPresenceService {
 
     private final ChatUserRepository repository;
     private final SimpMessagingTemplate messagingTemplate;
     private final FriendServiceClient friendServiceClient;
 
+    @Override
     public ChatUser saveUser(ChatUser user) {
         ChatUser savedUser = repository.findById(user.getId())
                 .map(storedUser -> {
@@ -57,6 +58,7 @@ public class UserPresenceService {
         return savedUser;
     }
 
+    @Override
     public void disconnect(String userId) {
         repository.findById(userId).ifPresent(user -> {
             user.setStatus(Status.OFFLINE);
@@ -94,6 +96,7 @@ public class UserPresenceService {
         }
     }
 
+    @Override
     public List<ChatUser> findConnectedUsers() {
         return repository.findAllByStatus(Status.ONLINE);
     }

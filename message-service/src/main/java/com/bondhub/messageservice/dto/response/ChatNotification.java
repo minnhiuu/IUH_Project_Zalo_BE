@@ -10,14 +10,15 @@ import java.time.LocalDateTime;
  */
 @Builder
 public record ChatNotification(
-    String id,
-    String chatId,
-    String senderId,
-    String senderName,
-    String senderAvatar,
-    String recipientId,
-    String content,
-    String clientMessageId,
-    LocalDateTime timestamp,
-    Integer unreadCount
-) {}
+        String id,
+        String chatId,
+        String senderId,
+        String senderName,
+        String senderAvatar,
+        String recipientId,
+        String content,
+        String clientMessageId,
+        LocalDateTime timestamp,
+        Integer unreadCount
+) {
+}

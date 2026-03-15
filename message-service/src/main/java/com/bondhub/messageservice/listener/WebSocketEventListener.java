@@ -1,6 +1,6 @@
 package com.bondhub.messageservice.listener;
 
-import com.bondhub.messageservice.service.UserPresenceService;
+import com.bondhub.messageservice.service.userpresence.UserPresenceService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.event.EventListener;
