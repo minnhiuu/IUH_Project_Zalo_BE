@@ -8,6 +8,7 @@ import lombok.experimental.FieldDefaults;
 import lombok.experimental.SuperBuilder;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.mapping.Field;
 import org.springframework.data.mongodb.core.mapping.FieldType;
 import org.springframework.data.mongodb.core.mapping.MongoId;
 
@@ -34,6 +35,7 @@ public class User extends BaseModel {
     String bio;
 
     Gender gender;
+    @Field(targetType = FieldType.OBJECT_ID)
     String accountId;
     Set<String> pinnedConversations;
 

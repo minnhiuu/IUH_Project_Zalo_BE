@@ -159,6 +159,17 @@ spring:
                     name: searchServiceCircuitBreaker
                     fallbackUri: forward:/fallback/search-service
 
+            - id: user-service-elasticsearch-legacy
+              uri: lb://search-service
+              predicates:
+                - Path=/api/users/elasticsearch/**
+              filters:
+                - RewritePath=/api/users/elasticsearch/(?<segment>.*), /search/elasticsearch/${segment}
+                - name: CircuitBreaker
+                  args:
+                    name: searchServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/search-service
+
             # Message Service Routes (Protected - JWT required)
             - id: message-service
               uri: lb://message-service

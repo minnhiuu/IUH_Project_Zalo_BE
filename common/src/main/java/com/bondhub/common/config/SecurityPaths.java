@@ -41,6 +41,8 @@ public class SecurityPaths {
             "/api/users/v3/api-docs",
             "/api/messages/v3/api-docs",
             "/api/notifications/v3/api-docs",
+            "/api/search/v3/api-docs",
+            "/api/search/v3/api-docs/**",
             // Service-level API docs paths (after gateway routes them)
             "/auth/v3/api-docs",
             "/auth/v3/api-docs/**",
@@ -54,6 +56,8 @@ public class SecurityPaths {
             "/file/v3/api-docs/**",
             "/friend/v3/api-docs",
             "/friend/v3/api-docs/**",
+            "/search/v3/api-docs",
+            "/search/v3/api-docs/**",
 
             // Actuator endpoints
             "/actuator/health",

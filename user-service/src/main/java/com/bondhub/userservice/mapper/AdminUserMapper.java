@@ -44,7 +44,6 @@ public interface AdminUserMapper {
     @Mapping(target = "email", expression = "java(account != null ? account.email() : null)")
     @Mapping(target = "phoneNumber", expression = "java(account != null ? account.phoneNumber() : null)")
     @Mapping(target = "role", expression = "java(account != null ? account.role() : null)")
-    @Mapping(target = "isVerified", expression = "java(account != null ? account.isVerified() : null)")
     @Mapping(target = "active", source = "user.active")
     @Mapping(target = "createdAt", source = "user.createdAt")
     @Mapping(target = "lastModifiedAt", source = "user.lastModifiedAt")
