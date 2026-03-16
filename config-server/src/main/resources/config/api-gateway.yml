@@ -5,9 +5,19 @@ spring:
   application:
     name: api-gateway
 
+  # Disable Kafka Related For Gateway
+  kafka:
+    enabled: false
+
   # Cloud Gateway Configuration
   cloud:
     gateway:
+      httpclient:
+        server:
+          webflux:
+            httpclient:
+              connect-timeout: 5000
+              response-timeout: 45000
       server:
         webflux:
           discovery:
@@ -15,7 +25,71 @@ spring:
               enabled: true
               lower-case-service-id: true
           routes:
+            # API Documentation Routes (for Swagger UI)
+            - id: auth-service-docs
+              uri: lb://auth-service
+              predicates:
+                - Path=/auth/v3/api-docs/**
+              filters:
+                - RewritePath=/auth/v3/api-docs, /v3/api-docs
+
+            - id: user-service-docs
+              uri: lb://user-service
+              predicates:
+                - Path=/user/v3/api-docs/**
+              filters:
+                - RewritePath=/user/v3/api-docs, /v3/api-docs
+
+            - id: message-service-docs
+              uri: lb://message-service
+              predicates:
+                - Path=/message/v3/api-docs/**
+              filters:
+                - RewritePath=/message/v3/api-docs, /v3/api-docs
+
+            - id: notification-service-docs
+              uri: lb://notification-service
+              predicates:
+                - Path=/notification/v3/api-docs/**
+              filters:
+                - RewritePath=/notification/v3/api-docs, /v3/api-docs
+
+            - id: file-service-docs
+              uri: lb://file-service
+              predicates:
+                - Path=/file/v3/api-docs/**
+              filters:
+                - RewritePath=/file/v3/api-docs, /v3/api-docs
+
+            - id: friend-service-docs
+              uri: lb://friend-service
+              predicates:
+                - Path=/friend/v3/api-docs/**
+              filters:
+                - RewritePath=/friend/v3/api-docs, /v3/api-docs
+
+            - id: search-service-docs
+              uri: lb://search-service
+              predicates:
+                - Path=/search/v3/api-docs/**
+              filters:
+                - RewritePath=/search/v3/api-docs, /v3/api-docs
+
             # Auth Service Routes (Public - no JWT required)
+            - id: auth-service-qr-wait
+              uri: lb://auth-service
+              predicates:
+                - Path=/api/auth/qr/wait/**
+              metadata:
+                response-timeout: 45000
+                connect-timeout: 5000
+              filters:
+                - RewritePath=/api/auth/(?<segment>.*), /auth/${segment}
+                - name: CircuitBreaker
+                  args:
+                    name: qrWaitServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/qr-wait
+
             - id: auth-service
               uri: lb://auth-service
               predicates:
@@ -27,7 +101,30 @@ spring:
                     name: authServiceCircuitBreaker
                     fallbackUri: forward:/fallback/auth-service
 
+            # File Service Routes (Public - no JWT required)
+            - id: file-service
+              uri: lb://file-service
+              predicates:
+                - Path=/api/files/**
+              filters:
+                - RewritePath=/api/files/(?<segment>.*), /files/${segment}
+                - name: CircuitBreaker
+                  args:
+                    name: fileServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/file-service
+
             # User Service Routes (Protected - JWT required)
+            - id: friend-service-blocks
+              uri: lb://friend-service
+              predicates:
+                - Path=/api/blocks,/api/blocks/**
+              filters:
+                - RewritePath=/api/(?<segment>.*), /${segment}
+                - name: CircuitBreaker
+                  args:
+                    name: friendServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/friend-service
+
             - id: user-service
               uri: lb://user-service
               predicates:
@@ -38,6 +135,40 @@ spring:
                   args:
                     name: userServiceCircuitBreaker
                     fallbackUri: forward:/fallback/user-service
+
+            # Admin Routes (Protected - ADMIN role required)
+            - id: user-service-admin
+              uri: lb://user-service
+              predicates:
+                - Path=/api/admin/**
+              filters:
+                - RewritePath=/api/admin/(?<segment>.*), /admin/${segment}
+                - name: CircuitBreaker
+                  args:
+                    name: userServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/user-service
+
+            - id: user-service-elasticsearch-legacy
+              uri: lb://search-service
+              predicates:
+                - Path=/api/users/elasticsearch/**
+              filters:
+                - RewritePath=/api/users/elasticsearch/(?<segment>.*), /search/elasticsearch/${segment}
+                - name: CircuitBreaker
+                  args:
+                    name: searchServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/search-service
+
+            - id: user-service-elasticsearch-legacy
+              uri: lb://search-service
+              predicates:
+                - Path=/api/users/elasticsearch/**
+              filters:
+                - RewritePath=/api/users/elasticsearch/(?<segment>.*), /search/elasticsearch/${segment}
+                - name: CircuitBreaker
+                  args:
+                    name: searchServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/search-service
 
             # Message Service Routes (Protected - JWT required)
             - id: message-service
@@ -63,11 +194,34 @@ spring:
                     name: notificationServiceCircuitBreaker
                     fallbackUri: forward:/fallback/notification-service
 
+            - id: search-service
+              uri: lb://search-service
+              predicates:
+                - Path=/api/search/**
+              filters:
+                - RewritePath=/api/search/(?<segment>.*), /search/${segment}
+                - name: CircuitBreaker
+                  args:
+                    name: searchServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/search-service
+
+            # Friend Service Routes (Protected - JWT required)
+            - id: friend-service
+              uri: lb://friend-service
+              predicates:
+                - Path=/api/friendships/**
+              filters:
+                - RewritePath=/api/friendships/(?<segment>.*), /friendships/${segment}
+                - name: CircuitBreaker
+                  args:
+                    name: friendServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/friend-service
+
           # Global CORS Configuration
-          globalcors:
+          globalCors:
             cors-configurations:
               "[/**]":
-                allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:4200}
+                allowed-origins: ${CORS_ALLOWED_ORIGINS}
                 allowed-methods:
                   - GET
                   - POST
@@ -85,17 +239,27 @@ spring:
           default-filters:
             - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
 
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT}
+      password: ${REDIS_PASSWORD}
+      timeout: 5000ms
+
 # JWT Configuration
 jwt:
-  secret: ${JWT_SECRET:TGhpcyBpcyBhIHRlbXBvcmFyeSBzZWNyZXQga2V5IGZvciBkZXZlbG9wbWVudCBvbmx5IC0gcGxlYXNlIHVzZSBhIHNlY3VyZSBzZWNyZXQgaW4gcHJvZHVjdGlvbg==}
-  access-token-expiration: 3600000  # 1 hour in milliseconds
-  refresh-token-expiration: 604800000  # 7 days in milliseconds
+  secret: ${JWT_SECRET}
+  access:
+    expiration: 3600000
+  refresh:
+    expiration-web: 1209600000
+    expiration-mobile: 31536000000
 
 # Eureka Client Configuration
 eureka:
   client:
     service-url:
-      defaultZone: ${EUREKA_SERVER_URL:http://localhost:8761/eureka/}
+      defaultZone: ${EUREKA_SERVER_URL}
     register-with-eureka: true
     fetch-registry: true
     registry-fetch-interval-seconds: 30
@@ -114,36 +278,139 @@ resilience4j:
     configs:
       default:
         register-health-indicator: true
+        sliding-window-type: COUNT_BASED
         sliding-window-size: 10
         minimum-number-of-calls: 5
         permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
         wait-duration-in-open-state: 30s
         failure-rate-threshold: 50
         slow-call-rate-threshold: 100
         slow-call-duration-threshold: 3s
+        record-exceptions:
+          - org.springframework.web.client.HttpServerErrorException
+          - java.io.IOException
+          - java.util.concurrent.TimeoutException
+        ignore-exceptions:
+          - org.springframework.web.client.HttpClientErrorException
     instances:
       userServiceCircuitBreaker:
         base-config: default
+        failure-rate-threshold: 60
+        wait-duration-in-open-state: 45s
       authServiceCircuitBreaker:
         base-config: default
+        failure-rate-threshold: 40
+        wait-duration-in-open-state: 20s
+      qrWaitServiceCircuitBreaker:
+        base-config: default
+        failure-rate-threshold: 70
+        wait-duration-in-open-state: 60s
       messageServiceCircuitBreaker:
         base-config: default
       notificationServiceCircuitBreaker:
+        base-config: default
+      fileServiceCircuitBreaker:
+        base-config: default
+      friendServiceCircuitBreaker:
         base-config: default
 
   timelimiter:
     configs:
       default:
         timeout-duration: 5s
+        cancel-running-future: true
     instances:
       userServiceCircuitBreaker:
         base-config: default
       authServiceCircuitBreaker:
         base-config: default
+      qrWaitServiceCircuitBreaker:
+        timeout-duration: ${GATEWAY_QR_TIMEOUT_MS}ms
       messageServiceCircuitBreaker:
         base-config: default
       notificationServiceCircuitBreaker:
         base-config: default
+      fileServiceCircuitBreaker:
+        base-config: default
+      friendServiceCircuitBreaker:
+        base-config: default
+
+  # Retry Configuration
+  retry:
+    configs:
+      default:
+        max-attempts: 3
+        wait-duration: 500ms
+        enable-exponential-backoff: true
+        exponential-backoff-multiplier: 2
+        retry-exceptions:
+          - org.springframework.web.client.ResourceAccessException
+          - java.io.IOException
+          - java.util.concurrent.TimeoutException
+        ignore-exceptions:
+          - org.springframework.web.client.HttpClientErrorException
+    instances:
+      userServiceRetry:
+        base-config: default
+      authServiceRetry:
+        base-config: default
+        max-attempts: 2
+      messageServiceRetry:
+        base-config: default
+      notificationServiceRetry:
+        base-config: default
+        max-attempts: 2
+      friendServiceRetry:
+        base-config: default
+
+  # Rate Limiter Configuration
+  ratelimiter:
+    configs:
+      default:
+        register-health-indicator: true
+        limit-for-period: 100
+        limit-refresh-period: 1s
+        timeout-duration: 0s
+    instances:
+      userServiceRateLimiter:
+        base-config: default
+        limit-for-period: 50
+      authServiceRateLimiter:
+        base-config: default
+        limit-for-period: 200
+      messageServiceRateLimiter:
+        base-config: default
+        limit-for-period: 80
+      notificationServiceRateLimiter:
+        base-config: default
+        limit-for-period: 60
+      friendServiceRateLimiter:
+        base-config: default
+        limit-for-period: 100
+
+  # Bulkhead Configuration
+  bulkhead:
+    configs:
+      default:
+        max-concurrent-calls: 25
+        max-wait-duration: 0ms
+    instances:
+      userServiceBulkhead:
+        base-config: default
+        max-concurrent-calls: 20
+      authServiceBulkhead:
+        base-config: default
+        max-concurrent-calls: 30
+      messageServiceBulkhead:
+        base-config: default
+        max-concurrent-calls: 15
+      notificationServiceBulkhead:
+        base-config: default
+        max-concurrent-calls: 15
+      friendServiceBulkhead:
+        base-config: default
+        max-concurrent-calls: 20
 
 # Management and Monitoring
 management:
@@ -158,7 +425,7 @@ management:
       probes:
         enabled: true
     gateway:
-      enabled: true
+      access: unrestricted
   prometheus:
     metrics:
       export:
@@ -179,9 +446,6 @@ logging:
     com.bondhub.gateway: DEBUG
     org.springframework.cloud.gateway: DEBUG
     org.springframework.web: INFO
-  pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
-    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
   file:
     name: logs/api-gateway.log
   logback:
@@ -195,16 +459,25 @@ springdoc:
   swagger-ui:
     # This disables the default "petstore" url
     disable-swagger-default-url: true
-    # Aggregates the docs from your services via Eureka discovery
+    # Aggregates the docs from your services via Gateway routes (no CORS issues)
     urls:
       - name: Auth Service
-        url: http://localhost:8084/v3/api-docs
+        url: /auth/v3/api-docs
       - name: User Service
-        url: http://localhost:8081/v3/api-docs
+        url: /user/v3/api-docs
       - name: Message Service
-        url: http://localhost:8082/v3/api-docs
+        url: /message/v3/api-docs
       - name: Notification Service
-        url: http://localhost:8083/v3/api-docs
+        url: /notification/v3/api-docs
+      - name: File Service
+        url: /file/v3/api-docs
+      - name: Friend Service
+        url: /friend/v3/api-docs
+      - name: Search Service
+        url: /search/v3/api-docs
+    # Enable "Try it out" functionality
+    use-root-path: true
+    path: /swagger-ui.html
   api-docs:
     enabled: true
     # This is the path for the Gateway's OWN docs (if any)

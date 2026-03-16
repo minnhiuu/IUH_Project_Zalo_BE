@@ -5,91 +5,71 @@ spring:
   application:
     name: message-service
 
+  messages:
+    basename: i18n/messages, i18n/messages-message
+
   # MongoDB Configuration
   data:
     mongodb:
-      uri: ${MONGODB_URI_MESSAGES:mongodb://root:rootpassword123@127.0.0.1:27017/bondhub_messages?authSource=admin}
+      uri: ${MONGODB_URI_MESSAGES}
       auto-index-creation: true
       uuid-representation: standard
 
-# Eureka Client Configuration
-eureka:
-  client:
-    service-url:
-      defaultZone: ${EUREKA_SERVER_URL:http://localhost:8761/eureka/}
-    register-with-eureka: true
-    fetch-registry: true
-    registry-fetch-interval-seconds: 30
-  instance:
-    prefer-ip-address: true
-    instance-id: ${spring.application.name}:${spring.application.instance_id:${random.value}}
-    lease-renewal-interval-in-seconds: 30
-    lease-expiration-duration-in-seconds: 90
-    metadata-map:
-      version: 0.0.1-SNAPSHOT
-      environment: ${spring.profiles.active:default}
+  # Kafka Configuration for Message Service
+  kafka:
+    # Producer configuration for outgoing message events
+    producer:
+      client-id: message-service-producer
+      retries: 3
+      properties:
+        max.in.flight.requests.per.connection: 5
 
-# Management and Monitoring
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info,metrics,prometheus,refresh,env
-      base-path: /actuator
-  endpoint:
-    health:
-      show-details: when-authorized
-      probes:
-        enabled: true
-  metrics:
-    export:
-      prometheus:
-        enabled: true
-    tags:
-      application: ${spring.application.name}
-  health:
-    livenessstate:
-      enabled: true
-    readinessstate:
-      enabled: true
+    # Consumer configuration for incoming events
+    consumer:
+      group-id: message-service-group
+      client-id: message-service-consumer
+      max-poll-records: 100
 
-# Logging Configuration
+    # Listener configuration
+    listener:
+      concurrency: 3
+      ack-mode: manual
+
+# Service-specific logging overrides
 logging:
   level:
-    root: INFO
     com.bondhub.messageservice: DEBUG
-    org.springframework.web: INFO
-    org.springframework.data.mongodb: DEBUG
-  pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
-    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
   file:
     name: logs/message-service.log
-    max-size: 10MB
-    max-history: 30
-    total-size-cap: 1GB
 
-# Resilience4j Circuit Breaker
+# Service-specific resilience4j overrides
 resilience4j:
   circuitbreaker:
     instances:
       messageService:
-        register-health-indicator: true
-        sliding-window-size: 10
-        minimum-number-of-calls: 5
-        permitted-number-of-calls-in-half-open-state: 3
-        wait-duration-in-open-state: 30s
-        failure-rate-threshold: 50
-        slow-call-rate-threshold: 100
-        slow-call-duration-threshold: 3s
+        base-config: default
 
   retry:
     instances:
       messageService:
-        max-attempts: 3
-        wait-duration: 1s
+        base-config: default
 
   timelimiter:
     instances:
       messageService:
-        timeout-duration: 5s
+        base-config: default
+
+# Service-specific security configuration
+bondhub:
+  security:
+    public-endpoints: []
+
+# SpringDoc OpenAPI Configuration
+springdoc:
+  api-docs:
+    enabled: true
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html
+  show-actuator: false

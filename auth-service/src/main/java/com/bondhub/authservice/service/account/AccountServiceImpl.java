@@ -6,7 +6,7 @@ import com.bondhub.authservice.dto.account.request.AccountUpdateRequest;
 import com.bondhub.authservice.mapper.AccountMapper;
 import com.bondhub.authservice.model.Account;
 import com.bondhub.authservice.repository.AccountRepository;
-import com.bondhub.common.dto.ApiResponse;
+import com.bondhub.authservice.service.token.TokenStoreService;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
 import lombok.AccessLevel;
@@ -27,18 +27,17 @@ public class AccountServiceImpl implements AccountService {
     AccountRepository accountRepository;
     AccountMapper accountMapper;
     PasswordEncoder passwordEncoder;
+    TokenStoreService tokenStoreService;
 
     @Override
-    public ApiResponse<AccountResponse> createAccount(AccountCreateRequest request) {
+    public AccountResponse createAccount(AccountCreateRequest request) {
         log.info("Creating new account with email: {}", request.email());
 
-        // Check if email already exists
         if (request.email() != null && accountRepository.existsByEmail(request.email())) {
             log.warn("Account with email {} already exists", request.email());
             throw new AppException(ErrorCode.ACC_EMAIL_ALREADY_USED);
         }
 
-        // Check if phone number already exists
         if (request.phoneNumber() != null && accountRepository.existsByPhoneNumber(request.phoneNumber())) {
             log.warn("Account with phone number {} already exists", request.phoneNumber());
             throw new AppException(ErrorCode.ACC_PHONE_NUMBER_ALREADY_USED);
@@ -49,11 +48,11 @@ public class AccountServiceImpl implements AccountService {
 
         Account savedAccount = accountRepository.save(account);
         log.info("Account created successfully with id: {}", savedAccount.getId());
-        return ApiResponse.success(accountMapper.toResponse(savedAccount));
+        return accountMapper.toResponse(savedAccount);
     }
 
     @Override
-    public ApiResponse<AccountResponse> getAccountById(String id) {
+    public AccountResponse getAccountById(String id) {
         log.info("Fetching account with id: {}", id);
         Account account = accountRepository.findById(id)
                 .orElseThrow(() -> {
@@ -62,11 +61,27 @@ public class AccountServiceImpl implements AccountService {
                 });
 
         log.info("Account found with id: {}", id);
-        return ApiResponse.success(accountMapper.toResponse(account));
+        return accountMapper.toResponse(account);
     }
 
     @Override
-    public ApiResponse<AccountResponse> getAccountByEmail(String email) {
+    public List<AccountResponse> getAccountsByIds(List<String> ids) {
+        if (ids == null || ids.isEmpty()) {
+            log.warn("Empty or null account IDs list provided");
+            return List.of();
+        }
+        
+        log.info("Fetching {} accounts by batch IDs", ids.size());
+        List<Account> accounts = accountRepository.findAllById(ids);
+        log.info("Found {} accounts out of {} requested", accounts.size(), ids.size());
+        
+        return accounts.stream()
+                .map(accountMapper::toResponse)
+                .toList();
+    }
+
+    @Override
+    public AccountResponse getAccountByEmail(String email) {
         log.info("Fetching account with email: {}", email);
         Account account = accountRepository.findByEmail(email)
                 .orElseThrow(() -> {
@@ -75,11 +90,11 @@ public class AccountServiceImpl implements AccountService {
                 });
 
         log.info("Account found with email: {}", email);
-        return ApiResponse.success(accountMapper.toResponse(account));
+        return accountMapper.toResponse(account);
     }
 
     @Override
-    public ApiResponse<AccountResponse> getAccountByPhoneNumber(String phoneNumber) {
+    public AccountResponse getAccountByPhoneNumber(String phoneNumber) {
         log.info("Fetching account with phone number: {}", phoneNumber);
         Account account = accountRepository.findByPhoneNumber(phoneNumber)
                 .orElseThrow(() -> {
@@ -88,22 +103,21 @@ public class AccountServiceImpl implements AccountService {
                 });
 
         log.info("Account found with phone number: {}", phoneNumber);
-        return ApiResponse.success(accountMapper.toResponse(account));
+        return accountMapper.toResponse(account);
     }
 
     @Override
-    public ApiResponse<List<AccountResponse>> getAllAccounts() {
+    public List<AccountResponse> getAllAccounts() {
         log.info("Fetching all accounts");
         List<Account> accounts = accountRepository.findAll();
         log.info("Found {} accounts", accounts.size());
-        List<AccountResponse> accountResponses = accounts.stream()
+        return accounts.stream()
                 .map(accountMapper::toResponse)
                 .toList();
-        return ApiResponse.success(accountResponses);
     }
 
     @Override
-    public ApiResponse<AccountResponse> updateAccount(String id, AccountUpdateRequest request) {
+    public AccountResponse updateAccount(String id, AccountUpdateRequest request) {
         log.info("Updating account with id: {}", id);
         Account accountToUpdate = accountRepository.findById(id)
                 .orElseThrow(() -> {
@@ -111,7 +125,6 @@ public class AccountServiceImpl implements AccountService {
                     return new AppException(ErrorCode.ACC_ACCOUNT_NOT_FOUND);
                 });
 
-        // Check if email is being changed and if it already exists
         if (request.email() != null && !request.email().equals(accountToUpdate.getEmail())) {
             if (accountRepository.existsByEmail(request.email())) {
                 log.warn("Email {} already exists for another account", request.email());
@@ -119,7 +132,6 @@ public class AccountServiceImpl implements AccountService {
             }
         }
 
-        // Check if phone number is being changed and if it already exists
         if (request.phoneNumber() != null && !request.phoneNumber().equals(accountToUpdate.getPhoneNumber())) {
             if (accountRepository.existsByPhoneNumber(request.phoneNumber())) {
                 log.warn("Phone number {} already exists for another account", request.phoneNumber());
@@ -129,18 +141,17 @@ public class AccountServiceImpl implements AccountService {
 
         accountMapper.updateEntityFromRequest(accountToUpdate, request);
 
-        // Hash password if it's being updated
         if (request.password() != null) {
             accountToUpdate.setPassword(passwordEncoder.encode(request.password()));
         }
 
         Account updatedAccount = accountRepository.save(accountToUpdate);
         log.info("Account updated successfully with id: {}", id);
-        return ApiResponse.success(accountMapper.toResponse(updatedAccount));
+        return accountMapper.toResponse(updatedAccount);
     }
 
     @Override
-    public ApiResponse<Void> deleteAccount(String id) {
+    public void deleteAccount(String id) {
         log.info("Deleting account with id: {}", id);
 
         if (!accountRepository.existsById(id)) {
@@ -150,22 +161,44 @@ public class AccountServiceImpl implements AccountService {
 
         accountRepository.deleteById(id);
         log.info("Account deleted successfully with id: {}", id);
-        return ApiResponse.successWithoutData();
     }
 
     @Override
-    public ApiResponse<Boolean> existsByEmail(String email) {
+    public boolean existsByEmail(String email) {
         log.info("Checking if account exists with email: {}", email);
         boolean exists = accountRepository.existsByEmail(email);
         log.info("Account with email {} exists: {}", email, exists);
-        return ApiResponse.success(exists);
+        return exists;
     }
 
     @Override
-    public ApiResponse<Boolean> existsByPhoneNumber(String phoneNumber) {
+    public boolean existsByPhoneNumber(String phoneNumber) {
         log.info("Checking if account exists with phone number: {}", phoneNumber);
         boolean exists = accountRepository.existsByPhoneNumber(phoneNumber);
         log.info("Account with phone number {} exists: {}", phoneNumber, exists);
-        return ApiResponse.success(exists);
+        return exists;
+    }
+
+    @Override
+    public void banAccount(String id, String reason) {
+        log.info("Banning account id={}, reason={}", id, reason);
+        Account account = accountRepository.findById(id)
+                .orElseThrow(() -> new AppException(ErrorCode.ACC_ACCOUNT_NOT_FOUND));
+        account.setEnabled(false);
+        account.setActive(false);
+        accountRepository.save(account);
+        int revoked = tokenStoreService.revokeAllUserRefreshSessions(id);
+        log.info("Account banned: id={}, revokedSessions={}", id, revoked);
+    }
+
+    @Override
+    public void unbanAccount(String id) {
+        log.info("Unbanning account id={}", id);
+        Account account = accountRepository.findById(id)
+                .orElseThrow(() -> new AppException(ErrorCode.ACC_ACCOUNT_NOT_FOUND));
+        account.setEnabled(true);
+        account.setActive(true);
+        accountRepository.save(account);
+        log.info("Account unbanned: id={}", id);
     }
 }

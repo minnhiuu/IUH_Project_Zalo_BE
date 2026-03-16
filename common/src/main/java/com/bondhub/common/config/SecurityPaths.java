@@ -16,11 +16,20 @@ public class SecurityPaths {
             // Authentication endpoints
             "/api/auth/login",
             "/api/auth/register",
+            "/api/auth/register/verify",
+            "/api/auth/forgot-password",
+            "/api/auth/reset-password",
             "/api/auth/refresh",
             "/api/auth/validate",
+            "/api/auth/qr/generate",
+            "/api/auth/qr/wait/**",
+
+            // Internal service-to-service endpoints
+            "/api/users/internal/**",
 
             // Test endpoints
             "/api/users/test/security/public",
+            "/api/users/qr-info",
 
             // Swagger UI and API documentation
             "/swagger-ui",
@@ -32,6 +41,23 @@ public class SecurityPaths {
             "/api/users/v3/api-docs",
             "/api/messages/v3/api-docs",
             "/api/notifications/v3/api-docs",
+            "/api/search/v3/api-docs",
+            "/api/search/v3/api-docs/**",
+            // Service-level API docs paths (after gateway routes them)
+            "/auth/v3/api-docs",
+            "/auth/v3/api-docs/**",
+            "/user/v3/api-docs",
+            "/user/v3/api-docs/**",
+            "/message/v3/api-docs",
+            "/message/v3/api-docs/**",
+            "/notification/v3/api-docs",
+            "/notification/v3/api-docs/**",
+            "/file/v3/api-docs",
+            "/file/v3/api-docs/**",
+            "/friend/v3/api-docs",
+            "/friend/v3/api-docs/**",
+            "/search/v3/api-docs",
+            "/search/v3/api-docs/**",
 
             // Actuator endpoints
             "/actuator/health",
@@ -45,8 +71,14 @@ public class SecurityPaths {
             // Auth endpoints (gateway strips /api/auth -> /auth)
             "/auth/login",
             "/auth/register",
+            "/auth/register/verify",
+            "/auth/forgot-password",
+            "/auth/reset-password",
             "/auth/refresh",
             "/auth/validate",
+            "/auth/logout",
+            "/auth/qr/generate",
+            "/auth/qr/wait/**",
 
             // Test endpoints (gateway strips /api/users -> /users)
             "/users/test/security/public",
@@ -76,14 +108,16 @@ public class SecurityPaths {
      * Check if a path is public at gateway level (doesn't require authentication)
      */
     public static boolean isPublicPath(String path) {
-        return PUBLIC_PATHS.stream().anyMatch(path::contains);
+        return PUBLIC_PATHS.stream()
+                .anyMatch(pattern -> matchesPattern(path, pattern));
     }
 
     /**
      * Check if a path is public at service level (after gateway rewrite)
      */
     public static boolean isServicePublicPath(String path) {
-        return SERVICE_PUBLIC_PATHS.stream().anyMatch(path::contains);
+        return SERVICE_PUBLIC_PATHS.stream()
+                .anyMatch(pattern -> matchesPattern(path, pattern));
     }
 
     /**

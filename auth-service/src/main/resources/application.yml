@@ -12,9 +12,19 @@ spring:
         initial-interval: 1000
         max-interval: 2000
         multiplier: 1.1
+  mail:
+    email: ${BREVO_MAIL}
 
-# JWT Configuration (fallback - should be configured in config-server)
+# JWT Configuration
 jwt:
-  secret: ${JWT_SECRET:TGhpcyBpcyBhIHRlbXBvcmFyeSBzZWNyZXQga2V5IGZvciBkZXZlbG9wbWVudCBvbmx5IC0gcGxlYXNlIHVzZSBhIHNlY3VyZSBzZWNyZXQgaW4gcHJvZHVjdGlvbg==}
-  access-token-expiration: 3600000  # 1 hour
-  refresh-token-expiration: 604800000  # 7 days
+  secret: ${JWT_SECRET}
+  access:
+    expiration: ${JWT_ACCESS_EXPIRATION} # 1 hour in milliseconds
+  refresh:
+    expiration-web: ${JWT_REFRESH_WEB_EXPIRATION} # 14 days in milliseconds
+    expiration-mobile: ${JWT_REFRESH_MOBILE_EXPIRATION} # 365 days in milliseconds
+# Admin Configuration
+app:
+  admin:
+    email: ${ADMIN_EMAIL:admin@bondhub.com}
+    password: ${ADMIN_PASSWORD:Admin@123}

@@ -5,100 +5,120 @@ spring:
   application:
     name: auth-service
 
+  messages:
+    basename: i18n/messages, i18n/messages-auth
 
     # MongoDB Configuration
   data:
     mongodb:
-      uri: ${MONGODB_URI_AUTH:mongodb://root:rootpassword123@127.0.0.1:27017/bondhub_auth?authSource=admin}
+      uri: ${MONGODB_URI_AUTH}
       auto-index-creation: true
       uuid-representation: standard
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT}
+      password: ${REDIS_PASSWORD}
+      timeout: 5000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
 
-# Eureka Client Configuration
-eureka:
-  client:
-    service-url:
-      defaultZone: ${EUREKA_SERVER_URL:http://localhost:8761/eureka/}
-    register-with-eureka: true
-    fetch-registry: true
-    registry-fetch-interval-seconds: 30
-  instance:
-    prefer-ip-address: true
-    instance-id: ${spring.application.name}:${spring.application.instance_id:${random.value}}
-    lease-renewal-interval-in-seconds: 30
-    lease-expiration-duration-in-seconds: 90
-    metadata-map:
-      version: 0.0.1-SNAPSHOT
-      environment: ${spring.profiles.active:default}
+  # Kafka Configuration for Auth Service
+  kafka:
+    # Producer configuration for authentication events
+    producer:
+      client-id: auth-service-producer
+      retries: 3
+      properties:
+        max.in.flight.requests.per.connection: 5
 
-# Management and Monitoring
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info,metrics,prometheus,refresh,env
-      base-path: /actuator
-  endpoint:
-    health:
-      show-details: when-authorized
-      probes:
-        enabled: true
-  metrics:
-    export:
-      prometheus:
-        enabled: true
-    tags:
-      application: ${spring.application.name}
-  health:
-    livenessstate:
-      enabled: true
-    readinessstate:
-      enabled: true
+    # Consumer configuration (if needed for user sync events)
+    consumer:
+      group-id: auth-service-group
+      client-id: auth-service-consumer
 
-# Logging Configuration
+    # Listener configuration
+    listener:
+      concurrency: 2
+      ack-mode: manual
+
+app:
+  cookie:
+    secure: ${COOKIE_SECURE} # Set to true in production
+    same-site: ${COOKIE_SAME_SITE}
+    path: ${COOKIE_PATH}
+
+# Service-specific logging overrides
 logging:
   level:
-    root: INFO
     com.bondhub.authservice: DEBUG
-    org.springframework.web: INFO
     org.springframework.security: DEBUG
     org.hibernate.SQL: DEBUG
     org.hibernate.type.descriptor.sql.BasicBinder: TRACE
-  pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
-    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
   file:
     name: logs/auth-service.log
-    max-size: 10MB
-    max-history: 30
-    total-size-cap: 1GB
 
-# Resilience4j Circuit Breaker (if needed)
+# Service-specific resilience4j overrides
 resilience4j:
   circuitbreaker:
     instances:
       authService:
-        register-health-indicator: true
-        sliding-window-size: 10
-        minimum-number-of-calls: 5
-        permitted-number-of-calls-in-half-open-state: 3
-        wait-duration-in-open-state: 30s
-        failure-rate-threshold: 50
-        slow-call-rate-threshold: 100
-        slow-call-duration-threshold: 3s
+        base-config: default
 
   retry:
     instances:
       authService:
-        max-attempts: 3
-        wait-duration: 1s
+        base-config: default
 
   timelimiter:
     instances:
       authService:
-        timeout-duration: 5s
+        base-config: default
 
-# JWT Configuration
+# JWT Configuration (fallback - should be configured in config-server)
 jwt:
-  secret: ${JWT_SECRET:TGhpcyBpcyBhIHRlbXBvcmFyeSBzZWNyZXQga2V5IGZvciBkZXZlbG9wbWVudCBvbmx5IC0gcGxlYXNlIHVzZSBhIHNlY3VyZSBzZWNyZXQgaW4gcHJvZHVjdGlvbg==}
-  access-token-expiration: 3600000  # 1 hour in milliseconds
-  refresh-token-expiration: 604800000  # 7 days in milliseconds
+  secret: ${JWT_SECRET}
+  access:
+    expiration: 3600000 # 1 hour
+  refresh:
+    expiration-web: 604800000 # 7 days
+    expiration-mobile: 31536000000 # 1 year
+
+# Brevo Email Configuration
+brevo:
+  api-key: ${BREVO_API_KEY}
+  sender:
+    name: ${BREVO_SENDER_NAME}
+  template:
+    otp-verification-id: ${BREVO_OTP_TEMPLATE_ID}
+
+# OTP Configuration
+otp:
+  length: 6 # Number of digits in OTP
+  ttl-seconds: 300 # 5 minutes
+  max-attempts: 5 # Maximum validation attempts before OTP is deleted
+  cooldown-seconds: 60 # Cooldown between OTP generation requests (1 minute)
+
+# SpringDoc OpenAPI Configuration
+springdoc:
+  api-docs:
+    enabled: true
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html
+  show-actuator: false
+
+# Security Configuration - Auth service uses its own SecurityConfig, not CommonSecurityConfig
+bondhub:
+  security:
+    gateway-auth:
+      enabled: false # Disable CommonSecurityConfig for auth-service
+
+# QR Configuration
+qr:
+  expiration-seconds: ${QR_EXPIRATION_SECONDS}
+  content-prefix: ${QR_CONTENT_PREFIX}
+  wait-timeout-ms: ${QR_WAIT_TIMEOUT_MS}

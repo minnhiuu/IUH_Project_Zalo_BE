@@ -1,0 +1,97 @@
+server:
+  port: 8086
+
+spring:
+  application:
+    name: friend-service
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+
+  messages:
+    basename: i18n/messages, i18n/messages-friend
+
+  data:
+    mongodb:
+      uri: ${MONGODB_URI_FRIENDSHIPS}
+      auto-index-creation: true
+      uuid-representation: standard
+
+  # Kafka Configuration for User Service
+  kafka:
+    # Producer configuration for user events
+    producer:
+      client-id: friend-service-producer
+      retries: 3
+      properties:
+        max.in.flight.requests.per.connection: 5
+
+    # Consumer configuration for incoming events (if needed)
+    consumer:
+      group-id: friend-service-group
+      client-id: friend-service-consumer
+      max-poll-records: 100
+
+    # Listener configuration
+    listener:
+      concurrency: 2
+      ack-mode: manual
+
+# Service-specific logging overrides
+logging:
+  level:
+    root: INFO
+    com.bondhub.friendservice: DEBUG
+    org.springframework.web: INFO
+    org.springframework.security: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+  file:
+    name: logs/friend-service.log
+    max-size: 10MB
+    max-history: 30
+    total-size-cap: 1GB
+
+# Service-specific resilience4j overrides
+resilience4j:
+  circuitbreaker:
+    instances:
+      userService:
+        base-config: default
+
+  retry:
+    instances:
+      userService:
+        base-config: default
+
+  timelimiter:
+    instances:
+      userService:
+        base-config: default
+
+# Service-specific security configuration
+bondhub:
+  security:
+    public-endpoints:
+      - /friendships
+
+# AWS S3 Configuration
+cloud:
+  aws:
+    region:
+      static: ${AWS_REGION}
+aws:
+  s3:
+    bucket:
+      name: ${AWS_S3_BUCKET_NAME}
+
+# SpringDoc OpenAPI Configuration
+springdoc:
+  api-docs:
+    enabled: true
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html
+  show-actuator: false

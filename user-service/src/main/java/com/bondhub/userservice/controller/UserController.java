@@ -1,0 +1,103 @@
+package com.bondhub.userservice.controller;
+
+import com.bondhub.common.dto.ApiResponse;
+import com.bondhub.common.dto.client.userservice.user.response.UserSummaryResponse;
+import com.bondhub.userservice.dto.request.BioUpdateRequest;
+import com.bondhub.userservice.dto.request.user.AvatarUpdateRequest;
+import com.bondhub.userservice.dto.request.user.BackgroundUpdateRequest;
+import com.bondhub.userservice.dto.request.user.UserCreateRequest;
+import com.bondhub.userservice.dto.request.user.UserUpdateRequest;
+import com.bondhub.userservice.dto.response.user.UserImageResponse;
+import com.bondhub.userservice.dto.response.user.UserProfileResponse;
+import com.bondhub.userservice.dto.response.user.UserResponse;
+import com.bondhub.userservice.service.user.UserService;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.util.List;
+import java.util.Map;
+
+@RestController
+@RequestMapping("/users")
+@RequiredArgsConstructor
+public class UserController {
+    private final UserService userService;
+
+    @PostMapping
+    public ResponseEntity<ApiResponse<UserResponse>> createUser(@Valid @RequestBody UserCreateRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success(userService.createUser(request)));
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<ApiResponse<UserResponse>> getUserById(@PathVariable String id) {
+        return ResponseEntity.ok(ApiResponse.success(userService.getUserById(id)));
+    }
+
+    @GetMapping("/account/{accountId}")
+    public ResponseEntity<ApiResponse<UserResponse>> getUserByAccountId(@PathVariable String accountId) {
+        return ResponseEntity.ok(ApiResponse.success(userService.getUserByAccountId(accountId)));
+    }
+
+    @GetMapping
+    public ResponseEntity<ApiResponse<List<UserResponse>>> getAllUsers() {
+        return ResponseEntity.ok(ApiResponse.success(userService.getAllUsers()));
+    }
+
+    @PutMapping("/me")
+    public ResponseEntity<ApiResponse<UserProfileResponse>> updateUser(
+            @Valid @RequestBody UserUpdateRequest request) {
+        return ResponseEntity.ok(ApiResponse.success(userService.updateUser(request)));
+    }
+
+    @GetMapping("/me")
+    public ResponseEntity<ApiResponse<UserProfileResponse>> getMyProfile() {
+        return ResponseEntity.ok(ApiResponse.success(userService.getMyUserWithAccountInfo()));
+    }
+
+    @PatchMapping("/profile/avatar")
+    public ResponseEntity<ApiResponse<UserImageResponse>> updateAvatar(
+            @RequestPart("file") MultipartFile file) {
+        AvatarUpdateRequest request = AvatarUpdateRequest.builder().file(file).build();
+        return ResponseEntity.ok(ApiResponse.success(userService.updateAvatar(request)));
+    }
+
+    @PatchMapping("/profile/background")
+    public ResponseEntity<ApiResponse<UserImageResponse>> updateBackground(
+            @RequestPart("file") MultipartFile file,
+            @RequestParam("y") Double y) {
+        BackgroundUpdateRequest request = BackgroundUpdateRequest.builder()
+                .file(file)
+                .y(y)
+                .build();
+        return ResponseEntity.ok(ApiResponse.success(userService.updateBackground(request)));
+    }
+
+    @PatchMapping("/profile/background/position")
+    public ResponseEntity<ApiResponse<UserImageResponse>> updateBackgroundPosition(
+            @RequestParam Double y) {
+        return ResponseEntity.ok(ApiResponse.success(userService.updateBackgroundPosition(y)));
+    }
+
+    @PatchMapping("/profile/bio")
+    public ResponseEntity<ApiResponse<UserProfileResponse>> updateBio(
+            @RequestBody BioUpdateRequest request) {
+        return ResponseEntity.ok(ApiResponse.success(userService.updateBio(request)));
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<ApiResponse<Void>> deleteUser(@PathVariable String id) {
+        userService.deleteUser(id);
+        return ResponseEntity.ok(ApiResponse.successWithoutData());
+    }
+
+    @PostMapping("/batch")
+    public ResponseEntity<ApiResponse<Map<String, UserSummaryResponse>>> getUsersByIds(
+            @RequestBody List<String> userIds) {
+        return ResponseEntity.ok(ApiResponse.success(userService.getUsersByIds(userIds)));
+    }
+}

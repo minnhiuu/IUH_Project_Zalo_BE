@@ -2,6 +2,7 @@ package com.bondhub.gateway.filter;
 
 import com.bondhub.common.config.SecurityPaths;
 import com.bondhub.common.utils.JwtUtil;
+import com.bondhub.gateway.service.TokenValidationService;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
@@ -18,10 +19,6 @@ import reactor.core.publisher.Mono;
 
 import java.util.Set;
 
-/**
- * JWT Authentication Global Filter
- * Validates JWT tokens and adds user context headers to downstream services
- */
 @Component
 @RequiredArgsConstructor
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
@@ -29,21 +26,20 @@ import java.util.Set;
 public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
 
     JwtUtil jwtUtil;
+    TokenValidationService tokenValidationService;
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         ServerHttpRequest request = exchange.getRequest();
-        String path = request.getPath().toString();
+        String path = request.getPath().value();
 
         log.debug("Processing request: {} {}", request.getMethod(), path);
 
-        // Skip authentication for public paths
         if (SecurityPaths.isPublicPath(path)) {
             log.debug("Public path detected, skipping authentication: {}", path);
             return chain.filter(exchange);
         }
 
-        // Extract JWT token from Authorization header
         String authHeader = request.getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
 
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
@@ -54,35 +50,46 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
 
         String token = authHeader.substring(7);
 
-        try {
-            // Validate token
-            if (!jwtUtil.validateToken(token)) {
-                log.warn("Invalid JWT token for path: {}", path);
-                exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
-                return exchange.getResponse().setComplete();
-            }
+        return tokenValidationService.validateToken(token)
+                .flatMap(isValid -> {
+                    if (!isValid) {
+                        log.warn("Token validation failed for path: {}", path);
+                        exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
+                        return exchange.getResponse().setComplete();
+                    }
 
-            // Extract user information from token
-            String userId = jwtUtil.extractUserId(token);
-            String email = jwtUtil.extractEmail(token);
-            Set<String> roles = jwtUtil.extractRoles(token);
+                    try {
+                        String accountId = jwtUtil.extractAccountId(token);
+                        String userId = jwtUtil.extractUserId(token);
+                        String email = jwtUtil.extractEmail(token);
+                        String role = jwtUtil.extractRole(token);
+                        String jti = jwtUtil.extractJti(token);
+                        String remainingTTL = String.valueOf(jwtUtil.getRemainingTtl(token));
 
-            // Add user context headers for downstream services
-            ServerHttpRequest modifiedRequest = request.mutate()
-                    .header("X-User-Id", userId)
-                    .header("X-User-Email", email)
-                    .header("X-User-Roles", String.join(",", roles))
-                    .build();
+                        ServerHttpRequest modifiedRequest = request.mutate()
+                                .header("X-Account-Id", accountId)
+                                .header("X-User-Id", userId != null ? userId : "")
+                                .header("X-User-Email", email)
+                                .header("X-User-Roles", role)
+                                .header("X-JWT-Id", jti)
+                                .header("X-Remaining-TTL", remainingTTL)
+                                .build();
 
-            log.debug("Authentication successful for user: {} ({})", email, userId);
+                        log.debug("Authentication successful for account: {}, user: {}", accountId, userId);
 
-            return chain.filter(exchange.mutate().request(modifiedRequest).build());
+                        return chain.filter(exchange.mutate().request(modifiedRequest).build());
 
-        } catch (Exception e) {
-            log.error("Error processing JWT token: {}", e.getMessage());
-            exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
-            return exchange.getResponse().setComplete();
-        }
+                    } catch (Exception e) {
+                        log.error("Error extracting token claims: {}", e.getMessage());
+                        exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
+                        return exchange.getResponse().setComplete();
+                    }
+                })
+                .onErrorResume(e -> {
+                    log.error("Error during token validation: {}", e.getMessage());
+                    exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
+                    return exchange.getResponse().setComplete();
+                });
     }
 
     @Override

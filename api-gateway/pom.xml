@@ -92,6 +92,12 @@
             <scope>compile</scope>
         </dependency>
 
+        <!-- Redis Reactive for token blacklist checking -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis-reactive</artifactId>
+        </dependency>
+
     </dependencies>
 
     <dependencyManagement>

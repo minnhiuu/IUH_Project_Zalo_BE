@@ -5,6 +5,7 @@ import lombok.Getter;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 
@@ -16,8 +17,11 @@ import java.util.List;
 @AllArgsConstructor
 public class UserPrincipal implements UserDetails {
 
+    private final String accountId;
     private final String userId;
     private final String email;
+    private final String jti;
+    private final Long remainingTTL;
     private final Collection<? extends GrantedAuthority> authorities;
 
     @Override
@@ -27,13 +31,13 @@ public class UserPrincipal implements UserDetails {
 
     @Override
     public String getPassword() {
-        // Not needed for header-based authentication
+
         return null;
     }
 
     @Override
     public String getUsername() {
-        return email; // Use email as username
+        return email;
     }
 
     @Override
@@ -56,10 +60,4 @@ public class UserPrincipal implements UserDetails {
         return true;
     }
 
-    /**
-     * Get user ID from security context
-     */
-    public String getId() {
-        return userId;
-    }
 }

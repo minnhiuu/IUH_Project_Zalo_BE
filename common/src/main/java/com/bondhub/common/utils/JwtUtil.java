@@ -13,8 +13,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 /**
  * JWT Utility class for token generation, validation, and extraction
@@ -30,35 +28,40 @@ public class JwtUtil {
     /**
      * Generate access token with user information
      *
-     * @param userId User ID
-     * @param email  User email
-     * @param roles  User roles
+     * @param accountId Account ID
+     * @param userId    User profile ID
+     * @param email     User email
+     * @param role      User role
      * @return JWT access token
      */
-    public String generateAccessToken(String userId, String email, Set<Role> roles) {
+    public String generateAccessToken(String accountId, String userId, String email, Role role, String sessionId) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", userId);
         claims.put("email", email);
-        // Convert Role enum to String for JWT claims
-        claims.put("roles", roles.stream()
-                .map(Role::getName)
-                .collect(Collectors.toList()));
+        claims.put("sessionId", sessionId);
+        claims.put("jti", java.util.UUID.randomUUID().toString());
+        // Store single role as string in JWT claims
+        claims.put("role", role != null ? role.getName() : null);
         claims.put("type", "access");
 
-        return generateToken(claims, userId, jwtProperties.getAccessTokenExpiration());
+        return generateToken(claims, accountId, jwtProperties.getAccessTokenExpiration());
     }
 
     /**
      * Generate refresh token
      *
-     * @param userId User ID
+     * @param userId       User ID
+     * @param sessionId    Session ID for device tracking
+     * @param expirationMs Expiration time for this specific token
      * @return JWT refresh token
      */
-    public String generateRefreshToken(String userId) {
+    public String generateRefreshToken(String userId, String sessionId, long expirationMs) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("type", "refresh");
+        claims.put("sessionId", sessionId);
+        claims.put("jti", java.util.UUID.randomUUID().toString());
 
-        return generateToken(claims, userId, jwtProperties.getRefreshTokenExpiration());
+        return generateToken(claims, userId, expirationMs);
     }
 
     /**
@@ -110,13 +113,23 @@ public class JwtUtil {
     }
 
     /**
-     * Extract user ID from token
+     * Extract account ID from token
+     *
+     * @param token JWT token
+     * @return Account ID
+     */
+    public String extractAccountId(String token) {
+        return extractClaim(token, Claims::getSubject);
+    }
+
+    /**
+     * Extract user profile ID from token
      *
      * @param token JWT token
      * @return User ID
      */
     public String extractUserId(String token) {
-        return extractClaim(token, Claims::getSubject);
+        return extractClaim(token, claims -> claims.get("userId", String.class));
     }
 
     /**
@@ -130,23 +143,14 @@ public class JwtUtil {
     }
 
     /**
-     * Extract roles from token
+     * Extract role from token
      *
      * @param token JWT token
-     * @return Set of roles
+     * @return Role string, or null if not present
      */
-    @SuppressWarnings("unchecked")
-    public Set<String> extractRoles(String token) {
+    public String extractRole(String token) {
         Claims claims = extractAllClaims(token);
-        Object rolesObj = claims.get("roles");
-
-        if (rolesObj instanceof Set) {
-            return (Set<String>) rolesObj;
-        } else if (rolesObj instanceof java.util.List) {
-            return new java.util.HashSet<>((java.util.List<String>) rolesObj);
-        }
-
-        return new java.util.HashSet<>();
+        return claims.get("role", String.class);
     }
 
     /**
@@ -162,6 +166,58 @@ public class JwtUtil {
         } catch (ExpiredJwtException e) {
             return true;
         }
+    }
+
+    /**
+     * Extract token type from token
+     *
+     * @param token JWT token
+     * @return Token type ("access" or "refresh")
+     */
+    public String extractTokenType(String token) {
+        return extractClaim(token, claims -> claims.get("type", String.class));
+    }
+
+    /**
+     * Validate if token is a refresh token
+     *
+     * @param token JWT token
+     * @return true if token is a refresh token, false otherwise
+     */
+    public boolean isRefreshToken(String token) {
+        try {
+            String tokenType = extractTokenType(token);
+            return "refresh".equals(tokenType);
+        } catch (Exception e) {
+            log.error("Error checking token type: {}", e.getMessage());
+            return false;
+        }
+    }
+
+    public String extractJti(String token) {
+        return extractClaim(token, claims -> claims.get("jti", String.class));
+    }
+
+    public String extractSessionId(String token) {
+        return extractClaim(token, claims -> claims.get("sessionId", String.class));
+    }
+
+    public long getRemainingTtl(String token) {
+        Date expiration = extractClaim(token, Claims::getExpiration);
+        long remainingMs = expiration.getTime() - System.currentTimeMillis();
+        return Math.max(0, remainingMs / 1000);
+    }
+
+    public long getWebRefreshExpirationMs() {
+        return jwtProperties.getRefreshExpirationWeb();
+    }
+
+    public long getMobileRefreshExpirationMs() {
+        return jwtProperties.getRefreshExpirationMobile();
+    }
+
+    public long getAccessTokenExpirationSeconds() {
+        return jwtProperties.getAccessTokenExpiration() / 1000;
     }
 
     /**

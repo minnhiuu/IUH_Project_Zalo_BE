@@ -32,6 +32,9 @@
         <module>auth-service</module>
         <module>message-service</module>
         <module>notification-service</module>
+        <module>file-service</module>
+        <module>search-service</module>
+        <module>friend-service</module>
     </modules>
 
     <dependencyManagement>

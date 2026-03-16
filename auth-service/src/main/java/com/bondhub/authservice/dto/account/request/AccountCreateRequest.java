@@ -18,9 +18,9 @@ import jakarta.validation.constraints.NotBlank;
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record AccountCreateRequest(
-                @NotBlank(message = "Email is required") @Email(message = "Email must be valid") String email,
+                @NotBlank(message = "{validation.email.required}") @Email(message = "{validation.email.invalid}") String email,
 
-                @NotBlank(message = "Password is required") String password,
+                @NotBlank(message = "{validation.password.required}") String password,
 
-                @NotBlank(message = "Phone number is required") String phoneNumber) {
+                @NotBlank(message = "{validation.phoneNumber.required}") String phoneNumber) {
 }

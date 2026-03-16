@@ -19,7 +19,7 @@ public record AccountUpdateRequest(
         String phoneNumber,
         String password,
 
-        @Email(message = "Email must be valid")
+        @Email(message = "{validation.email.invalid}")
         String email
 ) {
 }

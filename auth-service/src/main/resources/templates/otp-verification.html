@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OTP Verification - BondHub</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            line-height: 1.6; 
+            color: #333; 
+            background-color: #f4f4f4; 
+            padding: 20px; 
+            margin: 0;
+        }
+        .container { 
+            max-width: 600px; 
+            margin: 0 auto; 
+            background-color: #ffffff; 
+            padding: 30px; 
+            border-radius: 8px; 
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1); 
+        }
+        .header { 
+            text-align: center; 
+            margin-bottom: 20px; 
+        }
+        .header h1 {
+            color: #007bff;
+            margin: 0;
+            font-size: 28px;
+        }
+        .header p {
+            color: #666;
+            margin: 5px 0 0 0;
+            font-size: 14px;
+        }
+        .otp-code { 
+            font-size: 48px; 
+            font-weight: bold; 
+            color: #007bff; 
+            letter-spacing: 5px; 
+            text-align: center; 
+            margin: 20px 0; 
+            background-color: #f8f9fa; 
+            padding: 20px; 
+            border: 1px solid #dee2e6; 
+            border-radius: 5px; 
+        }
+        .content {
+            margin: 20px 0;
+        }
+        .content h2 {
+            color: #333;
+            font-size: 22px;
+            margin-bottom: 15px;
+        }
+        .content p {
+            color: #555;
+            line-height: 1.8;
+            margin: 10px 0;
+        }
+        .footer { 
+            text-align: center; 
+            margin-top: 30px; 
+            font-size: 14px; 
+            color: #666; 
+        }
+        .support { 
+            margin-top: 20px; 
+            padding-top: 20px; 
+            border-top: 1px solid #eee; 
+        }
+        .support p {
+            margin: 5px 0;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>{{params.companyName}}</h1>
+            <p>{{params.companyTagline}}</p>
+        </div>
+        
+        <div class="content">
+            <h2>Verify Your Account</h2>
+            <p>Hello,</p>
+            <p>Thank you for registering with {{params.companyName}}. To complete your verification for account ID <strong>{{params.accountId}}</strong>, please use the One-Time Password (OTP) below.</p>
+            
+            <div class="otp-code">{{params.otpCode}}</div>
+            
+            <p>This OTP is valid for a limited time. If you didn't request this, please ignore this email or contact support.</p>
+        </div>
+        
+        <div class="support">
+            <p>If you need assistance, reach out to us at <a href="mailto:{{params.supportEmail}}">{{params.supportEmail}}</a>.</p>
+            <p>&copy; {{params.currentYear}} {{params.companyName}}. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>
