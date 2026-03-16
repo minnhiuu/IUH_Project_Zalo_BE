@@ -90,6 +90,16 @@ public enum ErrorCode {
         //  NOTIFICATION_TEMPLATE (23xx)
         NOTIFICATION_TEMPLATE_NOT_FOUND(HttpStatus.NOT_FOUND, 2300, "error.notification.template.not.found"),
         NOTIFICATION_STRATEGY_NOT_FOUND(HttpStatus.INTERNAL_SERVER_ERROR, 2301, "error.notification.strategy.not.found"),
+
+        // Block List errors (23xx)
+        CANNOT_BLOCK_YOURSELF(HttpStatus.BAD_REQUEST, 2301, "error.block.cannot.block.yourself"),
+        USER_ALREADY_BLOCKED(HttpStatus.CONFLICT, 2302, "error.block.user.already.blocked"),
+        BLOCK_NOT_FOUND(HttpStatus.NOT_FOUND, 2303, "error.block.not.found"),
+        MESSAGE_BLOCKED(HttpStatus.FORBIDDEN, 2304, "error.block.message.blocked"),
+        CALL_BLOCKED(HttpStatus.FORBIDDEN, 2305, "error.block.call.blocked"),
+        STORY_BLOCKED(HttpStatus.FORBIDDEN, 2306, "error.block.story.blocked"),
+        COMMUNICATION_BLOCKED(HttpStatus.FORBIDDEN, 2307, "error.block.communication.blocked")
+
         ;
 
         private final HttpStatus httpStatus;

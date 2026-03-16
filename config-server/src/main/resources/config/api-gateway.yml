@@ -114,16 +114,16 @@ spring:
                     fallbackUri: forward:/fallback/file-service
 
             # User Service Routes (Protected - JWT required)
-            - id: user-service-audit-logs
-              uri: lb://user-service
+            - id: friend-service-blocks
+              uri: lb://friend-service
               predicates:
-                - Path=/api/audit-logs,/api/audit-logs/**
+                - Path=/api/blocks,/api/blocks/**
               filters:
                 - RewritePath=/api/(?<segment>.*), /${segment}
                 - name: CircuitBreaker
                   args:
-                    name: userServiceCircuitBreaker
-                    fallbackUri: forward:/fallback/user-service
+                    name: friendServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/friend-service
 
             - id: user-service
               uri: lb://user-service

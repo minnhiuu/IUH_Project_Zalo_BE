@@ -1,7 +1,6 @@
-package com.bondhub.userservice.model;
+package com.bondhub.friendservice.model;
 
 import com.bondhub.common.model.BaseModel;
-import com.bondhub.userservice.model.enums.UserAction;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
@@ -9,13 +8,11 @@ import lombok.experimental.SuperBuilder;
 import org.springframework.data.mongodb.core.index.CompoundIndex;
 import org.springframework.data.mongodb.core.index.CompoundIndexes;
 import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.mapping.Field;
 import org.springframework.data.mongodb.core.mapping.FieldType;
 import org.springframework.data.mongodb.core.mapping.MongoId;
 
-/**
- * Entity representing user activity log entries
- */
-@Document("user_activity_logs")
+@Document("block_list")
 @Getter
 @Setter
 @NoArgsConstructor
@@ -25,19 +22,20 @@ import org.springframework.data.mongodb.core.mapping.MongoId;
 @EqualsAndHashCode(onlyExplicitlyIncluded = true, callSuper = false)
 @JsonInclude(JsonInclude.Include.NON_NULL)
 @CompoundIndexes({
-    @CompoundIndex(name = "user_action_idx", def = "{'userId': 1, 'action': 1}"),
-    @CompoundIndex(name = "user_created_idx", def = "{'userId': 1, 'createdAt': -1}")
+    @CompoundIndex(name = "blocker_blocked_idx", def = "{'blockerId': 1, 'blockedUserId': 1}", unique = true),
+    @CompoundIndex(name = "blocker_idx", def = "{'blockerId': 1}")
 })
-public class UserActivityLog extends BaseModel {
-    
+public class BlockList extends BaseModel {
+
     @EqualsAndHashCode.Include
     @MongoId(FieldType.OBJECT_ID)
     String id;
-    
-    String userId;
-    UserAction action;
-    String description;
-    String ipAddress;
-    String userAgent;
-    ActivityLogMetadata metadata;
+
+    @Field(targetType =  FieldType.OBJECT_ID)
+    String blockerId;
+
+    @Field(targetType =  FieldType.OBJECT_ID)
+    String blockedUserId;
+
+    BlockPreference preference;
 }
