@@ -172,6 +172,7 @@ resilience4j:
         cancel-running-future: true
 
 bondhub:
+  frontend-url: ${APP_FRONTEND_URL:http://localhost:5173}
   security:
     gateway-auth:
       enabled: false
