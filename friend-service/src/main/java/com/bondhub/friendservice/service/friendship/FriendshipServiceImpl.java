@@ -8,6 +8,10 @@ import com.bondhub.common.exception.ErrorCode;
 import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.friendservice.client.UserServiceClient;
 import com.bondhub.friendservice.dto.request.FriendRequestSendRequest;
+import com.bondhub.common.enums.NotificationType;
+import com.bondhub.common.event.notification.RawNotificationEvent;
+import com.bondhub.common.event.notification.CleanupNotificationEvent;
+import com.bondhub.common.publisher.RawNotificationEventPublisher;
 import com.bondhub.friendservice.dto.response.*;
 import com.bondhub.friendservice.mapper.FriendShipMapper;
 import com.bondhub.friendservice.model.FriendShip;
@@ -20,6 +24,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 import org.springframework.data.domain.Page;
@@ -35,6 +40,7 @@ public class FriendshipServiceImpl implements FriendshipService {
     FriendShipMapper friendShipMapper;
     UserServiceClient userServiceClient;
     SecurityUtil securityUtil;
+    RawNotificationEventPublisher rawNotificationEventPublisher;
 
     @Override
     @Transactional
@@ -74,6 +80,19 @@ public class FriendshipServiceImpl implements FriendshipService {
 
         UserSummaryResponse requester = getUserSummary(friendShip.getRequested());
         UserSummaryResponse receiver = getUserSummary(friendShip.getReceived());
+
+        RawNotificationEvent notificationEvent = RawNotificationEvent.builder()
+                .recipientId(receiverId)
+                .actorId(currentUserId)
+                .actorName(requester.fullName())
+                .actorAvatar(requester.avatar())
+                .type(NotificationType.FRIEND_REQUEST)
+                .referenceId(friendShip.getId())
+                .payload(Map.of("requestId", friendShip.getId()))
+                .occurredAt(LocalDateTime.now())
+                .build();
+        rawNotificationEventPublisher.publish(notificationEvent);
+
         return friendShipMapper.toFriendRequestResponse(friendShip, requester, receiver);
     }
 
@@ -100,6 +119,19 @@ public class FriendshipServiceImpl implements FriendshipService {
         log.info("Friend request {} accepted successfully", friendshipId);
         UserSummaryResponse requester = getUserSummary(friendShip.getRequested());
         UserSummaryResponse receiver = getUserSummary(friendShip.getReceived());
+
+        RawNotificationEvent notificationEvent = RawNotificationEvent.builder()
+                .recipientId(friendShip.getRequested())
+                .actorId(currentUserId)
+                .actorName(receiver.fullName())
+                .actorAvatar(receiver.avatar())
+                .type(NotificationType.FRIEND_ACCEPT)
+                .referenceId(friendShip.getId())
+                .payload(Map.of("requestId", friendShip.getId()))
+                .occurredAt(LocalDateTime.now())
+                .build();
+        rawNotificationEventPublisher.publish(notificationEvent);
+
         return friendShipMapper.toFriendRequestResponse(friendShip, requester, receiver);
     }
 
@@ -123,6 +155,13 @@ public class FriendshipServiceImpl implements FriendshipService {
         friendShip.setFriendStatus(FriendStatus.DECLINED);
         friendShipRepository.save(friendShip);
         log.info("Friend request {} declined with status DECLINED", friendshipId);
+
+        CleanupNotificationEvent cleanupEvent = CleanupNotificationEvent.builder()
+                .recipientId(currentUserId)
+                .referenceId(friendShip.getId())
+                .type(NotificationType.FRIEND_REQUEST)
+                .build();
+        rawNotificationEventPublisher.publishCleanup(cleanupEvent);
     }
 
     @Override

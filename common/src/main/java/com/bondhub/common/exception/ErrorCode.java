@@ -87,6 +87,10 @@ public enum ErrorCode {
         DLQ_EVENT_NOT_FOUND(HttpStatus.NOT_FOUND, 2401, "error.dlq.event.not.found"),
         DLQ_RETRY_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, 2402, "error.dlq.retry.failed"),
 
+        //  NOTIFICATION_TEMPLATE (23xx)
+        NOTIFICATION_TEMPLATE_NOT_FOUND(HttpStatus.NOT_FOUND, 2300, "error.notification.template.not.found"),
+        NOTIFICATION_STRATEGY_NOT_FOUND(HttpStatus.INTERNAL_SERVER_ERROR, 2301, "error.notification.strategy.not.found"),
+
         // Block List errors (23xx)
         CANNOT_BLOCK_YOURSELF(HttpStatus.BAD_REQUEST, 2301, "error.block.cannot.block.yourself"),
         USER_ALREADY_BLOCKED(HttpStatus.CONFLICT, 2302, "error.block.user.already.blocked"),
