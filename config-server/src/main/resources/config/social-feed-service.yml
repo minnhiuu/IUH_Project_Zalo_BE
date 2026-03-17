@@ -1,0 +1,77 @@
+server:
+  port: 8088
+
+spring:
+  application:
+    name: social-feed-service
+
+  messages:
+    basename: i18n/messages
+
+  data:
+    mongodb:
+      uri: ${MONGODB_URI_SOCIAL_FEED}
+      auto-index-creation: true
+      uuid-representation: standard
+
+  # Kafka configuration for async counter projection and notifications
+  kafka:
+    producer:
+      client-id: social-feed-service-producer
+      retries: 3
+      properties:
+        max.in.flight.requests.per.connection: 5
+
+    consumer:
+      group-id: social-feed-service-group
+      client-id: social-feed-service-consumer
+      max-poll-records: 200
+
+    listener:
+      concurrency: 3
+      ack-mode: manual
+
+# Service-specific logging overrides
+logging:
+  level:
+    root: INFO
+    com.leafy.socialfeedservice: DEBUG
+    org.springframework.web: INFO
+    org.springframework.security: DEBUG
+  file:
+    name: logs/social-feed-service.log
+    max-size: 10MB
+    max-history: 30
+    total-size-cap: 1GB
+
+# Service-specific resilience4j overrides
+resilience4j:
+  circuitbreaker:
+    instances:
+      socialFeedService:
+        base-config: default
+
+  retry:
+    instances:
+      socialFeedService:
+        base-config: default
+
+  timelimiter:
+    instances:
+      socialFeedService:
+        base-config: default
+
+# Service-specific security configuration
+bondhub:
+  security:
+    public-endpoints: []
+
+# SpringDoc OpenAPI Configuration
+springdoc:
+  api-docs:
+    enabled: true
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html
+  show-actuator: false

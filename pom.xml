@@ -35,6 +35,7 @@
         <module>file-service</module>
         <module>search-service</module>
         <module>friend-service</module>
+        <module>social-feed-service</module>
     </modules>
 
     <dependencyManagement>

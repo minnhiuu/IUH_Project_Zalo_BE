@@ -73,6 +73,12 @@ public enum ErrorCode {
         NOT_AUTHORIZED_TO_CANCEL(HttpStatus.FORBIDDEN, 3008, "error.friend.not.authorized.to.cancel"),
         FRIEND_REQUEST_NOT_PENDING(HttpStatus.BAD_REQUEST, 3009, "error.friend.request.not.pending"),
 
+        // Social feed errors (4xxx)
+        POST_NOT_FOUND(HttpStatus.NOT_FOUND, 4001, "error.post.not.found"),
+        COMMENT_NOT_FOUND(HttpStatus.NOT_FOUND, 4002, "error.comment.not.found"),
+        REACTION_NOT_FOUND(HttpStatus.NOT_FOUND, 4003, "error.reaction.not.found"),
+        POST_INVALID_VISIBILITY(HttpStatus.BAD_REQUEST, 4004, "error.post.invalid.visibility"),
+
         // Admin / ban errors
         CANNOT_BAN_YOURSELF(HttpStatus.BAD_REQUEST, 2208, "error.cannot.ban.yourself"),
         CANNOT_BAN_ADMIN(HttpStatus.FORBIDDEN, 2209, "error.cannot.ban.admin"),

@@ -75,6 +75,13 @@ spring:
               filters:
                 - RewritePath=/search/v3/api-docs, /v3/api-docs
 
+            - id: social-feed-service-docs
+              uri: lb://social-feed-service
+              predicates:
+                - Path=/social-feed/v3/api-docs/**
+              filters:
+                - RewritePath=/social-feed/v3/api-docs, /v3/api-docs
+
             # Auth Service Routes (Public - no JWT required)
             - id: auth-service-qr-wait
               uri: lb://auth-service
@@ -206,6 +213,73 @@ spring:
                     name: friendServiceCircuitBreaker
                     fallbackUri: forward:/fallback/friend-service
 
+            # Social Feed Service Routes (Protected - JWT required)
+            - id: social-feed-service-posts-root
+              uri: lb://social-feed-service
+              predicates:
+                - Path=/api/posts
+              filters:
+                - SetPath=/posts
+                - name: CircuitBreaker
+                  args:
+                    name: socialFeedServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/general
+
+            - id: social-feed-service-posts
+              uri: lb://social-feed-service
+              predicates:
+                - Path=/api/posts/**
+              filters:
+                - RewritePath=/api/posts/(?<segment>.*), /posts/${segment}
+                - name: CircuitBreaker
+                  args:
+                    name: socialFeedServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/general
+
+            - id: social-feed-service-comments-root
+              uri: lb://social-feed-service
+              predicates:
+                - Path=/api/comments
+              filters:
+                - SetPath=/comments
+                - name: CircuitBreaker
+                  args:
+                    name: socialFeedServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/general
+
+            - id: social-feed-service-comments
+              uri: lb://social-feed-service
+              predicates:
+                - Path=/api/comments/**
+              filters:
+                - RewritePath=/api/comments/(?<segment>.*), /comments/${segment}
+                - name: CircuitBreaker
+                  args:
+                    name: socialFeedServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/general
+
+            - id: social-feed-service-reactions-root
+              uri: lb://social-feed-service
+              predicates:
+                - Path=/api/reactions
+              filters:
+                - SetPath=/reactions
+                - name: CircuitBreaker
+                  args:
+                    name: socialFeedServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/general
+
+            - id: social-feed-service-reactions
+              uri: lb://social-feed-service
+              predicates:
+                - Path=/api/reactions/**
+              filters:
+                - RewritePath=/api/reactions/(?<segment>.*), /reactions/${segment}
+                - name: CircuitBreaker
+                  args:
+                    name: socialFeedServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/general
+
           # Global CORS Configuration
           globalCors:
             cors-configurations:
@@ -303,6 +377,8 @@ resilience4j:
         base-config: default
       friendServiceCircuitBreaker:
         base-config: default
+      socialFeedServiceCircuitBreaker:
+        base-config: default
 
   timelimiter:
     configs:
@@ -323,6 +399,8 @@ resilience4j:
       fileServiceCircuitBreaker:
         base-config: default
       friendServiceCircuitBreaker:
+        base-config: default
+      socialFeedServiceCircuitBreaker:
         base-config: default
 
   # Retry Configuration
@@ -352,6 +430,8 @@ resilience4j:
         max-attempts: 2
       friendServiceRetry:
         base-config: default
+      socialFeedServiceRetry:
+        base-config: default
 
   # Rate Limiter Configuration
   ratelimiter:
@@ -377,6 +457,9 @@ resilience4j:
       friendServiceRateLimiter:
         base-config: default
         limit-for-period: 100
+      socialFeedServiceRateLimiter:
+        base-config: default
+        limit-for-period: 120
 
   # Bulkhead Configuration
   bulkhead:
@@ -398,6 +481,9 @@ resilience4j:
         base-config: default
         max-concurrent-calls: 15
       friendServiceBulkhead:
+        base-config: default
+        max-concurrent-calls: 20
+      socialFeedServiceBulkhead:
         base-config: default
         max-concurrent-calls: 20
 
@@ -464,6 +550,8 @@ springdoc:
         url: /friend/v3/api-docs
       - name: Search Service
         url: /search/v3/api-docs
+      - name: Social Feed Service
+        url: /social-feed/v3/api-docs
     # Enable "Try it out" functionality
     use-root-path: true
     path: /swagger-ui.html

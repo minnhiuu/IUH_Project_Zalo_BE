@@ -1,0 +1,25 @@
+package com.leafy.socialfeedservice.dto.request.post;
+
+import com.leafy.socialfeedservice.model.enums.PostType;
+import com.leafy.socialfeedservice.model.enums.Visibility;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
+import lombok.Builder;
+
+import java.util.List;
+
+@Builder
+public record CreatePostRequest(
+        String groupId,
+        String title,
+        String caption,
+        String description,
+        List<String> hashtags,
+        @Valid
+        List<PostMediaRequest> media,
+        @NotNull(message = "post.type.required")
+        PostType postType,
+        @NotNull(message = "post.visibility.required")
+        Visibility visibility
+) {
+}

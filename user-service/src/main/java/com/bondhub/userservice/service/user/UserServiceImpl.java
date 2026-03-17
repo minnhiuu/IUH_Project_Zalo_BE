@@ -23,6 +23,7 @@ import com.bondhub.userservice.dto.response.user.UserImageResponse;
 import com.bondhub.userservice.mapper.UserMapper;
 import com.bondhub.userservice.mapper.UserProfileMapper;
 import com.bondhub.userservice.model.User;
+import com.bondhub.userservice.model.UserSetting;
 import com.bondhub.userservice.publisher.UserIndexEventPublisher;
 import com.bondhub.userservice.repository.UserRepository;
 import lombok.AccessLevel;
@@ -64,6 +65,9 @@ public class UserServiceImpl implements UserService {
     public UserResponse createUser(UserCreateRequest request) {
         log.info("Creating user with accountId: {}", request.accountId());
         User user = userMapper.toUser(request);
+
+        user.setUserSetting(new UserSetting());
+
         user = userRepository.save(user);
         log.info("User created successfully with id: {}", user.getId());
 

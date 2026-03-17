@@ -15,5 +15,9 @@ public enum EventType {
     USER_DELETED,
 
     USER_INDEX_REQUESTED,
-    USER_INDEX_DELETED
+    USER_INDEX_DELETED,
+
+    // Social Feed Events (social-feed-service)
+    REACTION_TOGGLE_COMMAND_REQUESTED,
+    POST_COMMENT_COUNT_PROJECTION_REQUESTED
 }

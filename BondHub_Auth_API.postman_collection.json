@@ -977,6 +977,302 @@
         }
       ],
       "description": "User Settings endpoints for managing user preferences with efficient MongoDB dot notation updates"
+    },
+    {
+      "name": "Social Feed",
+      "item": [
+        {
+          "name": "Create Post",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"groupId\": null,\n  \"title\": \"My first social feed post\",\n  \"caption\": \"Hello BondHub\",\n  \"description\": \"Testing social-feed-service\",\n  \"hashtags\": [\"#bondhub\", \"#social\"],\n  \"media\": [\n    {\n      \"url\": \"https://example.com/image-1.jpg\",\n      \"type\": \"IMAGE\"\n    }\n  ],\n  \"postType\": \"SOCIAL\",\n  \"visibility\": \"ALL\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/posts",
+              "host": ["{{base_url}}"],
+              "path": ["api", "posts"]
+            },
+            "description": "Create a new post."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Post By ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/posts/{{post_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "posts", "{{post_id}}"]
+            },
+            "description": "Get post details by post id."
+          },
+          "response": []
+        },
+        {
+          "name": "Get My Posts",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/posts/me?page=0&size=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "posts", "me"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Get current user's posts with pagination."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Post",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Updated post title\",\n  \"caption\": \"Updated caption\",\n  \"description\": \"Updated description\",\n  \"hashtags\": [\"#updated\", \"#bondhub\"],\n  \"media\": [\n    {\n      \"url\": \"https://example.com/image-updated.jpg\",\n      \"type\": \"IMAGE\"\n    }\n  ],\n  \"visibility\": \"FRIEND\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/posts/{{post_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "posts", "{{post_id}}"]
+            },
+            "description": "Update an existing post."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Post",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/posts/{{post_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "posts", "{{post_id}}"]
+            },
+            "description": "Soft-delete a post."
+          },
+          "response": []
+        },
+        {
+          "name": "Create Comment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"postId\": \"{{post_id}}\",\n  \"parentId\": null,\n  \"content\": \"This is a top-level comment\",\n  \"media\": []\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/comments",
+              "host": ["{{base_url}}"],
+              "path": ["api", "comments"]
+            },
+            "description": "Create a comment on a post (or a reply with parentId)."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Root Comments By Post",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/comments/post/{{post_id}}?page=0&size=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "comments", "post", "{{post_id}}"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Get root comments for a post with pagination."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Comment",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"Updated comment content\",\n  \"media\": []\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/comments/{{comment_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "comments", "{{comment_id}}"]
+            },
+            "description": "Update comment content/media."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Comment",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/comments/{{comment_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "comments", "{{comment_id}}"]
+            },
+            "description": "Soft-delete a comment."
+          },
+          "response": []
+        },
+        {
+          "name": "Toggle Reaction",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"targetId\": \"{{post_id}}\",\n  \"targetType\": \"POST\",\n  \"type\": \"LIKE\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/reactions/toggle",
+              "host": ["{{base_url}}"],
+              "path": ["api", "reactions", "toggle"]
+            },
+            "description": "Toggle reaction on POST or COMMENT."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Reaction",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/reactions?targetId={{post_id}}&targetType=POST",
+              "host": ["{{base_url}}"],
+              "path": ["api", "reactions"],
+              "query": [
+                {
+                  "key": "targetId",
+                  "value": "{{post_id}}"
+                },
+                {
+                  "key": "targetType",
+                  "value": "POST"
+                }
+              ]
+            },
+            "description": "Delete current user's reaction for target."
+          },
+          "response": []
+        }
+      ],
+      "description": "Social feed endpoints for posts, comments, and reactions via API Gateway"
     }
   ],
   "variable": [

@@ -43,4 +43,7 @@ public class User extends BaseModel {
 
     /** Updated on every successful login (set by auth-service via internal API) */
     LocalDateTime lastLoginAt;
+
+    @Builder.Default
+    UserSetting userSetting = new UserSetting();
 }
