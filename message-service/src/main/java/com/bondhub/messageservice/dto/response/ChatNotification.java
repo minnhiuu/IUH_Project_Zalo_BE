@@ -1,14 +1,19 @@
 package com.bondhub.messageservice.dto.response;
 
+import com.bondhub.common.enums.MessageStatus;
 import lombok.Builder;
 
+import com.bondhub.messageservice.model.enums.MessageType;
 import java.time.LocalDateTime;
+
+import lombok.With;
 
 /**
  * Chat Notification DTO
  * Uses Java Record as per backend development rules
  */
-@Builder
+@Builder(toBuilder = true)
+@With
 public record ChatNotification(
         String id,
         String chatId,
@@ -17,8 +22,13 @@ public record ChatNotification(
         String senderAvatar,
         String recipientId,
         String content,
+        MessageType type,
         String clientMessageId,
         LocalDateTime timestamp,
-        Integer unreadCount
+        Integer unreadCount,
+        ReplyMetadataResponse replyTo,
+        boolean isForwarded,
+        boolean isFromMe,
+        MessageStatus status
 ) {
 }

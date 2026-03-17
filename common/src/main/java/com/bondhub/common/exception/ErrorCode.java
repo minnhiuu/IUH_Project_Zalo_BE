@@ -88,7 +88,9 @@ public enum ErrorCode {
         DLQ_RETRY_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, 2402, "error.dlq.retry.failed"),
 
         // Chat errors (4xxx)
-        CHAT_ROOM_NOT_FOUND(HttpStatus.NOT_FOUND, 4001, "error.chat.room.not.found")
+        CHAT_ROOM_NOT_FOUND(HttpStatus.NOT_FOUND, 4001, "error.chat.room.not.found"),
+        MESSAGE_NOT_FOUND(HttpStatus.NOT_FOUND, 4002, "error.message.not.found"),
+        UNAUTHORIZED(HttpStatus.FORBIDDEN, 4003, "error.unauthorized")
         ;
 
         private final HttpStatus httpStatus;

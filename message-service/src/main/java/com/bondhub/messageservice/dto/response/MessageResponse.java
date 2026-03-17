@@ -1,11 +1,15 @@
 package com.bondhub.messageservice.dto.response;
 
+import com.bondhub.common.enums.MessageStatus;
 import com.bondhub.messageservice.model.enums.MessageType;
 import lombok.Builder;
 
 import java.time.LocalDateTime;
 
-@Builder
+import lombok.With;
+
+@Builder(toBuilder = true)
+@With
 public record MessageResponse(
         String id,
         String chatId,
@@ -17,6 +21,9 @@ public record MessageResponse(
         String clientMessageId,
         MessageType type,
         LocalDateTime createdAt,
-        LocalDateTime lastModifiedAt
+        LocalDateTime lastModifiedAt,
+        ReplyMetadataResponse replyTo,
+        boolean isForwarded,
+        MessageStatus status
 ) {
 }

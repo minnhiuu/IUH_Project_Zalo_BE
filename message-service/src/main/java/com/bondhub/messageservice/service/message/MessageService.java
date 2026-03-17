@@ -12,4 +12,6 @@ public interface MessageService {
     PageResponse<List<MessageResponse>> findChatMessages(String recipientId, int page, int size);
 
     void sendMessage(Message message);
+    void revokeMessage(String messageId);
+    void deleteMessageForMe(String messageId);
 }

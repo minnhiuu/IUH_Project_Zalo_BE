@@ -1,6 +1,8 @@
 package com.bondhub.messageservice.dto.response;
 
+import com.bondhub.common.enums.MessageStatus;
 import com.bondhub.common.enums.Status;
+import com.bondhub.messageservice.model.enums.MessageType;
 import lombok.Builder;
 
 import java.time.LocalDateTime;
@@ -10,13 +12,16 @@ import java.util.List;
 public record ConversationResponse(
         String chatId,
         String partnerId,
-        String partnerName,
+        String partnerName, //replace to conversation name when implementing group chat functionality
         String partnerAvatar,
         Status partnerStatus,
         LocalDateTime lastSeenAt,
         String lastMessage,
         String lastMessageId,
         LocalDateTime lastMessageTime,
+        boolean isLastMessageFromMe,
+        MessageType lastMessageType,
         Integer unreadCount,
+        MessageStatus lastMessageStatus,
         List<ConversationMemberResponse> members) {
 }

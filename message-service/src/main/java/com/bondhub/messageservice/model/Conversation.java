@@ -9,7 +9,6 @@ import org.springframework.data.mongodb.core.index.IndexDirection;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
-import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -29,12 +28,9 @@ public class Conversation extends BaseModel {
     String chatId;
     String senderId;
     String recipientId;
-    String lastMessage;
-    String lastMessageId;
 
-    // later will replace with modifiedAt (from BaseModel)
     @Indexed(direction = IndexDirection.DESCENDING)
-    LocalDateTime lastMessageTime;
+    LastMessageInfo lastMessage;
 
     @Builder.Default
     Map<String, Integer> unreadCounts = new HashMap<>();

@@ -1,6 +1,7 @@
 package com.bondhub.messageservice.model;
 
 import com.bondhub.common.model.BaseModel;
+import com.bondhub.common.enums.MessageStatus;
 import com.bondhub.messageservice.model.enums.MessageType;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
@@ -8,6 +9,9 @@ import lombok.experimental.SuperBuilder;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.index.CompoundIndex;
 import org.springframework.data.mongodb.core.mapping.Document;
+
+import java.util.HashSet;
+import java.util.Set;
 
 @Data
 @SuperBuilder
@@ -28,4 +32,13 @@ public class Message extends BaseModel {
     String content;
     String clientMessageId;
     MessageType type;
+    ReplyMetadata replyTo;
+    @Builder.Default
+    boolean isForwarded = false;
+
+    @Builder.Default
+    MessageStatus status = MessageStatus.NORMAL;
+
+    @Builder.Default
+    Set<String> deletedBy = new HashSet<>();
 }

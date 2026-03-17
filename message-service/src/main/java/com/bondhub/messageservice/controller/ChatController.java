@@ -58,4 +58,18 @@ public class ChatController {
         conversationService.markAsRead(chatId);
         return ResponseEntity.ok(ApiResponse.success(null));
     }
+
+    @PatchMapping("/{id}/revoke")
+    @Operation(summary = "Revoke a message for everyone (sender only)")
+    public ResponseEntity<ApiResponse<Void>> revokeMessage(@PathVariable String id) {
+        messageService.revokeMessage(id);
+        return ResponseEntity.ok(ApiResponse.success(null));
+    }
+
+    @DeleteMapping("/me/{id}")
+    @Operation(summary = "Delete a message only for the current user")
+    public ResponseEntity<ApiResponse<Void>> deleteMessageForMe(@PathVariable String id) {
+        messageService.deleteMessageForMe(id);
+        return ResponseEntity.ok(ApiResponse.success(null));
+    }
 }
