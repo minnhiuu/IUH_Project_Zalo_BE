@@ -1,7 +1,7 @@
 version: "3.8"
 
 services:
-  # MongoDB for Message Service and Notification Service
+  # MongoDB for Message, Notification, and Post Recommendation services
   mongodb:
     image: mongo:7.0
     container_name: bondhub-mongodb
@@ -127,6 +127,25 @@ services:
       retries: 10
       start_period: 60s
 
+  # Qdrant for Vector Search
+  qdrant:
+    image: qdrant/qdrant:v1.13.2
+    container_name: bondhub-qdrant
+    restart: unless-stopped
+    ports:
+      - "${QDRANT_PORT:-6333}:6333"
+      - "${QDRANT_GRPC_PORT:-6334}:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    networks:
+      - bondhub-network
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:6333/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
   # Kibana for Elasticsearch Visualization
   kibana:
     image: docker.elastic.co/kibana/kibana:8.17.0
@@ -152,6 +171,8 @@ volumes:
   kafka_data:
     driver: local
   elasticsearch_data:
+    driver: local
+  qdrant_data:
     driver: local
 
 networks:

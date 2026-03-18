@@ -1,0 +1,31 @@
+[project]
+name = "post-recommendation-service"
+version = "0.1.0"
+description = "Bare-minimum FastAPI service with Eureka registration"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.135.1",
+    "pymongo>=4.10.1",
+    "pydantic-settings>=2.11.0",
+    "py-eureka-client>=0.13.0",
+    "qdrant-client>=1.12.1",
+    "uvicorn>=0.42.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[tool.ruff]
+# Modern Python linting config
+line-length = 88
+select = ["E", "F", "I"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.2",
+]

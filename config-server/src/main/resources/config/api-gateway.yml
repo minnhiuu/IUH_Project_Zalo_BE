@@ -280,6 +280,18 @@ spring:
                     name: socialFeedServiceCircuitBreaker
                     fallbackUri: forward:/fallback/general
 
+            # Post Recommendation Service Routes (Protected - JWT required)
+            - id: post-recommendation-service
+              uri: lb://post-recommendation-service
+              predicates:
+                - Path=/api/post-recommendations/**
+              filters:
+                - RewritePath=/api/post-recommendations/(?<segment>.*), /api/v1/recommendations/${segment}
+                - name: CircuitBreaker
+                  args:
+                    name: postRecommendationServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/general
+
           # Global CORS Configuration
           globalCors:
             cors-configurations:

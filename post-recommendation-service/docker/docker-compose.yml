@@ -1,0 +1,15 @@
+version: "3.8"
+
+services:
+  post-recommendation-service:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: post-recommendation-service
+    environment:
+      APP_NAME: post-recommendation-service
+      PORT: 8091
+      EUREKA_ENABLED: "true"
+      EUREKA_SERVER_URL: http://host.docker.internal:8761/eureka/
+    ports:
+      - "8091:8091"
