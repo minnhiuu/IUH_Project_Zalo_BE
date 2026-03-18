@@ -24,7 +24,7 @@ import java.time.LocalDateTime;
 @RequiredArgsConstructor
 @Slf4j
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
-public class PostCommentCountProjectionListener {
+public class PostCommentCountProjectionRequestedListener {
 
     CommentRepository commentRepository;
     PostRepository postRepository;

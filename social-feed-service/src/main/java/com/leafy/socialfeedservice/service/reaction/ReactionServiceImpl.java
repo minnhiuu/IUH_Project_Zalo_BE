@@ -36,6 +36,8 @@ public class ReactionServiceImpl implements ReactionService {
         String currentUserId = securityUtil.getCurrentUserId();
 
         validateTarget(request.targetId(), request.targetType());
+        String postId = resolvePostId(request.targetId(), request.targetType());
+        String groupId = resolveGroupId(postId);
 
         Reaction existingReaction = reactionRepository
                 .findByAuthorIdAndTargetIdAndTargetType(currentUserId, request.targetId(), request.targetType())
@@ -66,6 +68,13 @@ public class ReactionServiceImpl implements ReactionService {
                 request.targetType(),
                 request.type().name(),
                 desiredActive);
+
+        reactionEventPublisher.publishReactionInteraction(
+                currentUserId,
+                postId,
+                request.type(),
+                desiredActive,
+                groupId);
 
         return ReactionResponse.builder()
                 .id(savedReaction.getId())
@@ -130,6 +139,22 @@ public class ReactionServiceImpl implements ReactionService {
         }
     }
 
+    private String resolvePostId(String targetId, ReactionTargetType targetType) {
+        if (targetType == ReactionTargetType.POST) {
+            return targetId;
+        }
+
+        Comment targetComment = commentRepository.findByIdAndActiveTrue(targetId)
+                .orElseThrow(() -> new AppException(ErrorCode.COMMENT_NOT_FOUND));
+        return targetComment.getPostId();
+    }
+
+    private String resolveGroupId(String postId) {
+        return postRepository.findByIdAndActiveTrueAndIsCurrentTrue(postId)
+                .map(Post::getGroupId)
+                .orElse(null);
+    }
+
     private long getDenormalizedReactionCount(String targetId, ReactionTargetType targetType) {
         if (targetType == ReactionTargetType.POST) {
             Post post = postRepository.findByIdAndActiveTrueAndIsCurrentTrue(targetId)
@@ -138,6 +163,7 @@ public class ReactionServiceImpl implements ReactionService {
             if (post.getStats() == null) {
                 return 0;
             }
+
             return post.getStats().getReactionCount();
         }
 

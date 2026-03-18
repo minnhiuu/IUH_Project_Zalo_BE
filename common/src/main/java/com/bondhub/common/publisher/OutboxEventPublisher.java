@@ -4,6 +4,7 @@ import com.bondhub.common.config.kafka.KafkaTopicProperties;
 import com.bondhub.common.event.account.AccountRegisteredEvent;
 import com.bondhub.common.event.socialfeed.PostCommentCountProjectionRequestedEvent;
 import com.bondhub.common.event.socialfeed.ReactionToggleCommandEvent;
+import com.bondhub.common.event.socialfeed.UserInteractionEvent;
 import com.bondhub.common.event.user.UserIndexDeletedEvent;
 import com.bondhub.common.event.user.UserIndexRequestedEvent;
 import com.bondhub.common.model.kafka.EventType;
@@ -135,6 +136,7 @@ public class OutboxEventPublisher {
             case USER_INDEX_DELETED -> kafkaTopicProperties.getUserEvents().getIndexDeleted();
             case REACTION_TOGGLE_COMMAND_REQUESTED -> kafkaTopicProperties.getSocialFeedEvents().getReactionToggleCommandRequested();
             case POST_COMMENT_COUNT_PROJECTION_REQUESTED -> kafkaTopicProperties.getSocialFeedEvents().getPostCommentCountProjectionRequested();
+            case USER_INTERACTION_RECORDED -> kafkaTopicProperties.getInteractionEvents().getUserInteraction();
         };
     }
 
@@ -147,6 +149,7 @@ public class OutboxEventPublisher {
             case USER_INDEX_DELETED -> UserIndexDeletedEvent.class;
             case REACTION_TOGGLE_COMMAND_REQUESTED -> ReactionToggleCommandEvent.class;
             case POST_COMMENT_COUNT_PROJECTION_REQUESTED -> PostCommentCountProjectionRequestedEvent.class;
+            case USER_INTERACTION_RECORDED -> UserInteractionEvent.class;
         };
     }
 }

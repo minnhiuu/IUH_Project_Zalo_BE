@@ -64,6 +64,12 @@ public class CommentServiceImpl implements CommentService {
             post.getId(),
             savedComment.getId(),
             "INCREMENT");
+
+        commentEventPublisher.publishCommentInteraction(
+                currentUserId,
+                post.getId(),
+                post.getGroupId());
+
         return commentMapper.toCommentResponse(savedComment);
     }
 

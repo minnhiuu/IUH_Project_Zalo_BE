@@ -27,7 +27,7 @@ import java.time.LocalDateTime;
 @RequiredArgsConstructor
 @Slf4j
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
-public class ReactionToggleCommandListener {
+public class ReactionToggleCommandRequestedListener {
 
     ReactionRepository reactionRepository;
     PostRepository postRepository;
@@ -76,13 +76,13 @@ public class ReactionToggleCommandListener {
                 commentRepository.save(comment);
             }
 
-                        // Notification dispatch hook - downstream service can subscribe to this topic and notify target owners.
-                        log.info("Reaction notification hook: actorId={}, targetId={}, targetType={}, reactionType={}, active={}",
-                                        event.authorId(), event.targetId(), event.targetType(), event.reactionType(), event.desiredActive());
+            // Notification dispatch hook - downstream service can subscribe to this topic and notify target owners.
+            log.info("Reaction notification hook: actorId={}, targetId={}, targetType={}, reactionType={}, active={}",
+                    event.authorId(), event.targetId(), event.targetType(), event.reactionType(), event.desiredActive());
 
             acknowledgment.acknowledge();
         } catch (Exception e) {
-                        log.error("Failed to process reaction projection event: targetId={}, targetType={}",
+            log.error("Failed to process reaction projection event: targetId={}, targetType={}",
                     event.targetId(), event.targetType(), e);
             throw e;
         }

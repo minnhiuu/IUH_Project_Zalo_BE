@@ -16,6 +16,7 @@ public class KafkaTopicProperties {
     private MessageEvents messageEvents = new MessageEvents();
     private NotificationEvents notificationEvents = new NotificationEvents();
     private SocialFeedEvents socialFeedEvents = new SocialFeedEvents();
+    private InteractionEvents interactionEvents = new InteractionEvents();
 
     @Getter
     @Setter
@@ -56,6 +57,12 @@ public class KafkaTopicProperties {
     public static class SocialFeedEvents {
         private String reactionToggleCommandRequested = "social-feed.reaction.toggle.command";
         private String postCommentCountProjectionRequested = "social-feed.post.comment-count.projection";
+    }
+
+    @Getter
+    @Setter
+    public static class InteractionEvents {
+        private String userInteraction = "user.interaction";
     }
 
     @Getter
