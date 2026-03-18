@@ -51,6 +51,11 @@ public class KafkaTopicConfig {
         return createTopic(topicProperties.getSocialFeedEvents().getPostCommentCountProjectionRequested());
     }
 
+    @Bean
+    public NewTopic userInteractionEvents() {
+        return createTopic(topicProperties.getInteractionEvents().getUserInteraction());
+    }
+
     private NewTopic createTopic(String topicName) {
         log.info("Creating Kafka topic: {}", topicName);
         return TopicBuilder.name(topicName)
