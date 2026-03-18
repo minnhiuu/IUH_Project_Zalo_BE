@@ -5,8 +5,11 @@ description = "Bare-minimum FastAPI service with Eureka registration"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "aiokafka>=0.12.0",
+    "fastembed>=0.7.3",
     "fastapi>=0.135.1",
     "pymongo>=4.10.1",
+    "python-snappy>=0.7.3",
     "pydantic-settings>=2.11.0",
     "py-eureka-client>=0.13.0",
     "qdrant-client>=1.12.1",

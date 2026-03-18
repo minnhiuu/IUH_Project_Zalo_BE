@@ -55,6 +55,9 @@ public class KafkaTopicProperties {
     @Getter
     @Setter
     public static class SocialFeedEvents {
+        private String postCreated = "social-feed.post.created";
+        private String postUpdated = "social-feed.post.updated";
+        private String postDeleted = "social-feed.post.deleted";
         private String reactionToggleCommandRequested = "social-feed.reaction.toggle.command";
         private String postCommentCountProjectionRequested = "social-feed.post.comment-count.projection";
     }

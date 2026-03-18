@@ -11,10 +11,12 @@ from app.core.config import get_settings
 from app.core.exception_handlers import register_exception_handlers
 from app.core.logging import setup_logging
 from app.security.security_config import configure_security
+from app.workers.post_event_consumer import PostEventConsumerWorker
 
 settings = get_settings()
 setup_logging(settings.log_level)
 logger = logging.getLogger(__name__)
+post_event_consumer = PostEventConsumerWorker()
 
 
 def _instance_host() -> str:
@@ -25,7 +27,7 @@ def _instance_host() -> str:
     return socket.gethostbyname(socket.gethostname())
 
 
-def _register_eureka() -> None:
+async def _register_eureka() -> None:
     if "PYTEST_CURRENT_TEST" in os.environ:
         logger.info("Skipping Eureka registration in test execution")
         return
@@ -40,7 +42,7 @@ def _register_eureka() -> None:
     home_page_url = f"http://{host}:{settings.port}/"
     health_check_url = f"http://{host}:{settings.port}{settings.health_path}"
 
-    eureka_client.init(
+    await eureka_client.init_async(
         eureka_server=settings.eureka_server_url,
         app_name=settings.app_name,
         instance_host=host,
@@ -53,12 +55,12 @@ def _register_eureka() -> None:
     logger.info("Registered to Eureka as %s at %s", settings.app_name, settings.eureka_server_url)
 
 
-def _unregister_eureka() -> None:
+async def _unregister_eureka() -> None:
     if not settings.eureka_enabled:
         return
 
     try:
-        eureka_client.stop()
+        await eureka_client.stop_async()
         logger.info("Unregistered from Eureka")
     except Exception:
         logger.exception("Error while unregistering from Eureka")
@@ -67,11 +69,13 @@ def _unregister_eureka() -> None:
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     try:
-        _register_eureka()
+        await _register_eureka()
     except Exception:
         logger.exception("Failed to register to Eureka. Service will continue running.")
+    post_event_consumer.start()
     yield
-    _unregister_eureka()
+    await post_event_consumer.stop()
+    await _unregister_eureka()
 
 
 app = FastAPI(

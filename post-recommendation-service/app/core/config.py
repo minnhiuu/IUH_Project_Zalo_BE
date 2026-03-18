@@ -41,6 +41,18 @@ class Settings(BaseSettings):
     qdrant_https: bool = False
     qdrant_api_key: str | None = None
     qdrant_timeout_seconds: float = 5.0
+    qdrant_collection_name: str = "post_vectors"
+    qdrant_vector_size: int = 384
+
+    embedding_model_name: str = "sentence-transformers/all-MiniLM-L6-v2"
+    embedding_device: str = "cpu"
+
+    kafka_enabled: bool = True
+    kafka_bootstrap_servers: str = "localhost:9092"
+    kafka_consumer_group_id: str = "post-recommendation-service-group"
+    kafka_post_created_topic: str = "social-feed.post.created"
+    kafka_post_updated_topic: str = "social-feed.post.updated"
+    kafka_post_deleted_topic: str = "social-feed.post.deleted"
 
     mongodb_uri: str = "mongodb://localhost:27018"
     mongodb_database: str = "post_recommendation"

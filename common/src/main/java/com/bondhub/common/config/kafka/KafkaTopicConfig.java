@@ -42,6 +42,21 @@ public class KafkaTopicConfig {
     }
 
     @Bean
+    public NewTopic postCreatedEvents() {
+        return createTopic(topicProperties.getSocialFeedEvents().getPostCreated());
+    }
+
+    @Bean
+    public NewTopic postUpdatedEvents() {
+        return createTopic(topicProperties.getSocialFeedEvents().getPostUpdated());
+    }
+
+    @Bean
+    public NewTopic postDeletedEvents() {
+        return createTopic(topicProperties.getSocialFeedEvents().getPostDeleted());
+    }
+
+    @Bean
     public NewTopic reactionToggleCommandRequested() {
         return createTopic(topicProperties.getSocialFeedEvents().getReactionToggleCommandRequested());
     }

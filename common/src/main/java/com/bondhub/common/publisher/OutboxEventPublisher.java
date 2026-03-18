@@ -3,6 +3,7 @@ package com.bondhub.common.publisher;
 import com.bondhub.common.config.kafka.KafkaTopicProperties;
 import com.bondhub.common.event.account.AccountRegisteredEvent;
 import com.bondhub.common.event.socialfeed.PostCommentCountProjectionRequestedEvent;
+import com.bondhub.common.event.socialfeed.PostEvent;
 import com.bondhub.common.event.socialfeed.ReactionToggleCommandEvent;
 import com.bondhub.common.event.socialfeed.UserInteractionEvent;
 import com.bondhub.common.event.user.UserIndexDeletedEvent;
@@ -134,6 +135,9 @@ public class OutboxEventPublisher {
             case USER_DELETED -> kafkaTopicProperties.getUserEvents().getDeleted();
             case USER_INDEX_REQUESTED -> kafkaTopicProperties.getUserEvents().getIndexRequested();
             case USER_INDEX_DELETED -> kafkaTopicProperties.getUserEvents().getIndexDeleted();
+            case POST_CREATED -> kafkaTopicProperties.getSocialFeedEvents().getPostCreated();
+            case POST_UPDATED -> kafkaTopicProperties.getSocialFeedEvents().getPostUpdated();
+            case POST_DELETED -> kafkaTopicProperties.getSocialFeedEvents().getPostDeleted();
             case REACTION_TOGGLE_COMMAND_REQUESTED -> kafkaTopicProperties.getSocialFeedEvents().getReactionToggleCommandRequested();
             case POST_COMMENT_COUNT_PROJECTION_REQUESTED -> kafkaTopicProperties.getSocialFeedEvents().getPostCommentCountProjectionRequested();
             case USER_INTERACTION_RECORDED -> kafkaTopicProperties.getInteractionEvents().getUserInteraction();
@@ -147,6 +151,7 @@ public class OutboxEventPublisher {
             case USER_CREATED, USER_UPDATED, USER_DELETED -> UserCreatedEvent.class;
             case USER_INDEX_REQUESTED ->  UserIndexRequestedEvent.class;
             case USER_INDEX_DELETED -> UserIndexDeletedEvent.class;
+            case POST_CREATED, POST_UPDATED, POST_DELETED -> PostEvent.class;
             case REACTION_TOGGLE_COMMAND_REQUESTED -> ReactionToggleCommandEvent.class;
             case POST_COMMENT_COUNT_PROJECTION_REQUESTED -> PostCommentCountProjectionRequestedEvent.class;
             case USER_INTERACTION_RECORDED -> UserInteractionEvent.class;

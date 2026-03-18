@@ -31,14 +31,6 @@ public class SecurityPaths {
             "/api/users/test/security/public",
             "/api/users/qr-info",
 
-            // Social feed public endpoints
-            "/api/posts",
-            "/api/posts/**",
-            "/api/comments",
-            "/api/comments/**",
-            "/api/reactions",
-            "/api/reactions/**",
-
             // Swagger UI and API documentation
             "/swagger-ui",
             "/swagger-ui.html",

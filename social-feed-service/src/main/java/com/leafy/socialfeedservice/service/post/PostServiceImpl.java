@@ -9,6 +9,7 @@ import com.leafy.socialfeedservice.dto.request.post.UpdatePostRequest;
 import com.leafy.socialfeedservice.dto.response.post.PostResponse;
 import com.leafy.socialfeedservice.mapper.PostMapper;
 import com.leafy.socialfeedservice.model.Post;
+import com.leafy.socialfeedservice.publisher.PostEventPublisher;
 import com.leafy.socialfeedservice.repository.PostRepository;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
@@ -33,6 +34,7 @@ public class PostServiceImpl implements PostService {
     PostRepository postRepository;
     PostMapper postMapper;
     SecurityUtil securityUtil;
+    PostEventPublisher postEventPublisher;
 
     @Override
     @Transactional
@@ -48,6 +50,7 @@ public class PostServiceImpl implements PostService {
         post.setUpdatedAt(now);
 
         Post savedPost = postRepository.save(post);
+        postEventPublisher.publishPostCreated(savedPost);
         return postMapper.toPostResponse(savedPost);
     }
 
@@ -83,6 +86,7 @@ public class PostServiceImpl implements PostService {
         post.setVersion(post.getVersion() + 1);
 
         Post updatedPost = postRepository.save(post);
+        postEventPublisher.publishPostUpdated(updatedPost);
         return postMapper.toPostResponse(updatedPost);
     }
 
@@ -98,7 +102,8 @@ public class PostServiceImpl implements PostService {
         post.setCurrent(false);
         post.setUpdatedAt(LocalDateTime.now());
 
-        postRepository.save(post);
+        Post deletedPost = postRepository.save(post);
+        postEventPublisher.publishPostDeleted(deletedPost);
     }
 
     private Post getActivePost(String postId) {
