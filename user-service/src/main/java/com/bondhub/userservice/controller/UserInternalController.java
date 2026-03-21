@@ -22,6 +22,11 @@ public class UserInternalController {
         return ResponseEntity.ok(ApiResponse.success(userInternalService.getUserSummaryByAccountId(accountId)));
     }
 
+    @GetMapping("/id/{userId}/summary")
+    public ResponseEntity<ApiResponse<UserSummaryResponse>> getUserSummaryByUserId(@PathVariable String userId) {
+        return ResponseEntity.ok(ApiResponse.success(userInternalService.getUserSummaryByUserId(userId)));
+    }
+
     @GetMapping("/count")
     public ResponseEntity<ApiResponse<Long>> getUserCount() {
         return ResponseEntity.ok(ApiResponse.success(userInternalService.getUserCount()));
@@ -51,5 +56,11 @@ public class UserInternalController {
             @RequestParam boolean banned) {
         userInternalService.syncBanStatus(accountId, banned);
         return ResponseEntity.ok(ApiResponse.success(null));
+
+    }
+
+    @GetMapping("/exists/{userId}")
+    public ResponseEntity<ApiResponse<Boolean>> existsById(@PathVariable String userId) {
+        return ResponseEntity.ok(ApiResponse.success(userInternalService.existsById(userId)));
     }
 }

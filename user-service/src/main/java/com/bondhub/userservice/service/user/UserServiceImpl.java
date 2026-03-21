@@ -20,9 +20,9 @@ import com.bondhub.userservice.dto.request.user.UserUpdateRequest;
 import com.bondhub.userservice.dto.request.user.AvatarUpdateRequest;
 import com.bondhub.userservice.dto.request.user.BackgroundUpdateRequest;
 import com.bondhub.userservice.dto.response.user.AccountResponse;
-import com.bondhub.userservice.dto.response.user.UserResponse;
-import com.bondhub.userservice.dto.response.user.UserProfileResponse;
 import com.bondhub.userservice.dto.response.user.UserImageResponse;
+import com.bondhub.userservice.dto.response.user.UserProfileResponse;
+import com.bondhub.userservice.dto.response.user.UserResponse;
 import com.bondhub.userservice.mapper.UserMapper;
 import com.bondhub.userservice.mapper.UserProfileMapper;
 import com.bondhub.userservice.model.User;
@@ -40,7 +40,6 @@ import java.util.Map;
 import java.util.HashMap;
 import java.util.stream.Collectors;
 
-import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @Slf4j

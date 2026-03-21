@@ -114,16 +114,16 @@ spring:
                     fallbackUri: forward:/fallback/file-service
 
             # User Service Routes (Protected - JWT required)
-            - id: user-service-audit-logs
-              uri: lb://user-service
+            - id: friend-service-blocks
+              uri: lb://friend-service
               predicates:
-                - Path=/api/audit-logs,/api/audit-logs/**
+                - Path=/api/blocks,/api/blocks/**
               filters:
                 - RewritePath=/api/(?<segment>.*), /${segment}
                 - name: CircuitBreaker
                   args:
-                    name: userServiceCircuitBreaker
-                    fallbackUri: forward:/fallback/user-service
+                    name: friendServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/friend-service
 
             - id: user-service
               uri: lb://user-service
@@ -147,6 +147,17 @@ spring:
                   args:
                     name: userServiceCircuitBreaker
                     fallbackUri: forward:/fallback/user-service
+
+            - id: user-service-elasticsearch-legacy
+              uri: lb://search-service
+              predicates:
+                - Path=/api/users/elasticsearch/**
+              filters:
+                - RewritePath=/api/users/elasticsearch/(?<segment>.*), /search/elasticsearch/${segment}
+                - name: CircuitBreaker
+                  args:
+                    name: searchServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/search-service
 
             - id: user-service-elasticsearch-legacy
               uri: lb://search-service

@@ -8,34 +8,43 @@ spring:
   messages:
     basename: i18n/messages, i18n/messages-notification
 
-  # MongoDB Configuration
   data:
     mongodb:
       uri: ${MONGODB_URI_NOTIFICATIONS}
       auto-index-creation: true
       uuid-representation: standard
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT}
+      password: ${REDIS_PASSWORD}
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
 
-  # Kafka Configuration for Notification Service
   kafka:
-    # Producer configuration for notification status events
     producer:
       client-id: notification-service-producer
-      retries: 3
 
-    # Consumer configuration for incoming notification requests
     consumer:
-      group-id: notification-service-group
+      group-id: noti-pipeline-group
       client-id: notification-service-consumer
       max-poll-records: 50
       properties:
-        max.poll.interval.ms: 600000 # 10 minutes for processing notifications
+        max.poll.interval.ms: 600000
 
-    # Listener configuration
     listener:
-      concurrency: 2
+      concurrency: 4
       ack-mode: manual
 
-# Service-specific logging overrides
+notification:
+  kafka:
+    topics:
+      raw: noti.raw
+      ready: noti.ready
+
 logging:
   level:
     com.bondhub.notificationservices: DEBUG
@@ -43,29 +52,24 @@ logging:
   file:
     name: logs/notification-service.log
 
-# Service-specific resilience4j overrides
 resilience4j:
   circuitbreaker:
     instances:
       notificationService:
         base-config: default
-
   retry:
     instances:
       notificationService:
         base-config: default
-
   timelimiter:
     instances:
       notificationService:
         base-config: default
 
-# Service-specific security configuration
 bondhub:
   security:
     public-endpoints: []
 
-# SpringDoc OpenAPI Configuration
 springdoc:
   api-docs:
     enabled: true

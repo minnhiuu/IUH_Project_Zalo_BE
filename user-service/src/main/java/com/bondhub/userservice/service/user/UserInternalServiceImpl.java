@@ -100,6 +100,29 @@ public class UserInternalServiceImpl implements UserInternalService {
         });
     }
 
+    @Override
+    public boolean existsById(String userId) {
+        return userRepository.existsById(userId);
+    }
+
+    @Override
+    public UserSummaryResponse getUserSummaryByUserId(String userId) {
+        log.info("Internal: Fetching user summary for userId: {}", userId);
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+
+        UserSummaryResponse response = userMapper.toUserSummaryResponse(user);
+        if (response.avatar() != null && !response.avatar().isEmpty()) {
+            String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+            return UserSummaryResponse.builder()
+                    .id(response.id())
+                    .fullName(response.fullName())
+                    .avatar(baseUrl + response.avatar())
+                    .build();
+        }
+        return response;
+    }
+
     private UserSyncResponse mapToSyncResponse(User user) {
         return UserSyncResponse.builder()
                 .id(user.getId())
