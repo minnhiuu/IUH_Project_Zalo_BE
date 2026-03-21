@@ -63,10 +63,10 @@ public class MessageServiceImpl implements MessageService {
 
     @Override
     public Message save(Message message) {
-        var chatId = conversationService
-                .getChatRoomId(message.getSenderId(), message.getRecipientId(), true)
+        var room = conversationService
+                .getDirectConversation(message.getSenderId(), message.getRecipientId(), true)
                 .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
-        message.setChatId(chatId);
+        message.setChatId(room.getChatId());
 
         // Lookup sender info for snapshot (Cold Start if missing)
         ChatUser sender = chatUserRepository.findById(message.getSenderId())
@@ -95,15 +95,15 @@ public class MessageServiceImpl implements MessageService {
     @Override
     public PageResponse<List<MessageResponse>> findChatMessages(String recipientId, int page, int size) {
         String currentUserId = securityUtil.getCurrentUserId();
-        var chatId = conversationService.getChatRoomId(currentUserId, recipientId, false);
+        var roomOpt = conversationService.getDirectConversation(currentUserId, recipientId, false);
 
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
 
-        if (chatId.isEmpty()) {
+        if (roomOpt.isEmpty()) {
             return PageResponse.empty(pageable);
         }
 
-        Page<Message> messagePage = chatMessageRepository.findByChatIdAndNotDeleted(chatId.get(), currentUserId, pageable);
+        Page<Message> messagePage = chatMessageRepository.findByChatIdAndNotDeleted(roomOpt.get().getChatId(), currentUserId, pageable);
         String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
 
         List<MessageResponse> dtos = messagePage.getContent().stream()

@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Optional;
 
 public interface ConversationService {
-    Optional<String> getChatRoomId(
+    Optional<Conversation> getDirectConversation(
             String senderId,
             String recipientId,
             boolean createNewRoomIfNotExists);

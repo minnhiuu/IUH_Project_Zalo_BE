@@ -62,35 +62,17 @@ public class ConversationServiceImpl implements ConversationService {
     }
 
     @Override
-    public Optional<String> getChatRoomId(
+    public Optional<Conversation> getDirectConversation(
             String senderId,
             String recipientId,
             boolean createNewRoomIfNotExists) {
         String chatId = generateChatRoomId(senderId, recipientId);
 
-        return chatRoomRepository
-                .findByChatId(chatId)
-                .map(Conversation::getChatId)
-                .or(() -> {
-                    if (createNewRoomIfNotExists) {
-                        Conversation conversation = Conversation
-                                .builder()
-                                .chatId(chatId)
-                                .senderId(senderId)
-                                .recipientId(recipientId)
-                                .members(new HashSet<>(Arrays.asList(
-                                    ConversationMember.builder().userId(senderId).role(MemberRole.OWNER).joinedAt(LocalDateTime.now()).build(),
-                                    ConversationMember.builder().userId(recipientId).role(MemberRole.MEMBER).joinedAt(LocalDateTime.now()).build()
-                                )))
-                                .build();
+        if (createNewRoomIfNotExists) {
+            return Optional.of(createInitialChatRoom(senderId, recipientId, LocalDateTime.now()));
+        }
 
-                        chatRoomRepository.save(conversation);
-
-                        return Optional.of(chatId);
-                    }
-
-                    return Optional.empty();
-                });
+        return chatRoomRepository.findByChatId(chatId);
     }
 
     @Override
@@ -106,9 +88,10 @@ public class ConversationServiceImpl implements ConversationService {
                             .timestamp(timestamp)
                             .build()) // Set timestamp in embedded object for sorting
                     .members(new HashSet<>(Arrays.asList(
-                        ConversationMember.builder().userId(userA).role(MemberRole.OWNER).joinedAt(timestamp).build(),
-                        ConversationMember.builder().userId(userB).role(MemberRole.MEMBER).joinedAt(timestamp).build()
-                    )))
+                            ConversationMember.builder().userId(userA).role(MemberRole.OWNER).joinedAt(timestamp)
+                                    .build(),
+                            ConversationMember.builder().userId(userB).role(MemberRole.MEMBER).joinedAt(timestamp)
+                                    .build())))
                     .build();
             log.info("Created initial chat room proactively for: {}", chatId);
             return chatRoomRepository.save(newRoom);
@@ -130,7 +113,7 @@ public class ConversationServiceImpl implements ConversationService {
         Map<String, ChatUser> userCache = chatUserRepository.findAllById(userIds).stream()
                 .collect(Collectors.toMap(ChatUser::getId, u -> u));
 
-        ChatUser partner = userCache.getOrDefault(partnerId, 
+        ChatUser partner = userCache.getOrDefault(partnerId,
                 ChatUser.builder().id(partnerId).fullName("Người dùng mới").build());
         ChatUser currentUser = userCache.get(userId);
         boolean viewerCanSee = currentUser != null && currentUser.isShowSeenStatus();
@@ -148,7 +131,8 @@ public class ConversationServiceImpl implements ConversationService {
             return PageResponse.empty(pageable);
         }
 
-        // 1. Gom TẤT CẢ các ID cần thiết: Partner IDs + Member IDs trong các room + Current User
+        // 1. Gom TẤT CẢ các ID cần thiết: Partner IDs + Member IDs trong các room +
+        // Current User
         Set<String> allUserIdsToFetch = new HashSet<>();
         allUserIdsToFetch.add(currentUserId);
         roomsPage.getContent().forEach(room -> {
@@ -170,7 +154,7 @@ public class ConversationServiceImpl implements ConversationService {
             String partnerId = room.getSenderId().equals(currentUserId) ? room.getRecipientId() : room.getSenderId();
             ChatUser partner = userCache.getOrDefault(partnerId,
                     ChatUser.builder().id(partnerId).fullName("Người dùng mới").build());
-            
+
             // Sync user if not found in cache
             if (!userCache.containsKey(partnerId)) {
                 eventPublisher.publishEvent(new UserSyncEvent(partnerId));
@@ -181,11 +165,12 @@ public class ConversationServiceImpl implements ConversationService {
     }
 
     private ConversationResponse buildConversationResponse(
-            Conversation room, ChatUser partner, String currentUserId, 
+            Conversation room, ChatUser partner, String currentUserId,
             Map<String, ChatUser> userCache, String baseUrl, boolean viewerCanSee) {
-        
+
         LastMessageInfo last = room.getLastMessage();
-        List<ConversationMemberResponse> members = buildMembersWithCache(room, currentUserId, userCache, baseUrl, viewerCanSee);
+        List<ConversationMemberResponse> members = buildMembersWithCache(room, currentUserId, userCache, baseUrl,
+                viewerCanSee);
 
         return ConversationResponse.builder()
                 .chatId(room.getChatId())
@@ -206,18 +191,21 @@ public class ConversationServiceImpl implements ConversationService {
     }
 
     private List<ConversationMemberResponse> buildMembersWithCache(
-            Conversation room, String currentUserId, Map<String, ChatUser> userCache, String baseUrl, boolean viewerCanSee) {
-        
+            Conversation room, String currentUserId, Map<String, ChatUser> userCache, String baseUrl,
+            boolean viewerCanSee) {
+
         return room.getMembers().stream()
                 .filter(m -> !m.getUserId().equals(currentUserId))
                 .map(m -> {
                     ChatUser memberInfo = userCache.get(m.getUserId());
                     boolean canSeeStatus = viewerCanSee && memberInfo != null && memberInfo.isShowSeenStatus();
-                    
+
                     return ConversationMemberResponse.builder()
                             .userId(m.getUserId())
                             .fullName(memberInfo != null ? memberInfo.getFullName() : "Người dùng")
-                            .avatar(memberInfo != null && memberInfo.getAvatar() != null ? baseUrl + memberInfo.getAvatar() : null)
+                            .avatar(memberInfo != null && memberInfo.getAvatar() != null
+                                    ? baseUrl + memberInfo.getAvatar()
+                                    : null)
                             .lastReadMessageId(canSeeStatus ? m.getLastReadMessageId() : null)
                             .build();
                 })
@@ -238,7 +226,8 @@ public class ConversationServiceImpl implements ConversationService {
         Query query = new Query(Criteria.where("chatId").is(chatId)
                 .and("members.userId").is(currentUserId));
 
-        // Cập nhật: reset unread về 0 và set mốc đọc mới bằng tin nhắn cuối cùng của phòng
+        // Cập nhật: reset unread về 0 và set mốc đọc mới bằng tin nhắn cuối cùng của
+        // phòng
         Update update = new Update()
                 .set("unreadCounts." + currentUserId, 0);
 
@@ -263,11 +252,12 @@ public class ConversationServiceImpl implements ConversationService {
 
             chatUserRepository.findById(partnerId).ifPresent(partner -> {
                 if (partner.isShowSeenStatus()) {
-                    messagingTemplate.convertAndSendToUser(partnerId, "/queue/read-receipts", ReadReceiptNotification.builder()
-                            .chatId(chatId)
-                            .userId(userId)
-                            .lastReadMessageId(lastReadMessageId)
-                            .build());
+                    messagingTemplate.convertAndSendToUser(partnerId, "/queue/read-receipts",
+                            ReadReceiptNotification.builder()
+                                    .chatId(chatId)
+                                    .userId(userId)
+                                    .lastReadMessageId(lastReadMessageId)
+                                    .build());
                 }
             });
         });
