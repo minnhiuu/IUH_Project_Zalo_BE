@@ -132,6 +132,14 @@ public class FriendshipServiceImpl implements FriendshipService {
                 .build();
         rawNotificationEventPublisher.publish(notificationEvent);
 
+
+        CleanupNotificationEvent cleanupEvent = CleanupNotificationEvent.builder()
+                .recipientId(currentUserId)
+                .referenceId(friendShip.getId())
+                .type(NotificationType.FRIEND_REQUEST)
+                .build();
+        rawNotificationEventPublisher.publishCleanup(cleanupEvent);
+
         return friendShipMapper.toFriendRequestResponse(friendShip, requester, receiver);
     }
 
@@ -183,6 +191,13 @@ public class FriendshipServiceImpl implements FriendshipService {
 
         friendShip.setFriendStatus(FriendStatus.CANCELLED);
         friendShipRepository.save(friendShip);
+
+        CleanupNotificationEvent cleanupEvent = CleanupNotificationEvent.builder()
+                .recipientId(currentUserId)
+                .referenceId(friendShip.getId())
+                .type(NotificationType.FRIEND_REQUEST)
+                .build();
+        rawNotificationEventPublisher.publishCleanup(cleanupEvent);
         log.info("Friend request {} canceled and deleted", friendshipId);
     }
 
