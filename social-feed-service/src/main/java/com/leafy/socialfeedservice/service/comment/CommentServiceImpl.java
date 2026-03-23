@@ -115,6 +115,15 @@ public class CommentServiceImpl implements CommentService {
         return PageResponse.fromPage(comments, commentMapper::toCommentResponse);
     }
 
+    @Override
+    public List<CommentResponse> getRepliesByComment(String commentId) {
+        getActiveComment(commentId);
+        return commentRepository.findByParentIdAndActiveTrueOrderByCreatedAtAsc(commentId)
+                .stream()
+                .map(commentMapper::toCommentResponse)
+                .toList();
+    }
+
     private Post getActivePost(String postId) {
         return postRepository.findByIdAndActiveTrueAndIsCurrentTrue(postId)
                 .orElseThrow(() -> new AppException(ErrorCode.POST_NOT_FOUND));

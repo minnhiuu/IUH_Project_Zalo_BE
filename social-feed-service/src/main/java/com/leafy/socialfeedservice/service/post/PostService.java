@@ -15,6 +15,12 @@ public interface PostService {
 
     PageResponse<List<PostResponse>> getMyPosts(int page, int size);
 
+    PageResponse<List<PostResponse>> getFeedAndSharePosts(int page, int size);
+
+    PageResponse<List<PostResponse>> getStoryPosts(int page, int size);
+
+    PageResponse<List<PostResponse>> getReelPosts(int page, int size);
+
     PostResponse updatePost(String postId, UpdatePostRequest request);
 
     void deletePost(String postId);

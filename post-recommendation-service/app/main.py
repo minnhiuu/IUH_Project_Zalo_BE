@@ -12,11 +12,17 @@ from app.core.exception_handlers import register_exception_handlers
 from app.core.logging import setup_logging
 from app.security.security_config import configure_security
 from app.workers.post_event_consumer import PostEventConsumerWorker
+from app.workers.user_event_consumer import UserEventConsumerWorker
+from app.workers.user_interaction_consumer import UserInteractionConsumerWorker
+from app.clients.mongodb_client import get_mongodb_database
+from app.repositories import recommendation_repository
 
 settings = get_settings()
 setup_logging(settings.log_level)
 logger = logging.getLogger(__name__)
 post_event_consumer = PostEventConsumerWorker()
+user_event_consumer = UserEventConsumerWorker()
+user_interaction_consumer = UserInteractionConsumerWorker()
 
 
 def _instance_host() -> str:
@@ -72,9 +78,18 @@ async def lifespan(_: FastAPI):
         await _register_eureka()
     except Exception:
         logger.exception("Failed to register to Eureka. Service will continue running.")
+    try:
+        recommendation_repository.ensure_indexes(get_mongodb_database())
+        logger.info("Recommendation repository indexes ensured")
+    except Exception:
+        logger.exception("Failed to ensure recommendation repository indexes")
     post_event_consumer.start()
+    user_event_consumer.start()
+    user_interaction_consumer.start()
     yield
     await post_event_consumer.stop()
+    await user_event_consumer.stop()
+    await user_interaction_consumer.stop()
     await _unregister_eureka()
 
 

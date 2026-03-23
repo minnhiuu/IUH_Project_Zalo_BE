@@ -16,4 +16,6 @@ public interface CommentService {
     void deleteComment(String commentId);
 
     PageResponse<List<CommentResponse>> getRootCommentsByPost(String postId, int page, int size);
+
+    List<CommentResponse> getRepliesByComment(String commentId);
 }

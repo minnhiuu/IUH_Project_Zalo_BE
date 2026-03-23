@@ -7,6 +7,7 @@ import lombok.Builder;
 @Builder
 public record ReactionResponse(
         String id,
+        String authorId,
         String targetId,
         ReactionTargetType targetType,
         ReactionType type,

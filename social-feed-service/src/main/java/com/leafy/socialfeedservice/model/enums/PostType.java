@@ -1,6 +1,8 @@
 package com.leafy.socialfeedservice.model.enums;
 
 public enum PostType {
+    FEED,
     STORY,
-    SOCIAL
+    REEL,
+    SHARE
 }

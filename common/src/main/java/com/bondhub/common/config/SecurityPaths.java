@@ -41,7 +41,11 @@ public class SecurityPaths {
             "/api/users/v3/api-docs",
             "/api/messages/v3/api-docs",
             "/api/notifications/v3/api-docs",
+            "/api/social/v3/api-docs",
+
             // Service-level API docs paths (after gateway routes them)
+            "/social/v3/api-docs",
+            "/social/v3/api-docs/**",
             "/auth/v3/api-docs",
             "/auth/v3/api-docs/**",
             "/user/v3/api-docs",

@@ -1,14 +1,8 @@
 package com.bondhub.userservice.listener;
 
-import com.bondhub.common.config.kafka.KafkaTopicProperties;
 import com.bondhub.common.event.account.AccountRegisteredEvent;
-import com.bondhub.common.model.kafka.EventType;
-import com.bondhub.common.publisher.OutboxEventPublisher;
-import com.bondhub.common.event.user.UserCreatedEvent;
 import com.bondhub.userservice.dto.request.user.UserCreateRequest;
 import com.bondhub.userservice.dto.response.user.UserResponse;
-import com.bondhub.userservice.dto.request.elasticsearch.UserIndexRequest;
-import com.bondhub.userservice.publisher.UserIndexEventPublisher;
 import com.bondhub.userservice.service.user.UserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,17 +13,12 @@ import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Component;
 
-import java.time.Instant;
-
 @Component
 @RequiredArgsConstructor
 @Slf4j
 public class AccountRegisteredListener {
 
     private final UserService userService;
-    private final KafkaTopicProperties kafkaTopicProperties;
-    private final OutboxEventPublisher outboxEventPublisher;
-    private final UserIndexEventPublisher  userIndexEventPublisher;
 
     @KafkaListener(
             topics = "#{kafkaTopicProperties.accountEvents.registered}",
@@ -59,24 +48,6 @@ public class AccountRegisteredListener {
 
             log.info("✅ User created successfully for accountId: {}, userId: {}", 
                     event.getAccountId(), userResponse.id());
-
-            // Publish USER_CREATED event back to complete the saga
-            UserCreatedEvent userCreatedEvent = UserCreatedEvent.builder()
-                    .userId(userResponse.id())
-                    .accountId(event.getAccountId())
-                    .fullName(userResponse.fullName())
-                    .timestamp(Instant.now().toEpochMilli())
-                    .build();
-
-            outboxEventPublisher.saveAndPublish(
-                    userResponse.id(),
-                    "User",
-                    EventType.USER_CREATED,
-                    userCreatedEvent
-            );
-
-            log.info("📤 Published USER_CREATED event for userId: {}, accountId: {}", 
-                    userResponse.id(), event.getAccountId());
 
             // Manual acknowledgment
             if (acknowledgment != null) {

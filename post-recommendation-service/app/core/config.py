@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     qdrant_api_key: str | None = None
     qdrant_timeout_seconds: float = 5.0
     qdrant_collection_name: str = "post_vectors"
+    qdrant_user_collection_name: str = "user_vectors"
     qdrant_vector_size: int = 384
 
     embedding_model_name: str = "sentence-transformers/all-MiniLM-L6-v2"
@@ -50,9 +51,18 @@ class Settings(BaseSettings):
     kafka_enabled: bool = True
     kafka_bootstrap_servers: str = "localhost:9092"
     kafka_consumer_group_id: str = "post-recommendation-service-group"
+    kafka_user_consumer_group_id: str = "post-recommendation-service-user-group"
+    kafka_interaction_consumer_group_id: str = "post-recommendation-service-interaction-group"
     kafka_post_created_topic: str = "social-feed.post.created"
     kafka_post_updated_topic: str = "social-feed.post.updated"
     kafka_post_deleted_topic: str = "social-feed.post.deleted"
+    kafka_user_created_topic: str = "user.created"
+    kafka_user_interaction_topic: str = "user.interaction"
+
+    social_feed_service_url: str = "http://social-feed-service"
+    user_vector_alpha: float = 0.7
+    user_vector_interaction_limit: int = 20
+    user_vector_decay_half_life_days: float = 7.0
 
     mongodb_uri: str = "mongodb://localhost:27018"
     mongodb_database: str = "post_recommendation"

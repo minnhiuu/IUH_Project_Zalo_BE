@@ -3,6 +3,8 @@ package com.leafy.socialfeedservice.dto.response.post;
 import com.leafy.socialfeedservice.model.embedded.PostContent;
 import com.leafy.socialfeedservice.model.embedded.PostMedia;
 import com.leafy.socialfeedservice.model.embedded.PostStats;
+import com.leafy.socialfeedservice.model.embedded.LocationInfo;
+import com.leafy.socialfeedservice.model.embedded.StoryElement;
 import com.leafy.socialfeedservice.model.enums.PostType;
 import com.leafy.socialfeedservice.model.enums.Visibility;
 import lombok.Builder;
@@ -18,6 +20,15 @@ public record PostResponse(
         PostContent content,
         List<PostMedia> media,
         PostType postType,
+        String sharedPostId,
+        String originalAuthorId,
+        PostContent sharedCaption,
+        String rootPostId,
+        LocalDateTime expiresAt,
+        String musicId,
+        List<String> viewerIds,
+        LocationInfo location,
+        List<StoryElement> elements,
         Visibility visibility,
         PostStats stats,
         LocalDateTime uploadedAt,

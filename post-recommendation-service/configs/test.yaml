@@ -1,6 +1,0 @@
-app_name: post-recommendation-service
-app_env: test
-debug: false
-host: 127.0.0.1
-port: 8091
-eureka_enabled: false

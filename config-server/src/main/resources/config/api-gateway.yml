@@ -225,6 +225,17 @@ spring:
                     name: socialFeedServiceCircuitBreaker
                     fallbackUri: forward:/fallback/general
 
+            - id: social-feed-service-posts-root
+              uri: lb://social-feed-service
+              predicates:
+                - Path=/api/social/**
+              filters:
+                - RewritePath=/api/social/(?<segment>.*), /social/${segment}
+                - name: CircuitBreaker
+                  args:
+                    name: socialFeedServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/general
+
             - id: social-feed-service-posts
               uri: lb://social-feed-service
               predicates:

@@ -38,8 +38,10 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashSet;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -251,6 +253,7 @@ public class AuthenticationServiceImpl implements AuthenticationService {
                 .passwordHash(passwordEncoder.encode(request.password()))
                 .fullName(request.fullName())
                 .phoneNumber(request.phoneNumber())
+            .initialInterests(copyInitialInterests(request.initialInterests()))
                 .createdAt(now)
                 .ttl(300L)
                 .build();
@@ -312,6 +315,7 @@ public class AuthenticationServiceImpl implements AuthenticationService {
                     .fullName(pendingReg.getFullName())
                     .phoneNumber(account.getPhoneNumber())
                     .role(Role.USER.name())
+                    .initialInterests(copyInitialInterests(pendingReg.getInitialInterests()))
                     .build();
 
             var response = userServiceClient.createUser(createRequest);
@@ -485,5 +489,9 @@ public class AuthenticationServiceImpl implements AuthenticationService {
         accountRepository.save(account);
 
         log.info("✅ Password successfully changed for account: {}", accountId);
+    }
+
+    private Set<String> copyInitialInterests(Set<String> initialInterests) {
+        return initialInterests == null ? new HashSet<>() : new HashSet<>(initialInterests);
     }
 }

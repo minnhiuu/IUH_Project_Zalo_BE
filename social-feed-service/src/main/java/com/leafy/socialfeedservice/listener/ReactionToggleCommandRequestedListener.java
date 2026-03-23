@@ -5,8 +5,10 @@ import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
 import com.leafy.socialfeedservice.model.Comment;
 import com.leafy.socialfeedservice.model.Post;
+import com.leafy.socialfeedservice.model.Reaction;
 import com.leafy.socialfeedservice.model.embedded.PostStats;
 import com.leafy.socialfeedservice.model.enums.ReactionTargetType;
+import com.leafy.socialfeedservice.model.enums.ReactionType;
 import com.leafy.socialfeedservice.repository.CommentRepository;
 import com.leafy.socialfeedservice.repository.PostRepository;
 import com.leafy.socialfeedservice.repository.ReactionRepository;
@@ -22,6 +24,10 @@ import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
+import java.util.Comparator;
+import java.util.EnumMap;
+import java.util.List;
+import java.util.Map;
 
 @Component
 @RequiredArgsConstructor
@@ -51,9 +57,10 @@ public class ReactionToggleCommandRequestedListener {
         try {
             ReactionTargetType targetType = ReactionTargetType.valueOf(event.targetType());
 
-            long totalReactions = reactionRepository.countByTargetIdAndTargetTypeAndActiveTrue(
+                        List<Reaction> activeReactions = reactionRepository.findByTargetIdAndTargetTypeAndActiveTrueOrderByCreatedAtDesc(
                     event.targetId(),
                     targetType);
+                        long totalReactions = activeReactions.size();
 
             if (targetType == ReactionTargetType.POST) {
                 Post post = postRepository.findByIdAndActiveTrueAndIsCurrentTrue(event.targetId())
@@ -63,7 +70,23 @@ public class ReactionToggleCommandRequestedListener {
                 if (stats == null) {
                     stats = PostStats.builder().reactionCount(0).commentCount(0).shareCount(0).build();
                 }
+
+                                Map<ReactionType, Long> reactionCounts = new EnumMap<>(ReactionType.class);
+                                for (Reaction reaction : activeReactions) {
+                                        ReactionType reactionType = reaction.getType();
+                                        reactionCounts.put(reactionType, reactionCounts.getOrDefault(reactionType, 0L) + 1);
+                                }
+
+                                List<ReactionType> topReactions = reactionCounts.entrySet().stream()
+                                                .sorted(Comparator
+                                                                .comparing(Map.Entry<ReactionType, Long>::getValue, Comparator.reverseOrder())
+                                                                .thenComparing(entry -> entry.getKey().name()))
+                                                .limit(3)
+                                                .map(Map.Entry::getKey)
+                                                .toList();
+
                 stats.setReactionCount((int) totalReactions);
+                                stats.setTopReactions(topReactions);
                 post.setStats(stats);
                 post.setUpdatedAt(LocalDateTime.now());
                 postRepository.save(post);

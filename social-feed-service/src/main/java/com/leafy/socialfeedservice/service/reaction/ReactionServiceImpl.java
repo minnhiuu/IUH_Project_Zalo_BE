@@ -5,10 +5,12 @@ import com.bondhub.common.exception.ErrorCode;
 import com.bondhub.common.utils.SecurityUtil;
 import com.leafy.socialfeedservice.dto.request.reaction.ToggleReactionRequest;
 import com.leafy.socialfeedservice.dto.response.reaction.ReactionResponse;
+import com.leafy.socialfeedservice.dto.response.reaction.ReactionStatsResponse;
 import com.leafy.socialfeedservice.model.Comment;
 import com.leafy.socialfeedservice.model.Post;
 import com.leafy.socialfeedservice.model.Reaction;
 import com.leafy.socialfeedservice.model.enums.ReactionTargetType;
+import com.leafy.socialfeedservice.model.enums.ReactionType;
 import com.leafy.socialfeedservice.publisher.ReactionEventPublisher;
 import com.leafy.socialfeedservice.repository.CommentRepository;
 import com.leafy.socialfeedservice.repository.PostRepository;
@@ -18,6 +20,10 @@ import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.EnumMap;
+import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -78,6 +84,7 @@ public class ReactionServiceImpl implements ReactionService {
 
         return ReactionResponse.builder()
                 .id(savedReaction.getId())
+                .authorId(savedReaction.getAuthorId())
                 .targetId(request.targetId())
                 .targetType(request.targetType())
                 .type(request.type())
@@ -100,6 +107,7 @@ public class ReactionServiceImpl implements ReactionService {
         if (existingReaction == null || !existingReaction.isActive()) {
             return ReactionResponse.builder()
                     .id(existingReaction != null ? existingReaction.getId() : null)
+                    .authorId(existingReaction != null ? existingReaction.getAuthorId() : currentUserId)
                     .targetId(targetId)
                     .targetType(targetType)
                     .type(existingReaction != null ? existingReaction.getType() : null)
@@ -121,6 +129,7 @@ public class ReactionServiceImpl implements ReactionService {
 
         return ReactionResponse.builder()
                 .id(savedReaction.getId())
+                .authorId(savedReaction.getAuthorId())
                 .targetId(targetId)
                 .targetType(targetType)
                 .type(savedReaction.getType())
@@ -128,6 +137,52 @@ public class ReactionServiceImpl implements ReactionService {
                 .totalReactions(getDenormalizedReactionCount(targetId, targetType))
                 .build();
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ReactionResponse> searchReactions(ReactionTargetType targetType, ReactionType reactionType) {
+        List<Reaction> reactions = reactionRepository
+                .findByTargetTypeAndTypeAndActiveTrueOrderByCreatedAtDesc(targetType, reactionType);
+
+        long totalReactions = reactions.size();
+        return reactions.stream()
+                .map(reaction -> ReactionResponse.builder()
+                        .id(reaction.getId())
+                        .authorId(reaction.getAuthorId())
+                        .targetId(reaction.getTargetId())
+                        .targetType(reaction.getTargetType())
+                        .type(reaction.getType())
+                        .active(reaction.isActive())
+                        .totalReactions(totalReactions)
+                        .build())
+                .toList();
+    }
+
+        @Override
+        @Transactional(readOnly = true)
+        public ReactionStatsResponse getReactionStats(String targetId, ReactionTargetType targetType) {
+                validateTarget(targetId, targetType);
+
+                List<Reaction> reactions = reactionRepository
+                                .findByTargetIdAndTargetTypeAndActiveTrueOrderByCreatedAtDesc(targetId, targetType);
+
+                Map<ReactionType, Long> countsByType = new EnumMap<>(ReactionType.class);
+                for (ReactionType reactionType : ReactionType.values()) {
+                        countsByType.put(reactionType, 0L);
+                }
+
+                for (Reaction reaction : reactions) {
+                        ReactionType type = reaction.getType();
+                        countsByType.put(type, countsByType.getOrDefault(type, 0L) + 1);
+                }
+
+                return ReactionStatsResponse.builder()
+                                .targetId(targetId)
+                                .targetType(targetType)
+                                .totalReactions(reactions.size())
+                                .countsByType(countsByType)
+                                .build();
+        }
 
     private void validateTarget(String targetId, ReactionTargetType targetType) {
         switch (targetType) {

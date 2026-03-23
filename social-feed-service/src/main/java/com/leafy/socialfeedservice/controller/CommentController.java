@@ -54,4 +54,11 @@ public class CommentController {
             @RequestParam(defaultValue = "20") int size) {
         return ResponseEntity.ok(ApiResponse.success(commentService.getRootCommentsByPost(postId, page, size)));
     }
+
+    @GetMapping("/{commentId}/replies")
+    @Operation(summary = "Get all replies by comment")
+    public ResponseEntity<ApiResponse<List<CommentResponse>>> getRepliesByComment(
+            @PathVariable String commentId) {
+        return ResponseEntity.ok(ApiResponse.success(commentService.getRepliesByComment(commentId)));
+    }
 }

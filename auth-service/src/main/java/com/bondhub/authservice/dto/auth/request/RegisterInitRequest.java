@@ -4,6 +4,7 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
+import java.util.Set;
 
 /**
  * Request DTO for initiating user registration (Step 1)
@@ -18,5 +19,8 @@ public record RegisterInitRequest(
 
                 @NotBlank(message = "{validation.fullName.required}") String fullName,
 
-                @Pattern(regexp = "^[0-9]{10,15}$", message = "{validation.phoneNumber.pattern}") String phoneNumber) {
+                @Pattern(regexp = "^[0-9]{10,15}$", message = "{validation.phoneNumber.pattern}") String phoneNumber,
+
+                @Size(max = 10)
+                Set<@Pattern(regexp = "^#[A-Za-z0-9_]{1,50}$") String> initialInterests) {
 }

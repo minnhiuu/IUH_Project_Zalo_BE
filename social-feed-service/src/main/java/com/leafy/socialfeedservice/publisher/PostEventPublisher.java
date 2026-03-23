@@ -35,13 +35,20 @@ public class PostEventPublisher {
     }
 
     private void publishPostEvent(Post post, EventType eventType, String logEventType) {
+        var content = post.getContent() != null ? post.getContent() : post.getSharedCaption();
+
         PostEvent event = PostEvent.builder()
                 .postId(post.getId())
                 .authorId(post.getAuthorId())
                 .groupId(post.getGroupId())
-                .title(post.getContent() != null ? post.getContent().getTitle() : null)
-                .caption(post.getContent() != null ? post.getContent().getCaption() : null)
-                .description(post.getContent() != null ? post.getContent().getDescription() : null)
+            .title(content != null ? content.getTitle() : null)
+            .caption(content != null ? content.getCaption() : null)
+            .description(content != null ? content.getDescription() : null)
+            .hashtags(content != null ? content.getHashtags() : null)
+            .postType(post.getPostType() != null ? post.getPostType().name() : null)
+            .sharedPostId(post.getSharedPostId())
+            .originalAuthorId(post.getOriginalAuthorId())
+            .rootPostId(post.getRootPostId())
                 .visibility(post.getVisibility() != null ? post.getVisibility().name() : null)
                 .uploadedAt(post.getUploadedAt())
                 .updatedAt(post.getUpdatedAt())

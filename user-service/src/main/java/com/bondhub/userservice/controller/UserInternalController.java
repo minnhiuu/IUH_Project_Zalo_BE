@@ -2,8 +2,10 @@ package com.bondhub.userservice.controller;
 
 import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.common.dto.client.userservice.user.response.UserSummaryResponse;
+import com.bondhub.userservice.dto.request.user.UserInterestSeedUpdateRequest;
 import com.bondhub.userservice.dto.response.UserSyncResponse;
 import com.bondhub.userservice.service.user.UserInternalService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -50,6 +52,14 @@ public class UserInternalController {
             @PathVariable String accountId,
             @RequestParam boolean banned) {
         userInternalService.syncBanStatus(accountId, banned);
+        return ResponseEntity.ok(ApiResponse.success(null));
+    }
+
+    @PutMapping("/account/{accountId}/seed-interests")
+    public ResponseEntity<ApiResponse<Void>> updateUserInterestsForSeed(
+            @PathVariable String accountId,
+            @Valid @RequestBody UserInterestSeedUpdateRequest request) {
+        userInternalService.updateUserInterestsForSeed(accountId, request);
         return ResponseEntity.ok(ApiResponse.success(null));
     }
 }

@@ -13,6 +13,7 @@ import org.springframework.data.mongodb.core.mapping.MongoId;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.Set;
 
 @Document("users")
@@ -36,6 +37,9 @@ public class User extends BaseModel {
     Gender gender;
     String accountId;
     Set<String> pinnedConversations;
+
+    @Builder.Default
+    Set<String> initialInterests = new HashSet<>();
 
     String avatar;
     String background;

@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Builder;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Builder
 @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -18,6 +19,15 @@ public record PostEvent(
         String title,
         String caption,
         String description,
+        List<String> hashtags,
+        @JsonProperty("post_type")
+        String postType,
+        @JsonProperty("shared_post_id")
+        String sharedPostId,
+        @JsonProperty("original_author_id")
+        String originalAuthorId,
+        @JsonProperty("root_post_id")
+        String rootPostId,
         String visibility,
         @JsonProperty("uploaded_at")
         LocalDateTime uploadedAt,

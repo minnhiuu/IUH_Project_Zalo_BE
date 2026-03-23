@@ -4,6 +4,8 @@ import com.bondhub.common.model.BaseModel;
 import com.leafy.socialfeedservice.model.embedded.PostContent;
 import com.leafy.socialfeedservice.model.embedded.PostMedia;
 import com.leafy.socialfeedservice.model.embedded.PostStats;
+import com.leafy.socialfeedservice.model.embedded.LocationInfo;
+import com.leafy.socialfeedservice.model.embedded.StoryElement;
 import com.leafy.socialfeedservice.model.enums.PostType;
 import com.leafy.socialfeedservice.model.enums.Visibility;
 import lombok.AccessLevel;
@@ -44,7 +46,30 @@ public class Post extends BaseModel {
 
     List<PostMedia> media;
 
+    @Indexed
     PostType postType;
+
+    @Indexed
+    String sharedPostId;
+
+    @Indexed
+    String originalAuthorId;
+
+    PostContent sharedCaption;
+
+    @Indexed
+    String rootPostId;
+
+    @Indexed(expireAfter = "0s")
+    LocalDateTime expiresAt;
+
+    String musicId;
+
+    List<String> viewerIds;
+
+    LocationInfo location;
+
+    List<StoryElement> elements;
 
     Visibility visibility;
 

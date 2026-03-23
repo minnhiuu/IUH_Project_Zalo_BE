@@ -3,9 +3,12 @@ package com.bondhub.userservice.service.user;
 import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.common.dto.client.fileservice.FileUploadResponse;
 import com.bondhub.common.dto.client.userservice.user.response.UserSummaryResponse;
+import com.bondhub.common.event.user.UserCreatedEvent;
 import com.bondhub.common.enums.Role;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
+import com.bondhub.common.model.kafka.EventType;
+import com.bondhub.common.publisher.OutboxEventPublisher;
 import com.bondhub.common.utils.S3Util;
 import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.userservice.client.AuthServiceClient;
@@ -33,6 +36,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -54,6 +58,7 @@ public class UserServiceImpl implements UserService {
     final UserProfileMapper userProfileMapper;
     final FileServiceClient fileServiceClient;
     final UserIndexEventPublisher userIndexEventPublisher;
+    final OutboxEventPublisher outboxEventPublisher;
 
     @Value("${aws.s3.bucket.name}")
     String bucketName;
@@ -71,9 +76,32 @@ public class UserServiceImpl implements UserService {
         user = userRepository.save(user);
         log.info("User created successfully with id: {}", user.getId());
 
+        publishUserCreatedEvent(user);
         publishUserIndexEvent(user, request.phoneNumber(), request.role());
 
         return userMapper.toUserResponse(user);
+    }
+
+    private void publishUserCreatedEvent(User user) {
+        UserCreatedEvent event = UserCreatedEvent.builder()
+                .userId(user.getId())
+                .accountId(user.getAccountId())
+                .fullName(user.getFullName())
+                .bio(user.getBio())
+                .initialInterests(user.getInitialInterests())
+                .dob(user.getDob())
+                .gender(user.getGender() != null ? user.getGender().name() : null)
+                .timestamp(Instant.now().toEpochMilli())
+                .build();
+
+        outboxEventPublisher.saveAndPublish(
+                user.getId(),
+                "User",
+                EventType.USER_CREATED,
+                event
+        );
+
+        log.info("Published USER_CREATED event for userId: {}", user.getId());
     }
 
     private void publishUserIndexEvent(User user, String phoneNumber, String role) {

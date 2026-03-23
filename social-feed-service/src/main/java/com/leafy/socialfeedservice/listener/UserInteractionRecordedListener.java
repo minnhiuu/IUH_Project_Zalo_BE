@@ -1,6 +1,8 @@
 package com.leafy.socialfeedservice.listener;
 
 import com.bondhub.common.event.socialfeed.UserInteractionEvent;
+import com.bondhub.common.model.kafka.EventType;
+import com.bondhub.common.publisher.OutboxEventPublisher;
 import com.leafy.socialfeedservice.model.UserInteraction;
 import com.leafy.socialfeedservice.repository.UserInteractionRepository;
 import lombok.AccessLevel;
@@ -14,6 +16,7 @@ import org.springframework.kafka.support.KafkaHeaders;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 
@@ -24,6 +27,7 @@ import java.time.Instant;
 public class UserInteractionRecordedListener {
 
     UserInteractionRepository userInteractionRepository;
+    OutboxEventPublisher outboxEventPublisher;
 
     @KafkaListener(
             topics = "#{kafkaTopicProperties.interactionEvents.userInteraction}",
@@ -69,6 +73,7 @@ public class UserInteractionRecordedListener {
 
         try {
             userInteractionRepository.save(interaction);
+            publishVectorRefreshEvent(event);
             acknowledgment.acknowledge();
         } catch (DuplicateKeyException ex) {
             // Idempotency guard: replayed records from the same topic/partition/offset are treated as processed.
@@ -76,6 +81,18 @@ public class UserInteractionRecordedListener {
                     topic, partition, offset);
             acknowledgment.acknowledge();
         }
+    }
+
+    @Transactional
+    void publishVectorRefreshEvent(UserInteractionEvent event) {
+        outboxEventPublisher.saveAndPublish(
+                event.postId(),
+                "Post",
+                EventType.USER_INTERACTION_RECORDED,
+                event
+        );
+        log.debug("Published USER_INTERACTION_RECORDED for vector refresh: userId={}, postId={}",
+                event.userId(), event.postId());
     }
 
     private String buildDocumentId(String topic, int partition, long offset) {
