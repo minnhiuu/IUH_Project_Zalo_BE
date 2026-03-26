@@ -60,6 +60,7 @@ public class KafkaTopicProperties {
         private String postDeleted = "social-feed.post.deleted";
         private String reactionToggleCommandRequested = "social-feed.reaction.toggle.command";
         private String postCommentCountProjectionRequested = "social-feed.post.comment-count.projection";
+        private String postViewRecorded = "social-feed.post.view.recorded";
     }
 
     @Getter

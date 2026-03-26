@@ -5,21 +5,14 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.time.LocalDate;
-import java.util.Set;
-
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class UserCreatedEvent {
+public class UserUpdatedEvent {
     private String userId;
-    private String accountId;
     private String fullName;
-    private String bio;
     private String avatar;
-    private Set<String> initialInterests;
-    private LocalDate dob;
-    private String gender;
+    private String bio;
     private Long timestamp;
 }

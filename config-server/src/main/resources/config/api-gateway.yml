@@ -291,6 +291,28 @@ spring:
                     name: socialFeedServiceCircuitBreaker
                     fallbackUri: forward:/fallback/general
 
+            - id: social-feed-service-interactions-root
+              uri: lb://social-feed-service
+              predicates:
+                - Path=/api/interactions
+              filters:
+                - SetPath=/interactions
+                - name: CircuitBreaker
+                  args:
+                    name: socialFeedServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/general
+
+            - id: social-feed-service-interactions
+              uri: lb://social-feed-service
+              predicates:
+                - Path=/api/interactions/**
+              filters:
+                - RewritePath=/api/interactions/(?<segment>.*), /interactions/${segment}
+                - name: CircuitBreaker
+                  args:
+                    name: socialFeedServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/general
+
             # Post Recommendation Service Routes (Protected - JWT required)
             - id: post-recommendation-service
               uri: lb://post-recommendation-service

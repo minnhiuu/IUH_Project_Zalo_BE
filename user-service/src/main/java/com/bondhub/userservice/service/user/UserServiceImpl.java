@@ -4,6 +4,7 @@ import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.common.dto.client.fileservice.FileUploadResponse;
 import com.bondhub.common.dto.client.userservice.user.response.UserSummaryResponse;
 import com.bondhub.common.event.user.UserCreatedEvent;
+import com.bondhub.common.event.user.UserUpdatedEvent;
 import com.bondhub.common.enums.Role;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
@@ -88,6 +89,7 @@ public class UserServiceImpl implements UserService {
                 .accountId(user.getAccountId())
                 .fullName(user.getFullName())
                 .bio(user.getBio())
+                .avatar(user.getAvatar())
                 .initialInterests(user.getInitialInterests())
                 .dob(user.getDob())
                 .gender(user.getGender() != null ? user.getGender().name() : null)
@@ -102,6 +104,25 @@ public class UserServiceImpl implements UserService {
         );
 
         log.info("Published USER_CREATED event for userId: {}", user.getId());
+    }
+
+    private void publishUserUpdatedEvent(User user) {
+        UserUpdatedEvent event = UserUpdatedEvent.builder()
+                .userId(user.getId())
+                .fullName(user.getFullName())
+                .avatar(user.getAvatar())
+                .bio(user.getBio())
+                .timestamp(Instant.now().toEpochMilli())
+                .build();
+
+        outboxEventPublisher.saveAndPublish(
+                user.getId(),
+                "User",
+                EventType.USER_UPDATED,
+                event
+        );
+
+        log.info("Published USER_UPDATED event for userId: {}", user.getId());
     }
 
     private void publishUserIndexEvent(User user, String phoneNumber, String role) {
@@ -230,6 +251,7 @@ public class UserServiceImpl implements UserService {
         log.info("User profile updated successfully for account: {}", accountId);
 
         publishUserIndexEvent(user, accountResponse);
+        publishUserUpdatedEvent(user);
 
         return getUserProfileResponseWithUrl(user, accountResponse);
     }
@@ -298,6 +320,7 @@ public class UserServiceImpl implements UserService {
             log.info("Avatar updated successfully for user: {}", accountId);
 
             publishUserIndexEvent(user, null);
+            publishUserUpdatedEvent(user);
 
             String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
             return userMapper.toAvatarResponse(user, baseUrl);
@@ -336,6 +359,7 @@ public class UserServiceImpl implements UserService {
             log.info("Background updated successfully for user: {}", accountId);
 
             publishUserIndexEvent(user, null);
+            publishUserUpdatedEvent(user);
 
             String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
             return userMapper.toBackgroundResponse(user, baseUrl);

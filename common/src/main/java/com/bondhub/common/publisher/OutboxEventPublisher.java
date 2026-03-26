@@ -12,6 +12,8 @@ import com.bondhub.common.model.kafka.EventType;
 import com.bondhub.common.model.kafka.OutboxEvent;
 import com.bondhub.common.repository.OutboxEventRepository;
 import com.bondhub.common.event.user.UserCreatedEvent;
+import com.bondhub.common.event.user.UserUpdatedEvent;
+import com.bondhub.common.event.user.UserDeletedEvent;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -141,6 +143,7 @@ public class OutboxEventPublisher {
             case REACTION_TOGGLE_COMMAND_REQUESTED -> kafkaTopicProperties.getSocialFeedEvents().getReactionToggleCommandRequested();
             case POST_COMMENT_COUNT_PROJECTION_REQUESTED -> kafkaTopicProperties.getSocialFeedEvents().getPostCommentCountProjectionRequested();
             case USER_INTERACTION_RECORDED -> kafkaTopicProperties.getInteractionEvents().getUserInteraction();
+            case POST_VIEW_RECORDED -> kafkaTopicProperties.getSocialFeedEvents().getPostViewRecorded();
         };
     }
 
@@ -148,13 +151,15 @@ public class OutboxEventPublisher {
         return switch (eventType) {
             case ACCOUNT_REGISTERED, ACCOUNT_UPDATED, ACCOUNT_DELETED, 
                  ACCOUNT_VERIFIED, ACCOUNT_ENABLED, ACCOUNT_DISABLED -> AccountRegisteredEvent.class;
-            case USER_CREATED, USER_UPDATED, USER_DELETED -> UserCreatedEvent.class;
+            case USER_CREATED -> UserCreatedEvent.class;
+            case USER_UPDATED -> UserUpdatedEvent.class;
+            case USER_DELETED -> UserDeletedEvent.class;
             case USER_INDEX_REQUESTED ->  UserIndexRequestedEvent.class;
             case USER_INDEX_DELETED -> UserIndexDeletedEvent.class;
             case POST_CREATED, POST_UPDATED, POST_DELETED -> PostEvent.class;
             case REACTION_TOGGLE_COMMAND_REQUESTED -> ReactionToggleCommandEvent.class;
             case POST_COMMENT_COUNT_PROJECTION_REQUESTED -> PostCommentCountProjectionRequestedEvent.class;
-            case USER_INTERACTION_RECORDED -> UserInteractionEvent.class;
+            case USER_INTERACTION_RECORDED, POST_VIEW_RECORDED -> UserInteractionEvent.class;
         };
     }
 }
