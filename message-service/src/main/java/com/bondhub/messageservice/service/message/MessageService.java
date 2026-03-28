@@ -1,6 +1,7 @@
 package com.bondhub.messageservice.service.message;
 
 import com.bondhub.common.dto.PageResponse;
+import com.bondhub.messageservice.dto.request.MessageSendRequest;
 import com.bondhub.messageservice.dto.response.MessageResponse;
 import com.bondhub.messageservice.model.Message;
 
@@ -11,7 +12,7 @@ public interface MessageService {
 
     PageResponse<List<MessageResponse>> findChatMessages(String recipientId, int page, int size);
 
-    void sendMessage(Message message);
+    void sendMessage(MessageSendRequest request);
     void revokeMessage(String messageId);
     void deleteMessageForMe(String messageId);
 }

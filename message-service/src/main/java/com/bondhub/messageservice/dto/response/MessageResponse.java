@@ -2,6 +2,7 @@ package com.bondhub.messageservice.dto.response;
 
 import com.bondhub.common.enums.MessageStatus;
 import com.bondhub.messageservice.model.enums.MessageType;
+import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.Builder;
 
 import java.time.LocalDateTime;
@@ -20,7 +21,9 @@ public record MessageResponse(
         String content,
         String clientMessageId,
         MessageType type,
+        @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss", timezone = "Asia/Ho_Chi_Minh")
         LocalDateTime createdAt,
+        @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss", timezone = "Asia/Ho_Chi_Minh")
         LocalDateTime lastModifiedAt,
         ReplyMetadataResponse replyTo,
         boolean isForwarded,

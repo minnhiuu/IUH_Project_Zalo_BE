@@ -9,6 +9,12 @@ spring:
   main:
     allow-bean-definition-overriding: true
 
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    deserialization:
+      fail-on-unknown-properties: false
+
   # ==================== ELASTICSEARCH CONFIGURATION ====================
   elasticsearch:
     uris: ${ELASTICSEARCH_URIS}
@@ -70,6 +76,9 @@ kafka:
     # Friend Events
     friend-events:
       friendship-changed: friend.friendship.changed
+
+    # Socket Events (message-service publishes → socket-service consumes)
+    socket-events: socket.events
 
     # Authentication & User Events (Legacy or other services)
     user-registered: user.registered

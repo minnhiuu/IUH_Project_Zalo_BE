@@ -1,4 +1,4 @@
-package com.bondhub.messageservice.config;
+package com.bondhub.socketservice.config;
 
 import com.bondhub.common.security.UserPrincipal;
 import com.bondhub.common.utils.JwtUtil;
@@ -24,7 +24,9 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
 import java.util.List;
 
 /**
- * WebSocket configuration for Message Service.
+ * WebSocket configuration for socket-service.
+ * Validates JWT on STOMP CONNECT frame and sets Principal so that
+ * convertAndSendToUser() routing works correctly.
  */
 @Configuration
 @EnableWebSocketMessageBroker
@@ -55,8 +57,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
             public Message<?> preSend(Message<?> message, MessageChannel channel) {
                 StompHeaderAccessor accessor = MessageHeaderAccessor.getAccessor(message, StompHeaderAccessor.class);
 
-                if (accessor == null)
-                    return message;
+                if (accessor == null) return message;
 
                 if (StompCommand.CONNECT.equals(accessor.getCommand())) {
                     String authHeader = accessor.getFirstNativeHeader("Authorization");
@@ -65,33 +66,36 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                         try {
                             if (jwtUtil.validateToken(token)) {
                                 String accountId = jwtUtil.extractAccountId(token);
-                                String userId = jwtUtil.extractUserId(token);
-                                String email = jwtUtil.extractEmail(token);
-                                String role = jwtUtil.extractRole(token);
-                                String jti = jwtUtil.extractJti(token);
-                                long remaining = jwtUtil.getRemainingTtl(token);
+                                String userId   = jwtUtil.extractUserId(token);
+                                String email    = jwtUtil.extractEmail(token);
+                                String role     = jwtUtil.extractRole(token);
+                                String jti      = jwtUtil.extractJti(token);
+                                long remaining  = jwtUtil.getRemainingTtl(token);
 
                                 List<SimpleGrantedAuthority> authorities = role != null
                                         ? List.of(new SimpleGrantedAuthority("ROLE_" + role))
                                         : List.of();
 
-                                UserPrincipal userPrincipal = new UserPrincipal(accountId, userId, email, jti,
-                                        remaining, authorities);
+                                UserPrincipal userPrincipal = new UserPrincipal(accountId, userId, email, jti, remaining, authorities);
 
-                                // Use userId for STOMP private routing
-                                UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
-                                        userPrincipal, null, authorities) {
-                                    @Override
-                                    public String getName() {
-                                        return userPrincipal.getUserId();
-                                    }
-                                };
+                                // Use userId as the STOMP routing key for convertAndSendToUser()
+                                UsernamePasswordAuthenticationToken auth =
+                                        new UsernamePasswordAuthenticationToken(userPrincipal, null, authorities) {
+                                            @Override
+                                            public String getName() {
+                                                return userPrincipal.getUserId();
+                                            }
+                                        };
 
                                 accessor.setUser(auth);
                                 log.info("[WS] Authenticated user: {}", userId);
+                            } else {
+                                log.warn("[WS] Invalid JWT token – connection refused");
+                                return null; // reject the CONNECT frame
                             }
                         } catch (Exception e) {
                             log.error("[WS] Authentication error: {}", e.getMessage());
+                            return null; // reject
                         }
                     }
                 } else if (accessor.getUser() instanceof UsernamePasswordAuthenticationToken auth) {

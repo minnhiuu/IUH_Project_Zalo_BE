@@ -1,6 +1,7 @@
 package com.bondhub.messageservice.dto.response;
 
 import com.bondhub.common.enums.MessageStatus;
+import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.Builder;
 
 import com.bondhub.messageservice.model.enums.MessageType;
@@ -24,6 +25,7 @@ public record ChatNotification(
         String content,
         MessageType type,
         String clientMessageId,
+        @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss.SSS")
         LocalDateTime timestamp,
         Integer unreadCount,
         ReplyMetadataResponse replyTo,
@@ -32,3 +34,4 @@ public record ChatNotification(
         MessageStatus status
 ) {
 }
+

@@ -20,14 +20,9 @@ import com.bondhub.messageservice.repository.ChatUserRepository;
 import com.bondhub.messageservice.service.conversation.ConversationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
-import org.springframework.stereotype.Service;
-
-import org.springframework.data.mongodb.core.MongoTemplate;
-import org.springframework.data.mongodb.core.query.Criteria;
-import org.springframework.data.mongodb.core.query.Query;
-import org.springframework.data.mongodb.core.query.Update;
-import org.springframework.data.mongodb.core.FindAndModifyOptions;
+import com.bondhub.common.dto.SocketEvent;
+import com.bondhub.common.enums.SocketEventType;
+import com.bondhub.messageservice.dto.request.MessageSendRequest;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -35,8 +30,14 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import com.bondhub.common.dto.PageResponse;
 import com.bondhub.messageservice.dto.response.MessageResponse;
-
 import com.bondhub.messageservice.mapper.MessageMapper;
+import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.stereotype.Service;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
+import org.springframework.data.mongodb.core.FindAndModifyOptions;
 
 import java.time.LocalDateTime;
 import java.util.*;
@@ -49,7 +50,7 @@ public class MessageServiceImpl implements MessageService {
     private final ChatMessageRepository chatMessageRepository;
     private final ChatUserRepository chatUserRepository;
     private final ConversationService conversationService;
-    private final SimpMessagingTemplate messagingTemplate;
+    private final KafkaTemplate<String, Object> kafkaTemplate;
     private final SecurityUtil securityUtil;
     private final UserServiceClient userServiceClient;
     private final MongoTemplate mongoTemplate;
@@ -60,6 +61,9 @@ public class MessageServiceImpl implements MessageService {
 
     @Value("${cloud.aws.region.static}")
     private String region;
+
+    @Value("${kafka.topics.socket-events}")
+    private String socketEventsTopic;
 
     @Override
     public Message save(Message message) {
@@ -156,7 +160,17 @@ public class MessageServiceImpl implements MessageService {
     }
 
     @Override
-    public void sendMessage(Message message) {
+    public void sendMessage(MessageSendRequest request) {
+        Message message = Message.builder()
+                .senderId(securityUtil.getCurrentUserId())
+                .recipientId(request.recipientId())
+                .content(request.content())
+                .clientMessageId(request.clientMessageId())
+                .replyTo(request.replyTo())
+                .isForwarded(request.isForwarded())
+                .type(MessageType.CHAT)
+                .build();
+
         Message savedMsg = save(message);
         String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
 
@@ -194,7 +208,7 @@ public class MessageServiceImpl implements MessageService {
                 ? updatedRoom.getUnreadCounts().getOrDefault(savedMsg.getSenderId(), 0)
                 : 0;
 
-        log.info("[Chat] Sending real-time message to: {}", savedMsg.getRecipientId());
+        log.info("[Chat] Publishing real-time message event for: {}", savedMsg.getRecipientId());
 
         ChatNotification notification = messageMapper.mapToChatNotification(savedMsg, baseUrl, recipientUnreadCount);
 
@@ -205,13 +219,9 @@ public class MessageServiceImpl implements MessageService {
 
         // For recipient: isFromMe = false
         notification = notification.toBuilder().isFromMe(false).build();
+        kafkaTemplate.send(socketEventsTopic, new SocketEvent(SocketEventType.MESSAGE, savedMsg.getRecipientId(), "/queue/messages", notification));
 
-        messagingTemplate.convertAndSendToUser(
-                message.getRecipientId(),
-                "/queue/messages",
-                notification);
-
-        if (!message.getSenderId().equals(message.getRecipientId())) {
+        if (!savedMsg.getSenderId().equals(savedMsg.getRecipientId())) {
             ChatNotification senderNotif = messageMapper.mapToChatNotification(savedMsg, baseUrl, senderUnreadCount);
 
             List<ChatNotification> senderNotifList = new ArrayList<>(List.of(senderNotif));
@@ -220,11 +230,7 @@ public class MessageServiceImpl implements MessageService {
 
             // For sender: isFromMe = true (sync self devices)
             senderNotif = senderNotif.toBuilder().isFromMe(true).build();
-
-            messagingTemplate.convertAndSendToUser(
-                    message.getSenderId(),
-                    "/queue/messages",
-                    senderNotif);
+            kafkaTemplate.send(socketEventsTopic, new SocketEvent(SocketEventType.MESSAGE, savedMsg.getSenderId(), "/queue/messages", senderNotif));
         }
     }
 
@@ -309,24 +315,20 @@ public class MessageServiceImpl implements MessageService {
 
         if (conversation == null) return;
 
-        Map<String, Object> payload = new HashMap<>();
-        payload.put("type", "MESSAGE_STATUS_UPDATE");
-        payload.put("chatId", chatId);
-        payload.put("messageId", messageId);
-        payload.put("newStatus", newStatus);
-
         for (ConversationMember member : conversation.getMembers()) {
-            // For the recipient in frontend to update local state, 
-            // we need to provide the 'partnerId' from their perspective.
-            Map<String, Object> personalPayload = new HashMap<>(payload);
-            String partnerId = conversation.isGroup() ? chatId : 
-                (member.getUserId().equals(conversation.getSenderId()) ? conversation.getRecipientId() : conversation.getSenderId());
+            Map<String, Object> personalPayload = new HashMap<>();
+            personalPayload.put("type", "MESSAGE_STATUS_UPDATE");
+            personalPayload.put("chatId", chatId);
+            personalPayload.put("messageId", messageId);
+            personalPayload.put("newStatus", newStatus);
+
+            String partnerId = conversation.isGroup() ? chatId
+                    : (member.getUserId().equals(conversation.getSenderId())
+                            ? conversation.getRecipientId() : conversation.getSenderId());
             personalPayload.put("partnerId", partnerId);
 
-            messagingTemplate.convertAndSendToUser(
-                    member.getUserId(),
-                    "/queue/status-updates",
-                    personalPayload);
+            kafkaTemplate.send(socketEventsTopic,
+                    new SocketEvent(SocketEventType.MESSAGE, member.getUserId(), "/queue/status-updates", personalPayload));
         }
     }
 }

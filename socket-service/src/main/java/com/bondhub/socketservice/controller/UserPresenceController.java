@@ -1,8 +1,7 @@
-package com.bondhub.messageservice.controller;
+package com.bondhub.socketservice.controller;
 
-import com.bondhub.messageservice.model.ChatUser;
-import com.bondhub.messageservice.service.userpresence.UserPresenceService;
-import io.swagger.v3.oas.annotations.tags.Tag;
+import com.bondhub.socketservice.model.ChatUser;
+import com.bondhub.socketservice.service.UserPresenceService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
@@ -12,8 +11,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 
 @Controller
 @RequiredArgsConstructor
-@RequestMapping("/messages/presence")
-@Tag(name = "User Presence", description = "User online/offline status API")
+@RequestMapping("/presence")
 public class UserPresenceController {
 
     private final UserPresenceService userPresenceService;
@@ -27,16 +25,7 @@ public class UserPresenceController {
     }
 
     @MessageMapping("/user.disconnectUser")
-    public void disconnectUser(
-            @Payload ChatUser user) {
+    public void disconnectUser(@Payload ChatUser user) {
         userPresenceService.disconnect(user.getId());
     }
-
-    // @GetMapping("/online")
-    // @Operation(summary = "Get list of online users")
-    // public ResponseEntity<ApiResponse<List<ChatUser>>> findConnectedUsers() {
-    // return ResponseEntity.ok(ApiResponse.success(
-    // userPresenceService.findConnectedUsers()
-    // ));
-    // }
 }
