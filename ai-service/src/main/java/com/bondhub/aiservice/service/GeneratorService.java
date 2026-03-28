@@ -1,6 +1,7 @@
 package com.bondhub.aiservice.service;
 
 import dev.langchain4j.service.SystemMessage;
+import dev.langchain4j.service.TokenStream;
 import dev.langchain4j.service.UserMessage;
 
 public interface GeneratorService {
@@ -18,5 +19,5 @@ public interface GeneratorService {
         - Nếu không tìm thấy thông tin liên quan, lịch sự thông báo:
           'Tôi chưa tìm thấy dữ liệu liên quan đến câu hỏi của bạn.'
         """)
-    String generate(@UserMessage String contextAndQuery);
+    TokenStream generate(@UserMessage String contextAndQuery);
 }

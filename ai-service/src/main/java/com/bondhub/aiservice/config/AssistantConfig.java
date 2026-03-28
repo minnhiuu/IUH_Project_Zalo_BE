@@ -38,7 +38,6 @@ public class AssistantConfig {
 
     /**
      * Logic model (gpt-4o-mini): Analyzer (Slot Filling) & Grader (RAG grading).
-     * Temperature = 0.0 — logic xác định, tuân thủ định dạng MISSING: cực tốt.
      */
     @Bean
     @Qualifier("logicModel")
@@ -53,7 +52,6 @@ public class AssistantConfig {
 
     /**
      * Generator model (gpt-4o): Tổng hợp câu trả lời cuối.
-     * Temperature = 0.7 — văn phong tiếng Việt mượt mà, hiểu ngữ cảnh sâu.
      */
     @Bean
     @Qualifier("generatorModel")
@@ -119,7 +117,6 @@ public class AssistantConfig {
                 .build();
     }
 
-    /** Analyzer: gpt-4o-mini — phát hiện MISSING context, xác định */
     @Bean
     AnalyzerService analyzerService(@Qualifier("logicModel") ChatLanguageModel chatModel) {
         return AiServices.builder(AnalyzerService.class)
@@ -127,7 +124,6 @@ public class AssistantConfig {
                 .build();
     }
 
-    /** Grader: gpt-4o-mini — chấm điểm RAG CORRECT/AMBIGUOUS/INCORRECT */
     @Bean
     GraderService graderService(@Qualifier("logicModel") ChatLanguageModel chatModel) {
         return AiServices.builder(GraderService.class)
@@ -135,11 +131,10 @@ public class AssistantConfig {
                 .build();
     }
 
-    /** Generator: gpt-4o — tổng hợp câu trả lời cuối, văn phong tốt */
     @Bean
-    GeneratorService generatorService(@Qualifier("generatorModel") ChatLanguageModel chatModel) {
+    GeneratorService generatorService(StreamingChatLanguageModel streamingModel) {
         return AiServices.builder(GeneratorService.class)
-                .chatLanguageModel(chatModel)
+                .streamingChatLanguageModel(streamingModel)
                 .build();
     }
 }
