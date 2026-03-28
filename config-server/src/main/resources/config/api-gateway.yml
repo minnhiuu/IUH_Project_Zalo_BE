@@ -75,6 +75,13 @@ spring:
               filters:
                 - RewritePath=/search/v3/api-docs, /v3/api-docs
 
+            - id: ai-service-docs
+              uri: lb://ai-service
+              predicates:
+                - Path=/ai/v3/api-docs/**
+              filters:
+                - RewritePath=/ai/v3/api-docs, /v3/api-docs
+
             # Auth Service Routes (Public - no JWT required)
             - id: auth-service-qr-wait
               uri: lb://auth-service
@@ -226,6 +233,18 @@ spring:
                   args:
                     name: friendServiceCircuitBreaker
                     fallbackUri: forward:/fallback/friend-service
+
+            - id: ai-service
+              uri: lb://ai-service
+              predicates:
+                - Path=/api/v1/ai/**
+              filters:
+                - RewritePath=/api/v1/ai/(?<segment>.*), /ai/${segment}
+                - AddResponseHeader=X-Accel-Buffering, no
+                - name: CircuitBreaker
+                  args:
+                    name: aiServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/ai-service
 
           # Global CORS Configuration
           globalCors:
@@ -485,6 +504,8 @@ springdoc:
         url: /friend/v3/api-docs
       - name: Search Service
         url: /search/v3/api-docs
+      - name: AI Service
+        url: /ai/v3/api-docs
     # Enable "Try it out" functionality
     use-root-path: true
     path: /swagger-ui.html

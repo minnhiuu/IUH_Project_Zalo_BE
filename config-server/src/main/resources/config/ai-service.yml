@@ -1,0 +1,46 @@
+server:
+  port: 8087
+
+spring:
+  data:
+    mongodb:
+      uri: ${MONGODB_URI_AI_SERVICE}
+  kafka:
+    bootstrap-servers: ${KAFKA_SERVERS:localhost:9092}
+    consumer:
+      group-id: ai-service-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+
+openai:
+  api-key: ${OPENAI_API_KEY}
+  # Analyzer & Grader: logic nhanh, tuân thủ định dạng MISSING:, giá rẻ
+  logic-model-name: gpt-4o-mini
+  logic-temperature: 0.0
+  # Generator: streaming, văn phong tiếng Việt mượt, tổng hợp đa nguồn
+  generator-model-name: gpt-4o
+  generator-temperature: 0.7
+  # Embedding: text-embedding-3-small — hiệu năng cao, 1536 chiều
+  embedding-model-name: text-embedding-3-small
+
+# Qdrant Vector Database
+qdrant:
+  host: ${QDRANT_HOST:localhost}
+  port: ${QDRANT_GRPC_PORT:6334}
+  collection-name: bondhub-messages
+  embedding-dimension: 1536
+
+eureka:
+  client:
+    serviceUrl:
+      defaultZone: ${EUREKA_SERVER_URL:http://localhost:8761/eureka/}
+    register-with-eureka: true
+    fetch-registry: true
+  instance:
+    prefer-ip-address: true

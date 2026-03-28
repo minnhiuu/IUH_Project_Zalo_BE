@@ -103,7 +103,8 @@ public class MessageServiceImpl implements MessageService {
             return PageResponse.empty(pageable);
         }
 
-        Page<Message> messagePage = chatMessageRepository.findByChatIdAndNotDeleted(roomOpt.get().getChatId(), currentUserId, pageable);
+        Page<Message> messagePage = chatMessageRepository.findByChatIdAndNotDeleted(roomOpt.get().getChatId(),
+                currentUserId, pageable);
         String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
 
         List<MessageResponse> dtos = messagePage.getContent().stream()
@@ -114,7 +115,6 @@ public class MessageServiceImpl implements MessageService {
 
         return PageResponse.fromPageData(messagePage, dtos);
     }
-
 
     private void enrichMessages(List<MessageResponse> dtos) {
         Set<String> userIds = new HashSet<>();
@@ -277,7 +277,7 @@ public class MessageServiceImpl implements MessageService {
         }
 
         message.setStatus(MessageStatus.REVOKED);
-        message.setContent(null); 
+        message.setContent(null);
         message.setReplyTo(null);
         chatMessageRepository.save(message);
 
@@ -307,7 +307,8 @@ public class MessageServiceImpl implements MessageService {
                 new Query(Criteria.where("chatId").is(chatId)),
                 Conversation.class);
 
-        if (conversation == null) return;
+        if (conversation == null)
+            return;
 
         Map<String, Object> payload = new HashMap<>();
         payload.put("type", "MESSAGE_STATUS_UPDATE");
@@ -316,11 +317,12 @@ public class MessageServiceImpl implements MessageService {
         payload.put("newStatus", newStatus);
 
         for (ConversationMember member : conversation.getMembers()) {
-            // For the recipient in frontend to update local state, 
+            // For the recipient in frontend to update local state,
             // we need to provide the 'partnerId' from their perspective.
             Map<String, Object> personalPayload = new HashMap<>(payload);
-            String partnerId = conversation.isGroup() ? chatId : 
-                (member.getUserId().equals(conversation.getSenderId()) ? conversation.getRecipientId() : conversation.getSenderId());
+            String partnerId = conversation.isGroup() ? chatId
+                    : (member.getUserId().equals(conversation.getSenderId()) ? conversation.getRecipientId()
+                    : conversation.getSenderId());
             personalPayload.put("partnerId", partnerId);
 
             messagingTemplate.convertAndSendToUser(

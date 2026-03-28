@@ -33,7 +33,7 @@ spring:
     # Listener configuration
     listener:
       concurrency: 3
-      ack-mode: manual
+      ack-mode: manual_immediate
 
 # Service-specific logging overrides
 logging:
