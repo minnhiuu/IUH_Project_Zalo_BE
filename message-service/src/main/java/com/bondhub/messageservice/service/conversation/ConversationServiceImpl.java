@@ -16,11 +16,13 @@ import com.bondhub.messageservice.dto.response.ConversationMemberResponse;
 import com.bondhub.messageservice.dto.response.ReadReceiptNotification;
 import com.bondhub.messageservice.model.enums.MemberRole;
 import com.bondhub.messageservice.model.enums.MessageType;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
+import com.bondhub.common.dto.SocketEvent;
+import com.bondhub.common.enums.SocketEventType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 
 import org.springframework.data.domain.Page;
@@ -46,7 +48,7 @@ public class ConversationServiceImpl implements ConversationService {
     private final ChatUserRepository chatUserRepository;
     private final SecurityUtil securityUtil;
     private final ApplicationEventPublisher eventPublisher;
-    private final SimpMessagingTemplate messagingTemplate;
+    private final KafkaTemplate<String, Object> kafkaTemplate;
     private final MongoTemplate mongoTemplate;
 
     @Value("${aws.s3.bucket.name}")
@@ -54,6 +56,9 @@ public class ConversationServiceImpl implements ConversationService {
 
     @Value("${cloud.aws.region.static}")
     private String region;
+
+    @Value("${kafka.topics.socket-events}")
+    private String socketEventsTopic;
 
     private String generateChatRoomId(String senderId, String recipientId) {
         return (senderId.compareTo(recipientId) < 0)
@@ -115,6 +120,13 @@ public class ConversationServiceImpl implements ConversationService {
 
         ChatUser partner = userCache.getOrDefault(partnerId,
                 ChatUser.builder().id(partnerId).fullName("Người dùng mới").build());
+
+        // Ghi đè tên hiển thị cho trường hợp chat với chính mình (My Documents)
+        if (partnerId.equals(userId)) {
+            partner = ChatUser.builder().id(partnerId).fullName("My Documents").avatar("cloud.png")
+                    .showSeenStatus(false).build();
+        }
+
         ChatUser currentUser = userCache.get(userId);
         boolean viewerCanSee = currentUser != null && currentUser.isShowSeenStatus();
         String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
@@ -155,8 +167,15 @@ public class ConversationServiceImpl implements ConversationService {
             ChatUser partner = userCache.getOrDefault(partnerId,
                     ChatUser.builder().id(partnerId).fullName("Người dùng mới").build());
 
-            // Sync user if not found in cache
-            if (!userCache.containsKey(partnerId)) {
+            // Ghi đè tên hiển thị cho trường hợp chat với chính mình (My Documents)
+            if (partnerId.equals(currentUserId)) {
+                partner = ChatUser.builder().id(partnerId).fullName("My Documents").avatar("cloud.png")
+                        .showSeenStatus(false).build();
+            }
+
+            // Sync user if not found in cache (skip for our special hardcoded partners)
+            if (!userCache.containsKey(partnerId) && !partnerId.equals(currentUserId)
+                    && !partnerId.equals("ai-assistant-001")) {
                 eventPublisher.publishEvent(new UserSyncEvent(partnerId));
             }
 
@@ -182,7 +201,8 @@ public class ConversationServiceImpl implements ConversationService {
                 .lastMessage(last != null ? last.getContent() : "")
                 .lastMessageId(last != null ? last.getMessageId() : null)
                 .lastMessageTime(last != null ? last.getTimestamp() : null)
-                .isLastMessageFromMe(last != null && last.getSenderId().equals(currentUserId))
+                .isLastMessageFromMe(
+                        last != null && last.getSenderId() != null && last.getSenderId().equals(currentUserId))
                 .lastMessageType(last != null ? last.getType() : MessageType.CHAT)
                 .unreadCount(room.getUnreadCounts() != null ? room.getUnreadCounts().getOrDefault(currentUserId, 0) : 0)
                 .lastMessageStatus(last != null ? last.getStatus() : null)
@@ -252,12 +272,13 @@ public class ConversationServiceImpl implements ConversationService {
 
             chatUserRepository.findById(partnerId).ifPresent(partner -> {
                 if (partner.isShowSeenStatus()) {
-                    messagingTemplate.convertAndSendToUser(partnerId, "/queue/read-receipts",
-                            ReadReceiptNotification.builder()
-                                    .chatId(chatId)
-                                    .userId(userId)
-                                    .lastReadMessageId(lastReadMessageId)
-                                    .build());
+                    kafkaTemplate.send(socketEventsTopic,
+                            new SocketEvent(SocketEventType.MESSAGE, partnerId, "/queue/read-receipts",
+                                    ReadReceiptNotification.builder()
+                                            .chatId(chatId)
+                                            .userId(userId)
+                                            .lastReadMessageId(lastReadMessageId)
+                                            .build()));
                 }
             });
         });

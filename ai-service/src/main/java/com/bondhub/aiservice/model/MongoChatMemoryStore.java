@@ -1,4 +1,4 @@
-package com.bondhub.aiservice.memory;
+package com.bondhub.aiservice.model;
 
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.store.memory.chat.ChatMemoryStore;
@@ -22,9 +22,9 @@ public class MongoChatMemoryStore implements ChatMemoryStore {
     @Override
     public List<ChatMessage> getMessages(Object memoryId) {
         log.debug("Retrieving chat memory for: {}", memoryId);
-        ChatMemoryEntity entity = mongoTemplate.findOne(
+        ChatMemory entity = mongoTemplate.findOne(
                 Query.query(Criteria.where("chatId").is(memoryId.toString())), 
-                ChatMemoryEntity.class, 
+                ChatMemory.class,
                 COLLECTION_NAME
         );
         
@@ -39,7 +39,7 @@ public class MongoChatMemoryStore implements ChatMemoryStore {
     @Override
     public void updateMessages(Object memoryId, List<ChatMessage> messages) {
         log.debug("Updating chat memory for: {}", memoryId);
-        ChatMemoryEntity entity = ChatMemoryEntity.builder()
+        ChatMemory entity = ChatMemory.builder()
                 .chatId(memoryId.toString())
                 .messages(messages)
                 .build();

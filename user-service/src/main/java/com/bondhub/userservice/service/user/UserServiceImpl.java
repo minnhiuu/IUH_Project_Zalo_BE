@@ -4,6 +4,7 @@ import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.common.dto.client.fileservice.FileUploadResponse;
 import com.bondhub.common.dto.client.userservice.user.response.UserSummaryResponse;
 import com.bondhub.common.enums.Role;
+import com.bondhub.common.event.user.UserCreatedEvent;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
 import com.bondhub.common.utils.S3Util;
@@ -41,7 +42,6 @@ import java.util.Map;
 import java.util.HashMap;
 import java.util.stream.Collectors;
 
-
 @Service
 @Slf4j
 @FieldDefaults(level = AccessLevel.PRIVATE)
@@ -71,9 +71,22 @@ public class UserServiceImpl implements UserService {
         log.info("User created successfully with id: {}", user.getId());
 
         publishUserIndexEvent(user, request.phoneNumber(), request.role());
+        publishUserCreatedEvent(user, request.accountId());
         publishUserProfileUpdatedEvent(user);
 
         return userMapper.toUserResponse(user);
+    }
+
+    private void publishUserCreatedEvent(User user, String accountId) {
+        UserCreatedEvent event = UserCreatedEvent.builder()
+                .userId(user.getId())
+                .accountId(accountId)
+                .fullName(user.getFullName())
+                .timestamp(System.currentTimeMillis())
+                .build();
+
+        outboxEventPublisher.saveAndPublish(user.getId(), "User", EventType.USER_CREATED, event);
+        log.info("Published USER_CREATED event via outbox for user: {}", user.getId());
     }
 
     private void publishUserIndexEvent(User user, String phoneNumber, String role) {
@@ -132,6 +145,7 @@ public class UserServiceImpl implements UserService {
 
         return getUserResponseWithUrl(user, accountResponse);
     }
+
     @Override
     public UserProfileResponse getMyUserWithAccountInfo() {
         String accountId = securityUtil.getCurrentAccountId();
@@ -413,7 +427,6 @@ public class UserServiceImpl implements UserService {
                         .id(user.getId())
                         .fullName(user.getFullName())
                         .avatar(user.getAvatar() != null ? baseUrl + user.getAvatar() : null)
-                        .build()
-        ));
+                        .build()));
     }
 }

@@ -2,35 +2,33 @@ package com.bondhub.messageservice.controller;
 
 import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.common.dto.PageResponse;
+import com.bondhub.messageservice.dto.request.MessageSendRequest;
 import com.bondhub.messageservice.dto.response.ConversationResponse;
 import com.bondhub.messageservice.dto.response.MessageResponse;
-import com.bondhub.messageservice.model.Message;
 import com.bondhub.messageservice.service.message.MessageService;
 import com.bondhub.messageservice.service.conversation.ConversationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.messaging.handler.annotation.MessageMapping;
-import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.web.bind.annotation.*;
 
-import java.security.Principal;
 import java.util.List;
 
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/messages")
-@Tag(name = "Chat", description = "Real-time chat API")
+@Tag(name = "Chat", description = "Real-time chat REST API")
 public class ChatController {
 
     private final MessageService messageService;
     private final ConversationService conversationService;
 
-    @MessageMapping("/chat")
-    public void processMessage(@Payload Message message, Principal principal) {
-        message.setSenderId(principal.getName());
-        messageService.sendMessage(message);
+    @PostMapping("/send")
+    @Operation(summary = "Send a message (REST). Delivery via Kafka → socket-service → WebSocket.")
+    public ResponseEntity<ApiResponse<Void>> sendMessage(@RequestBody MessageSendRequest request) {
+        messageService.sendMessage(request);
+        return ResponseEntity.ok(ApiResponse.success(null));
     }
 
     @GetMapping("/{recipientId}")

@@ -1,4 +1,4 @@
-package com.bondhub.aiservice.memory;
+package com.bondhub.aiservice.model;
 
 import dev.langchain4j.data.message.ChatMessage;
 import lombok.AllArgsConstructor;
@@ -13,7 +13,7 @@ import java.util.List;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class ChatMemoryEntity {
+public class ChatMemory {
     @Id
     private String chatId;
     private List<ChatMessage> messages;

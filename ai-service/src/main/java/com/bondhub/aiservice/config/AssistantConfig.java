@@ -1,6 +1,6 @@
 package com.bondhub.aiservice.config;
 
-import com.bondhub.aiservice.memory.MongoChatMemoryStore;
+import com.bondhub.aiservice.model.MongoChatMemoryStore;
 import com.bondhub.aiservice.service.*;
 import dev.langchain4j.memory.chat.ChatMemoryProvider;
 import dev.langchain4j.memory.chat.MessageWindowChatMemory;

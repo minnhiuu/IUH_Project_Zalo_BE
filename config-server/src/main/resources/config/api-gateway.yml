@@ -177,16 +177,16 @@ spring:
                     name: searchServiceCircuitBreaker
                     fallbackUri: forward:/fallback/search-service
 
-            # Message Service Routes (Protected - JWT required)
-            - id: message-service-ws
-              uri: lb:ws://message-service
+            # Socket Service Routes (WebSocket)
+            - id: socket-service-ws
+              uri: lb:ws://socket-service
               predicates:
                 - Path=/ws/**
               filters:
                 - name: CircuitBreaker
                   args:
-                    name: messageServiceCircuitBreaker
-                    fallbackUri: forward:/fallback/message-service
+                    name: socketServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/socket-service
 
             - id: message-service
               uri: lb://message-service
@@ -335,6 +335,8 @@ resilience4j:
         base-config: default
         failure-rate-threshold: 70
         wait-duration-in-open-state: 60s
+      socketServiceCircuitBreaker:
+        base-config: default
       messageServiceCircuitBreaker:
         base-config: default
       notificationServiceCircuitBreaker:
@@ -356,6 +358,8 @@ resilience4j:
         base-config: default
       qrWaitServiceCircuitBreaker:
         timeout-duration: ${GATEWAY_QR_TIMEOUT_MS}ms
+      socketServiceCircuitBreaker:
+        base-config: default
       messageServiceCircuitBreaker:
         base-config: default
       notificationServiceCircuitBreaker:

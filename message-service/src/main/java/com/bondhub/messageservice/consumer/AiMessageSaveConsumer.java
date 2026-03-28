@@ -1,4 +1,4 @@
-package com.bondhub.messageservice.listener;
+package com.bondhub.messageservice.consumer;
 
 import com.bondhub.common.enums.MessageStatus;
 import com.bondhub.common.event.ai.AiMessageSaveEvent;
@@ -11,14 +11,14 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.support.Acknowledgment;
-import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 
-@Component
+@Service
 @Slf4j
 @RequiredArgsConstructor
-public class AiMessageSaveListener {
+public class AiMessageSaveConsumer {
     private final ChatMessageRepository chatMessageRepository;
     private final ChatRoomRepository chatRoomRepository;
 
