@@ -13,6 +13,10 @@ import com.bondhub.common.event.notification.RawNotificationEvent;
 import com.bondhub.common.event.notification.CleanupNotificationEvent;
 import com.bondhub.common.publisher.RawNotificationEventPublisher;
 import com.bondhub.friendservice.dto.response.*;
+import com.bondhub.common.enums.FriendshipAction;
+import com.bondhub.common.event.friend.FriendshipChangedEvent;
+import com.bondhub.common.model.kafka.EventType;
+import com.bondhub.common.publisher.OutboxEventPublisher;
 import com.bondhub.friendservice.mapper.FriendShipMapper;
 import com.bondhub.friendservice.model.FriendShip;
 import com.bondhub.friendservice.model.enums.FriendStatus;
@@ -40,6 +44,7 @@ public class FriendshipServiceImpl implements FriendshipService {
     FriendShipMapper friendShipMapper;
     UserServiceClient userServiceClient;
     SecurityUtil securityUtil;
+    OutboxEventPublisher outboxEventPublisher;
     RawNotificationEventPublisher rawNotificationEventPublisher;
 
     @Override
@@ -115,6 +120,8 @@ public class FriendshipServiceImpl implements FriendshipService {
 
         friendShip.setFriendStatus(FriendStatus.ACCEPTED);
         friendShip = friendShipRepository.save(friendShip);
+
+        publishFriendshipEvent(friendShip.getRequested(), friendShip.getReceived(), FriendshipAction.ADDED);
 
         log.info("Friend request {} accepted successfully", friendshipId);
         UserSummaryResponse requester = getUserSummary(friendShip.getRequested());
@@ -212,7 +219,22 @@ public class FriendshipServiceImpl implements FriendshipService {
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FRIENDS));
 
         friendShipRepository.delete(friendShip);
+
+        publishFriendshipEvent(currentUserId, friendId, FriendshipAction.REMOVED);
+
         log.info("Friendship between {} and {} removed", currentUserId, friendId);
+    }
+
+    private void publishFriendshipEvent(String userA, String userB, FriendshipAction action) {
+        FriendshipChangedEvent event = FriendshipChangedEvent.builder()
+                .userA(userA)
+                .userB(userB)
+                .action(action)
+                .timestamp(System.currentTimeMillis())
+                .build();
+
+        // We use userA as aggregateId for the outbox event, but the consumer will process both A and B.
+        outboxEventPublisher.saveAndPublish(userA, "Friendship", EventType.FRIENDSHIP_CHANGED, event);
     }
 
     @Override
@@ -358,6 +380,13 @@ public class FriendshipServiceImpl implements FriendshipService {
         mutualFriendIds.retainAll(targetUserFriendIds);
 
         return mutualFriendIds;
+    }
+
+    @Override
+    public Set<String> getFriendIds(String userId) {
+        log.info("Fetching friend IDs for user {}", userId);
+        List<FriendShip> friendships = friendShipRepository.findAllFriendsByUserId(userId);
+        return extractFriendIds(friendships, userId);
     }
 
     // Helper methods

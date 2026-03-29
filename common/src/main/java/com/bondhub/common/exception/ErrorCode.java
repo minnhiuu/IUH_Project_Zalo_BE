@@ -87,6 +87,11 @@ public enum ErrorCode {
         DLQ_EVENT_NOT_FOUND(HttpStatus.NOT_FOUND, 2401, "error.dlq.event.not.found"),
         DLQ_RETRY_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, 2402, "error.dlq.retry.failed"),
 
+        // Chat errors (4xxx)
+        CHAT_ROOM_NOT_FOUND(HttpStatus.NOT_FOUND, 4001, "error.chat.room.not.found"),
+        MESSAGE_NOT_FOUND(HttpStatus.NOT_FOUND, 4002, "error.message.not.found"),
+        UNAUTHORIZED(HttpStatus.FORBIDDEN, 4003, "error.unauthorized"),
+
         //  NOTIFICATION_TEMPLATE (23xx)
         NOTIFICATION_TEMPLATE_NOT_FOUND(HttpStatus.NOT_FOUND, 2300, "error.notification.template.not.found"),
         NOTIFICATION_STRATEGY_NOT_FOUND(HttpStatus.INTERNAL_SERVER_ERROR, 2301, "error.notification.strategy.not.found"),

@@ -1,0 +1,274 @@
+{
+  "info": {
+    "name": "BondHub - AI Service",
+    "_postman_id": "ai-service-collection-001",
+    "description": "Postman collection for testing the BondHub AI Service APIs.\n\n### Authentication:\n1. **Via Gateway**: Set the `token` variable. Gateway will inject X-User-* headers.\n2. **Direct (Bypass Gateway)**: Manually provide X-User-* headers.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "gateway_url", "value": "http://localhost:8080", "type": "string" },
+    { "key": "direct_url",  "value": "http://localhost:8087", "type": "string" },
+    { "key": "token",       "value": "YOUR_JWT_TOKEN_HERE",   "type": "string" },
+    { "key": "userId",      "value": "user-123",              "type": "string" },
+    { "key": "accountId",   "value": "acc-123",               "type": "string" },
+    { "key": "userEmail",   "value": "user@bondhub.com",      "type": "string" },
+    { "key": "chatId",      "value": "ai-chat-user-123",      "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Gateway Calls",
+      "item": [
+        {
+          "name": "1. Chat — Stream AI Response (SSE)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Accept",        "value": "text/event-stream" },
+              { "key": "Cache-Control", "value": "no-cache" }
+            ],
+            "url": {
+              "raw": "{{gateway_url}}/api/v1/ai/chat/stream?userId={{userId}}&chatId={{chatId}}&message=Xin chào! Bạn là ai?",
+              "host": ["{{gateway_url}}"],
+              "path": ["api", "v1", "ai", "chat", "stream"],
+              "query": [
+                { "key": "userId",  "value": "{{userId}}" },
+                { "key": "chatId",  "value": "{{chatId}}" },
+                { "key": "message", "value": "Xin chào! Bạn là ai?" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "2. Smart Reply",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization",  "value": "Bearer {{token}}" },
+              { "key": "Content-Type",   "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "[\"Chào bạn!\", \"Bạn khỏe không?\", \"Mình đang cần giúp về dự án AI.\"]"
+            },
+            "url": {
+              "raw": "{{gateway_url}}/api/v1/ai/smart-reply",
+              "host": ["{{gateway_url}}"],
+              "path": ["api", "v1", "ai", "smart-reply"]
+            }
+          }
+        },
+        {
+          "name": "3. Summarize",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type",  "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "\"An: Họp lúc mấy giờ? Minh: 8h tối nhé. An: Ok chốt.\""
+            },
+            "url": {
+              "raw": "{{gateway_url}}/api/v1/ai/summarize",
+              "host": ["{{gateway_url}}"],
+              "path": ["api", "v1", "ai", "summarize"]
+            }
+          }
+        },
+        {
+          "name": "4. [AGENTIC] Chat CRAG Pipeline",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{gateway_url}}/api/v1/ai/chat/agentic?groupId=group-001&message=Huy nói gì về Redis trong cuộc họp tuần trước?",
+              "host": ["{{gateway_url}}"],
+              "path": ["api", "v1", "ai", "chat", "agentic"],
+              "query": [
+                { "key": "groupId", "value": "group-001" },
+                { "key": "message", "value": "Huy nói gì về Redis trong cuộc họp tuần trước?" }
+              ]
+            },
+            "description": "Agentic CRAG: Analyzer → Qdrant Retrieval → Grader → Generator.\nGateway tự inject X-User-Id từ JWT."
+          }
+        },
+        {
+          "name": "5. [AGENTIC] Chat — Ambiguous Query (Analyzer hỏi lại)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{gateway_url}}/api/v1/ai/chat/agentic?groupId=group-001&message=Thời tiết hôm nay thế nào?",
+              "host": ["{{gateway_url}}"],
+              "path": ["api", "v1", "ai", "chat", "agentic"],
+              "query": [
+                { "key": "groupId", "value": "group-001" },
+                { "key": "message", "value": "Thời tiết hôm nay thế nào?" }
+              ]
+            },
+            "description": "Query thiếu địa điểm → Analyzer trả về MISSING → AI hỏi lại user."
+          }
+        },
+        {
+          "name": "6. [AGENTIC] Chat — Follow-up (bổ sung context)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{gateway_url}}/api/v1/ai/chat/agentic?groupId=group-001&message=Ở Hồ Chí Minh",
+              "host": ["{{gateway_url}}"],
+              "path": ["api", "v1", "ai", "chat", "agentic"],
+              "query": [
+                { "key": "groupId", "value": "group-001" },
+                { "key": "message", "value": "Ở Hồ Chí Minh" }
+              ]
+            },
+            "description": "Follow-up sau khi AI hỏi lại địa điểm. AgentState WAIT_FOR_CONTEXT sẽ merge câu trả lời 'Ở Hồ Chí Minh' với câu hỏi gốc."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Direct Calls (Manual Headers)",
+      "item": [
+        {
+          "name": "1. [Direct] Chat Stream",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "X-User-Id",    "value": "{{userId}}" },
+              { "key": "X-Account-Id", "value": "{{accountId}}" },
+              { "key": "X-User-Email", "value": "{{userEmail}}" },
+              { "key": "X-User-Roles", "value": "USER,ADMIN" },
+              { "key": "Accept",       "value": "text/event-stream" }
+            ],
+            "url": {
+              "raw": "{{direct_url}}/ai/chat/stream?userId={{userId}}&chatId={{chatId}}&message=Hello direct!",
+              "host": ["{{direct_url}}"],
+              "path": ["ai", "chat", "stream"],
+              "query": [
+                { "key": "userId",  "value": "{{userId}}" },
+                { "key": "chatId",  "value": "{{chatId}}" },
+                { "key": "message", "value": "Hello direct!" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "2. [Direct] Smart Reply",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-User-Id",    "value": "{{userId}}" },
+              { "key": "X-Account-Id", "value": "{{accountId}}" },
+              { "key": "X-User-Email", "value": "{{userEmail}}" },
+              { "key": "X-User-Roles", "value": "USER" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "[\"Hôm nay trời đẹp quá\", \"Ừ, đi cafe không?\"]"
+            },
+            "url": {
+              "raw": "{{direct_url}}/ai/smart-reply",
+              "host": ["{{direct_url}}"],
+              "path": ["ai", "smart-reply"]
+            }
+          }
+        },
+        {
+          "name": "3. [Direct] Summarize",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-User-Id",    "value": "{{userId}}" },
+              { "key": "X-Account-Id", "value": "{{accountId}}" },
+              { "key": "X-User-Email", "value": "{{userEmail}}" },
+              { "key": "X-User-Roles", "value": "USER" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "\"Dự án BondHub đã hoàn thành phase 1. Team đang chuẩn bị cho phase 2 vào tuần tới.\""
+            },
+            "url": {
+              "raw": "{{direct_url}}/ai/summarize",
+              "host": ["{{direct_url}}"],
+              "path": ["ai", "summarize"]
+            }
+          }
+        },
+        {
+          "name": "4. [Direct] Agentic CRAG — Full Query",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-User-Id",    "value": "{{userId}}" },
+              { "key": "X-Account-Id", "value": "{{accountId}}" },
+              { "key": "X-User-Email", "value": "{{userEmail}}" },
+              { "key": "X-User-Roles", "value": "USER" }
+            ],
+            "url": {
+              "raw": "{{direct_url}}/ai/chat/agentic?groupId=group-001&message=Huy nói gì về Redis trong cuộc họp tuần trước?",
+              "host": ["{{direct_url}}"],
+              "path": ["ai", "chat", "agentic"],
+              "query": [
+                { "key": "groupId", "value": "group-001" },
+                { "key": "message", "value": "Huy nói gì về Redis trong cuộc họp tuần trước?" }
+              ]
+            },
+            "description": "Agentic CRAG pipeline:\n1. Analyzer kiểm tra context\n2. Tìm trong Qdrant\n3. Grader chấm điểm\n4. Generator trả lời"
+          }
+        },
+        {
+          "name": "5. [Direct] Agentic CRAG — Ambiguous Query (Analyzer hỏi lại)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-User-Id",    "value": "{{userId}}" },
+              { "key": "X-User-Roles", "value": "USER" }
+            ],
+            "url": {
+              "raw": "{{direct_url}}/ai/chat/agentic?groupId=group-001&message=Thời tiết hôm nay thế nào?",
+              "host": ["{{direct_url}}"],
+              "path": ["ai", "chat", "agentic"],
+              "query": [
+                { "key": "groupId", "value": "group-001" },
+                { "key": "message", "value": "Thời tiết hôm nay thế nào?" }
+              ]
+            },
+            "description": "Query thiếu địa điểm → Analyzer trả về MISSING → AI hỏi lại user."
+          }
+        },
+        {
+          "name": "6. [Direct] Agentic CRAG — Follow-up (bổ sung context)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-User-Id",    "value": "{{userId}}" },
+              { "key": "X-User-Roles", "value": "USER" }
+            ],
+            "url": {
+              "raw": "{{direct_url}}/ai/chat/agentic?groupId=group-001&message=Ở Hồ Chí Minh",
+              "host": ["{{direct_url}}"],
+              "path": ["ai", "chat", "agentic"],
+              "query": [
+                { "key": "groupId", "value": "group-001" },
+                { "key": "message", "value": "Ở Hồ Chí Minh" }
+              ]
+            },
+            "description": "Follow-up sau khi AI hỏi lại địa điểm. AgentState WAIT_FOR_CONTEXT sẽ merge câu trả lời với câu hỏi gốc và xử lý tiếp."
+          }
+        }
+      ]
+    }
+  ]
+}
