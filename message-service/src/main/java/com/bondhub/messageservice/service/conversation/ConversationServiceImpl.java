@@ -60,7 +60,7 @@ public class ConversationServiceImpl implements ConversationService {
     @Value("${kafka.topics.socket-events}")
     private String socketEventsTopic;
 
-    private String generateChatRoomId(String senderId, String recipientId) {
+    private String generateConversationId(String senderId, String recipientId) {
         return (senderId.compareTo(recipientId) < 0)
                 ? String.format("%s_%s", senderId, recipientId)
                 : String.format("%s_%s", recipientId, senderId);
@@ -71,22 +71,22 @@ public class ConversationServiceImpl implements ConversationService {
             String senderId,
             String recipientId,
             boolean createNewRoomIfNotExists) {
-        String chatId = generateChatRoomId(senderId, recipientId);
+        String conversationId = generateConversationId(senderId, recipientId);
 
         if (createNewRoomIfNotExists) {
             return Optional.of(createInitialChatRoom(senderId, recipientId, LocalDateTime.now()));
         }
 
-        return chatRoomRepository.findByChatId(chatId);
+        return chatRoomRepository.findByConversationId(conversationId);
     }
 
     @Override
     public Conversation createInitialChatRoom(String userA, String userB, LocalDateTime timestamp) {
-        String chatId = generateChatRoomId(userA, userB);
+        String conversationId = generateConversationId(userA, userB);
 
-        return chatRoomRepository.findByChatId(chatId).orElseGet(() -> {
+        return chatRoomRepository.findByConversationId(conversationId).orElseGet(() -> {
             Conversation newRoom = Conversation.builder()
-                    .chatId(chatId)
+                    .conversationId(conversationId)
                     .senderId(userA)
                     .recipientId(userB)
                     .lastMessage(LastMessageInfo.builder()
@@ -98,15 +98,15 @@ public class ConversationServiceImpl implements ConversationService {
                             ConversationMember.builder().userId(userB).role(MemberRole.MEMBER).joinedAt(timestamp)
                                     .build())))
                     .build();
-            log.info("Created initial chat room proactively for: {}", chatId);
+            log.info("Created initial chat room proactively for: {}", conversationId);
             return chatRoomRepository.save(newRoom);
         });
     }
 
     @Override
     public ConversationResponse getConversationForUser(String userId, String partnerId) {
-        String chatId = generateChatRoomId(userId, partnerId);
-        Conversation room = chatRoomRepository.findByChatId(chatId)
+        String conversationId = generateConversationId(userId, partnerId);
+        Conversation room = chatRoomRepository.findByConversationId(conversationId)
                 .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
 
         // Gom ID thành viên và partner để fetch 1 lần
@@ -192,7 +192,7 @@ public class ConversationServiceImpl implements ConversationService {
                 viewerCanSee);
 
         return ConversationResponse.builder()
-                .chatId(room.getChatId())
+                .conversationId(room.getConversationId())
                 .partnerId(partner.getId())
                 .partnerName(partner.getFullName())
                 .partnerAvatar(partner.getAvatar() != null ? baseUrl + partner.getAvatar() : null)
@@ -233,17 +233,17 @@ public class ConversationServiceImpl implements ConversationService {
     }
 
     @Override
-    public void markAsRead(String chatId) {
+    public void markAsRead(String conversationId) {
         String currentUserId = securityUtil.getCurrentUserId();
 
         // Tìm room để lấy lastMessageId mới nhất trong DB
-        Conversation room = chatRoomRepository.findByChatId(chatId)
+        Conversation room = chatRoomRepository.findByConversationId(conversationId)
                 .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
 
         String finalReadId = room.getLastMessage() != null ? room.getLastMessage().getMessageId() : null;
 
         // Query tìm đúng Conversation và đúng Member trong mảng members
-        Query query = new Query(Criteria.where("chatId").is(chatId)
+        Query query = new Query(Criteria.where("conversationId").is(conversationId)
                 .and("members.userId").is(currentUserId));
 
         // Cập nhật: reset unread về 0 và set mốc đọc mới bằng tin nhắn cuối cùng của
@@ -260,14 +260,14 @@ public class ConversationServiceImpl implements ConversationService {
         if (result.getModifiedCount() > 0) {
             chatUserRepository.findById(currentUserId).ifPresent(user -> {
                 if (user.isShowSeenStatus()) {
-                    broadcastReadReceipt(chatId, currentUserId, finalReadId);
+                    broadcastReadReceipt(conversationId, currentUserId, finalReadId);
                 }
             });
         }
     }
 
-    private void broadcastReadReceipt(String chatId, String userId, String lastReadMessageId) {
-        chatRoomRepository.findByChatId(chatId).ifPresent(room -> {
+    private void broadcastReadReceipt(String conversationId, String userId, String lastReadMessageId) {
+        chatRoomRepository.findByConversationId(conversationId).ifPresent(room -> {
             String partnerId = room.getSenderId().equals(userId) ? room.getRecipientId() : room.getSenderId();
 
             chatUserRepository.findById(partnerId).ifPresent(partner -> {
@@ -275,7 +275,7 @@ public class ConversationServiceImpl implements ConversationService {
                     kafkaTemplate.send(socketEventsTopic,
                             new SocketEvent(SocketEventType.MESSAGE, partnerId, "/queue/read-receipts",
                                     ReadReceiptNotification.builder()
-                                            .chatId(chatId)
+                                            .conversationId(conversationId)
                                             .userId(userId)
                                             .lastReadMessageId(lastReadMessageId)
                                             .build()));

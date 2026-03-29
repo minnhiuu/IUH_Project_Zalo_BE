@@ -10,7 +10,7 @@ import java.util.List;
 
 @Builder
 public record ConversationResponse(
-        String chatId,
+        String conversationId,
         String partnerId,
         String partnerName, //replace to conversation name when implementing group chat functionality
         String partnerAvatar,

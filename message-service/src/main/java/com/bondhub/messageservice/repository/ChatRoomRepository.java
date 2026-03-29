@@ -14,7 +14,7 @@ import java.util.Optional;
 public interface ChatRoomRepository extends MongoRepository<Conversation, String> {
     Optional<Conversation> findBySenderIdAndRecipientId(String senderId, String recipientId);
 
-    Optional<Conversation> findByChatId(String chatId);
+    Optional<Conversation> findByConversationId(String conversationId);
 
     @Query(value = "{ '$or': [ { 'senderId': ?0 }, { 'recipientId': ?0 } ] }")
     Page<Conversation> findAllRoomsByUserId(String userId, Pageable pageable);

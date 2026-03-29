@@ -11,8 +11,8 @@ import org.springframework.data.mongodb.repository.Query;
 
 @Repository
 public interface ChatMessageRepository extends MongoRepository<Message, String> {
-    @Query("{ 'chatId': ?0, 'deletedBy': { $ne: ?1 } }")
-    Page<Message> findByChatIdAndNotDeleted(String chatId, String userId, Pageable pageable);
+    @Query("{ 'conversationId': ?0, 'deletedBy': { $ne: ?1 } }")
+    Page<Message> findByConversationIdAndNotDeleted(String conversationId, String userId, Pageable pageable);
 
-    Page<Message> findByChatId(String chatId, Pageable pageable);
+    Page<Message> findByConversationId(String conversationId, Pageable pageable);
 }

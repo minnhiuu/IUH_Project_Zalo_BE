@@ -237,9 +237,9 @@ spring:
             - id: ai-service
               uri: lb://ai-service
               predicates:
-                - Path=/api/v1/ai/**
+                - Path=/api/ai/**
               filters:
-                - RewritePath=/api/v1/ai/(?<segment>.*), /ai/${segment}
+                - RewritePath=/api/ai/(?<segment>.*), /ai/${segment}
                 - AddResponseHeader=X-Accel-Buffering, no
                 - name: CircuitBreaker
                   args:

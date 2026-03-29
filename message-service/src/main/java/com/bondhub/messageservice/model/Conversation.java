@@ -25,7 +25,7 @@ public class Conversation extends BaseModel {
     @Id
     String id;
     @Indexed(unique = true)
-    String chatId;
+    String conversationId;
     String senderId;
     String recipientId;
 

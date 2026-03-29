@@ -33,7 +33,7 @@ public class ChatController {
 
     @GetMapping("/{recipientId}")
     @Operation(summary = "Get chat messages by recipient ID")
-    public ResponseEntity<ApiResponse<PageResponse<List<MessageResponse>>>> findChatMessages(
+    public ResponseEntity<ApiResponse<PageResponse<List<MessageResponse>>>> getChatMessages(
             @PathVariable String recipientId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
@@ -50,10 +50,10 @@ public class ChatController {
                 conversationService.getUserConversations(page, size)));
     }
 
-    @PutMapping("/conversations/{chatId}/read")
+    @PutMapping("/conversations/{conversationId}/read")
     @Operation(summary = "Mark a conversation as read")
-    public ResponseEntity<ApiResponse<Void>> markAsRead(@PathVariable String chatId) {
-        conversationService.markAsRead(chatId);
+    public ResponseEntity<ApiResponse<Void>> markAsRead(@PathVariable String conversationId) {
+        conversationService.markAsRead(conversationId);
         return ResponseEntity.ok(ApiResponse.success(null));
     }
 

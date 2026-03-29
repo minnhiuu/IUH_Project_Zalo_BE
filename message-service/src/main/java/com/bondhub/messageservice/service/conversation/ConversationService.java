@@ -20,5 +20,5 @@ public interface ConversationService {
 
     PageResponse<List<ConversationResponse>> getUserConversations(int page, int size);
 
-    void markAsRead(String chatId);
+    void markAsRead(String conversationId);
 }

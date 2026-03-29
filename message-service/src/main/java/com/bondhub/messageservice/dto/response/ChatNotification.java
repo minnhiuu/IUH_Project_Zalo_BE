@@ -17,7 +17,7 @@ import lombok.With;
 @With
 public record ChatNotification(
         String id,
-        String chatId,
+        String conversationId,
         String senderId,
         String senderName,
         String senderAvatar,

@@ -8,15 +8,16 @@ import org.springframework.context.annotation.ComponentScan;
 @SpringBootApplication
 @EnableDiscoveryClient
 @ComponentScan(
-    basePackages = { 
-        "com.bondhub.aiservice", 
-        "com.bondhub.common.config", 
-        "com.bondhub.common.security" 
-    },
-    excludeFilters = @ComponentScan.Filter(
-        type = org.springframework.context.annotation.FilterType.ASSIGNABLE_TYPE,
-        classes = com.bondhub.common.config.I18nConfig.class
-    )
+        basePackages = {
+                "com.bondhub.aiservice",
+                "com.bondhub.common.config",
+                "com.bondhub.common.security",
+                "com.bondhub.common.utils",
+        },
+        excludeFilters = @ComponentScan.Filter(
+                type = org.springframework.context.annotation.FilterType.ASSIGNABLE_TYPE,
+                classes = com.bondhub.common.config.I18nConfig.class
+        )
 )
 public class AiServiceApplication {
     public static void main(String[] args) {

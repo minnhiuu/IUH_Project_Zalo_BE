@@ -70,7 +70,7 @@ public class MessageServiceImpl implements MessageService {
         var room = conversationService
                 .getDirectConversation(message.getSenderId(), message.getRecipientId(), true)
                 .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
-        message.setChatId(room.getChatId());
+        message.setConversationId(room.getConversationId());
 
         // Lookup sender info for snapshot (Cold Start if missing)
         ChatUser sender = chatUserRepository.findById(message.getSenderId())
@@ -107,7 +107,7 @@ public class MessageServiceImpl implements MessageService {
             return PageResponse.empty(pageable);
         }
 
-        Page<Message> messagePage = chatMessageRepository.findByChatIdAndNotDeleted(roomOpt.get().getChatId(),
+        Page<Message> messagePage = chatMessageRepository.findByConversationIdAndNotDeleted(roomOpt.get().getConversationId(),
                 currentUserId, pageable);
         String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
 
@@ -174,6 +174,7 @@ public class MessageServiceImpl implements MessageService {
         Message savedMsg = save(message);
         String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
 
+        //TODO: For non-text messages, consider enriching content with metadata (e.g. filename) instead of just showing [FILE]
         String previewContent = switch (savedMsg.getType() == null ? MessageType.CHAT
                 : savedMsg.getType()) {
             case IMAGE -> "[IMAGE]";
@@ -190,7 +191,7 @@ public class MessageServiceImpl implements MessageService {
                 .status(savedMsg.getStatus())
                 .build();
 
-        Query query = new Query(Criteria.where("chatId").is(savedMsg.getChatId()));
+        Query query = new Query(Criteria.where("conversationId").is(savedMsg.getConversationId()));
         Update update = new Update()
                 .set("lastMessage", lastInfo)
                 .inc("unreadCounts." + savedMsg.getRecipientId(), 1);
@@ -288,7 +289,7 @@ public class MessageServiceImpl implements MessageService {
         chatMessageRepository.save(message);
 
         updateLastMessageIfRevoked(message);
-        broadcastStatusChange(message.getChatId(), messageId, MessageStatus.REVOKED);
+        broadcastStatusChange(message.getConversationId(), messageId, MessageStatus.REVOKED);
     }
 
     @Override
@@ -300,7 +301,7 @@ public class MessageServiceImpl implements MessageService {
     }
 
     private void updateLastMessageIfRevoked(Message revokedMsg) {
-        Query query = new Query(Criteria.where("chatId").is(revokedMsg.getChatId())
+        Query query = new Query(Criteria.where("conversationId").is(revokedMsg.getConversationId())
                 .and("lastMessage.messageId").is(revokedMsg.getId()));
         Update update = new Update()
                 .set("lastMessage.content", "Tin nhắn đã được thu hồi")
@@ -308,9 +309,9 @@ public class MessageServiceImpl implements MessageService {
         mongoTemplate.updateFirst(query, update, Conversation.class);
     }
 
-    private void broadcastStatusChange(String chatId, String messageId, MessageStatus newStatus) {
+    private void broadcastStatusChange(String conversationId, String messageId, MessageStatus newStatus) {
         Conversation conversation = mongoTemplate.findOne(
-                new Query(Criteria.where("chatId").is(chatId)),
+                new Query(Criteria.where("conversationId").is(conversationId)),
                 Conversation.class);
 
         if (conversation == null)
@@ -319,11 +320,11 @@ public class MessageServiceImpl implements MessageService {
         for (ConversationMember member : conversation.getMembers()) {
             Map<String, Object> personalPayload = new HashMap<>();
             personalPayload.put("type", "MESSAGE_STATUS_UPDATE");
-            personalPayload.put("chatId", chatId);
+            personalPayload.put("conversationId", conversationId);
             personalPayload.put("messageId", messageId);
             personalPayload.put("newStatus", newStatus);
 
-            String partnerId = conversation.isGroup() ? chatId
+            String partnerId = conversation.isGroup() ? conversationId
                     : (member.getUserId().equals(conversation.getSenderId())
                             ? conversation.getRecipientId() : conversation.getSenderId());
             personalPayload.put("partnerId", partnerId);

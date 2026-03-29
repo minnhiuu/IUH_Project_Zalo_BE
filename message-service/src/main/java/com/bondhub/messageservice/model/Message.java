@@ -18,13 +18,13 @@ import java.util.Set;
 @NoArgsConstructor
 @AllArgsConstructor
 @Document(collection = "chat_messages")
-@CompoundIndex(name = "chatId_createdAt_idx", def = "{'chatId': 1, 'createdAt': -1}")
+@CompoundIndex(name = "conversationId_createdAt_idx", def = "{'conversationId': 1, 'createdAt': -1}")
 @FieldDefaults(level = AccessLevel.PRIVATE)
 @EqualsAndHashCode(callSuper = true)
 public class Message extends BaseModel {
     @Id
     String id;
-    String chatId;
+    String conversationId;
     String senderId;
     String senderName;
     String senderAvatar;

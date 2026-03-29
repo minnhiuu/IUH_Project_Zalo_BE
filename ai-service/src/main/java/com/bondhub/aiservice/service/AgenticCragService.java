@@ -22,14 +22,8 @@ public class AgenticCragService {
     private final VectorSearchService vectorSearchService;
     private final AgentStateService agentStateService;
 
-    /**
-     * Luồng CRAG Agentic: Analyzer → Retrieval → Grader → Generator (streaming)
-     *
-     * Trả về Flux<String> với 2 loại event JSON:
-     *  - {"type":"CLARIFICATION","content":"..."} — yêu cầu user bổ sung thông tin
-     *  - {"type":"ANSWER_CHUNK","content":"..."}  — từng token câu trả lời cuối
-     */
     public Flux<String> handleChat(String query, String conversationId, String userId) {
+        log.info("[CRAG] Received query from user: {} in conversation: {}", userId, conversationId);
         String convId = conversationId + ":" + userId;
 
         // Bước 1: Kiểm tra trạng thái cũ (đang chờ context bổ sung?)
@@ -43,7 +37,6 @@ public class AgenticCragService {
             agentStateService.clear(convId);
         }
 
-        // Toàn bộ pipeline chạy trên boundedElastic để không block I/O
         return Mono.fromCallable(() -> runPipeline(currentQuery, convId))
                 .flatMapMany(pipelineResult -> {
                     if (pipelineResult.needsClarification()) {
@@ -78,7 +71,7 @@ public class AgenticCragService {
     }
 
     // ======================================================
-    // Pipeline nội bộ (blocking — chạy trên boundedElastic)
+    // Pipeline
     // ======================================================
 
     private PipelineResult runPipeline(String currentQuery, String convId) {

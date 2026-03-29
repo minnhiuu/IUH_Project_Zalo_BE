@@ -4,7 +4,7 @@ import lombok.Builder;
 
 @Builder
 public record ReadReceiptNotification(
-        String chatId,
+        String conversationId,
         String userId,
         String lastReadMessageId
 ) {

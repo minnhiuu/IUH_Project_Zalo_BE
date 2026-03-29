@@ -26,8 +26,6 @@ public class AssistantController {
             @RequestHeader(value = "X-User-Id", required = false, defaultValue = "anonymous") String userId,
             @RequestParam(defaultValue = "global") String conversationId,
             @RequestParam String message) {
-
-        log.info("[Controller] New agentic stream request from user: {}, conv: {}", userId, conversationId);
         return agenticCragService.handleChat(message, conversationId, userId);
     }
 

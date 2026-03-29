@@ -27,7 +27,7 @@ public class AiMessageSaveConsumer {
         log.info("Received ai.message.save event for chat: {}", event.getChatId());
         
         Message aiMsg = Message.builder()
-            .chatId(event.getChatId())
+            .conversationId(event.getChatId())
             .senderId("ai-assistant-001")
             .recipientId(event.getUserId())
             .content(event.getContent())
@@ -39,7 +39,7 @@ public class AiMessageSaveConsumer {
         Message savedMsg = chatMessageRepository.save(aiMsg);
         
         // Update LastMessageInfo in Conversation
-        chatRoomRepository.findByChatId(event.getChatId()).ifPresent(conversation -> {
+        chatRoomRepository.findByConversationId(event.getChatId()).ifPresent(conversation -> {
             conversation.setLastMessage(LastMessageInfo.builder()
                 .messageId(savedMsg.getId())
                 .senderId(savedMsg.getSenderId())

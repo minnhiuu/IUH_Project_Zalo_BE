@@ -19,7 +19,7 @@ import java.util.Set;
 @FieldDefaults(level = AccessLevel.PRIVATE)
 public class ChatUser {
     @Id
-    String id; // Same as UserProfile.id
+    String id;
     String accountId;
     String fullName;
     String email;

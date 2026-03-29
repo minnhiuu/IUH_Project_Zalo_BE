@@ -25,13 +25,13 @@ public class UserCreatedConsumer {
         log.info("Received user.created event for user: {}", event.getUserId());
         String recipientId = "ai-assistant-001";
         String senderId = event.getUserId();
-        String chatId = (senderId.compareTo(recipientId) < 0) 
-                ? senderId + "_" + recipientId 
-                : recipientId + "_" + senderId;
+        String conversationId = (senderId.compareTo(recipientId) < 0) 
+                ? String.format("%s_%s", senderId, recipientId)
+                : String.format("%s_%s", recipientId, senderId);
         
-        if (chatRoomRepository.findByChatId(chatId).isEmpty()) {
+        if (chatRoomRepository.findByConversationId(conversationId).isEmpty()) {
             Conversation aiRoom = Conversation.builder()
-                .chatId(chatId)
+                .conversationId(conversationId)
                 .senderId(event.getUserId())
                 .recipientId("ai-assistant-001")
                 .members(Set.of(
@@ -54,9 +54,9 @@ public class UserCreatedConsumer {
 
         // Tạo luôn phòng Cloud (My Documents) cho User
         String cloudChatId = event.getUserId() + "_" + event.getUserId();
-        if (chatRoomRepository.findByChatId(cloudChatId).isEmpty()) {
+        if (chatRoomRepository.findByConversationId(cloudChatId).isEmpty()) {
             Conversation cloudRoom = Conversation.builder()
-                .chatId(cloudChatId)
+                .conversationId(cloudChatId)
                 .senderId(event.getUserId())
                 .recipientId(event.getUserId()) // Sender và Recipient là một
                 .members(Set.of(
