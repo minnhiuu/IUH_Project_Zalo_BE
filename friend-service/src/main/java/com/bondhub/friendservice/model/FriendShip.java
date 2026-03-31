@@ -7,6 +7,8 @@ import lombok.*;
 import lombok.experimental.FieldDefaults;
 import lombok.experimental.SuperBuilder;
 import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.mapping.Field;
+import org.springframework.data.mongodb.core.mapping.FieldType;
 import org.springframework.data.mongodb.core.mapping.MongoId;
 
 @Document("friendships")
@@ -20,12 +22,15 @@ import org.springframework.data.mongodb.core.mapping.MongoId;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class FriendShip extends BaseModel {
     @EqualsAndHashCode.Include
-    @MongoId
+    @MongoId(FieldType.OBJECT_ID)
     String id;
 
     String content;
     FriendStatus friendStatus;
+
+    @Field(targetType = FieldType.OBJECT_ID)
     String requested;
+    @Field(targetType = FieldType.OBJECT_ID)
     String received;
 
 }

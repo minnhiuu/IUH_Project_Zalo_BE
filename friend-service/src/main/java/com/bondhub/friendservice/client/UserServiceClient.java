@@ -23,6 +23,4 @@ public interface UserServiceClient {
     @GetMapping("/account/{accountId}")
     ApiResponse<UserSummaryResponse> getUserByAccountId(@PathVariable("accountId") String accountId);
 
-//    @GetMapping("/batch")
-//    ApiResponse<List<UserSummaryResponse>> getUsersByIds(@PathVariable("ids") List<String> ids);
 }

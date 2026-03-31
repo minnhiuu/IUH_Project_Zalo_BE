@@ -70,7 +70,7 @@ public class UserInternalServiceImpl implements UserInternalService {
     public List<UserSyncResponse> getUsersBatch(String lastId, int size) {
         List<User> users;
         PageRequest pageRequest = PageRequest.of(0, size);
-        
+
         if (lastId == null || lastId.isEmpty()) {
             users = userRepository.findAllByOrderByIdAsc(pageRequest);
         } else {

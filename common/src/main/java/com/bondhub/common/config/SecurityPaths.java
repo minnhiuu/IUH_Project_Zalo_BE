@@ -24,6 +24,10 @@ public class SecurityPaths {
             "/api/auth/qr/generate",
             "/api/auth/qr/wait/**",
 
+            // WebSocket endpoints
+            "/ws/**",
+            "/ws",
+
             // Internal service-to-service endpoints
             "/api/users/internal/**",
 
@@ -79,6 +83,10 @@ public class SecurityPaths {
             "/auth/logout",
             "/auth/qr/generate",
             "/auth/qr/wait/**",
+
+            // WebSocket endpoints
+            "/ws/**",
+            "/ws",
 
             // Test endpoints (gateway strips /api/users -> /users)
             "/users/test/security/public",
