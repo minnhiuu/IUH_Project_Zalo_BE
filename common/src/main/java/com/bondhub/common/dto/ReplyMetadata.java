@@ -1,6 +1,6 @@
-package com.bondhub.messageservice.model;
+package com.bondhub.common.dto;
 
-import com.bondhub.messageservice.model.enums.MessageType;
+import com.bondhub.common.enums.MessageType;
 import lombok.*;
 
 @Data

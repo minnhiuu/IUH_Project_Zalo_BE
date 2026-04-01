@@ -3,6 +3,7 @@ package com.bondhub.aiservice.controller;
 import com.bondhub.aiservice.service.AgenticCragService;
 import com.bondhub.aiservice.service.SmartReplyService;
 import com.bondhub.aiservice.service.SummarizationService;
+import com.bondhub.common.dto.MessageSendRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
@@ -24,9 +25,10 @@ public class AssistantController {
     @PostMapping(value = "/chat/agentic", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<String> agenticChat(
             @RequestHeader(value = "X-User-Id", required = false, defaultValue = "anonymous") String userId,
-            @RequestParam(defaultValue = "global") String conversationId,
-            @RequestParam String message) {
-        return agenticCragService.handleChat(message, conversationId, userId);
+            @RequestBody MessageSendRequest request) {
+        log.info("[Assistant] Received agentic chat request from user: {} for conversation: {}", 
+                userId, request.recipientId());
+        return agenticCragService.handleChat(request.content(), request.recipientId(), userId);
     }
 
     @PostMapping("/smart-reply")

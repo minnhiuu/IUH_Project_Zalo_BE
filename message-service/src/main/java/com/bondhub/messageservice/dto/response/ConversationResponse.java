@@ -2,7 +2,7 @@ package com.bondhub.messageservice.dto.response;
 
 import com.bondhub.common.enums.MessageStatus;
 import com.bondhub.common.enums.Status;
-import com.bondhub.messageservice.model.enums.MessageType;
+import com.bondhub.common.enums.MessageType;
 import lombok.Builder;
 
 import java.time.LocalDateTime;

@@ -5,7 +5,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import com.bondhub.messageservice.model.enums.MessageType;
+import com.bondhub.common.enums.MessageType;
 import java.time.LocalDateTime;
 
 @Data
