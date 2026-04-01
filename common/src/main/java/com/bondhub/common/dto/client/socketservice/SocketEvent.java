@@ -1,4 +1,4 @@
-package com.bondhub.common.dto;
+package com.bondhub.common.dto.client.socketservice;
 
 import com.bondhub.common.enums.SocketEventType;
 

@@ -1,6 +1,6 @@
 package com.bondhub.messageservice.dto.response;
 
-import com.bondhub.messageservice.model.enums.MessageType;
+import com.bondhub.common.enums.MessageType;
 import lombok.Builder;
 
 import lombok.With;
@@ -11,9 +11,9 @@ import lombok.With;
 @Builder(toBuilder = true)
 @With
 public record ReplyMetadataResponse(
-    String messageId,
-    String senderId,
-    String senderName,
-    String content,
-    MessageType type
-) {}
+        String messageId,
+        String senderId,
+        String senderName,
+        String content,
+        MessageType type) {
+}

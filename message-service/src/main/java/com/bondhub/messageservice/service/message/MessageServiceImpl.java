@@ -14,15 +14,16 @@ import com.bondhub.messageservice.model.LastMessageInfo;
 import com.bondhub.messageservice.model.Message;
 import com.bondhub.messageservice.model.ChatUser;
 import com.bondhub.common.enums.MessageStatus;
-import com.bondhub.messageservice.model.enums.MessageType;
+import com.bondhub.common.enums.MessageType;
 import com.bondhub.messageservice.repository.ChatMessageRepository;
 import com.bondhub.messageservice.repository.ChatUserRepository;
 import com.bondhub.messageservice.service.conversation.ConversationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import com.bondhub.common.dto.SocketEvent;
+import com.bondhub.common.dto.client.socketservice.SocketEvent;
 import com.bondhub.common.enums.SocketEventType;
-import com.bondhub.messageservice.dto.request.MessageSendRequest;
+import com.bondhub.common.dto.client.messageservice.MessageSendRequest;
+import com.bondhub.common.event.ai.AiMessageSaveEvent;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -107,7 +108,8 @@ public class MessageServiceImpl implements MessageService {
             return PageResponse.empty(pageable);
         }
 
-        Page<Message> messagePage = chatMessageRepository.findByConversationIdAndNotDeleted(roomOpt.get().getConversationId(),
+        Page<Message> messagePage = chatMessageRepository.findByConversationIdAndNotDeleted(
+                roomOpt.get().getConversationId(),
                 currentUserId, pageable);
         String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
 
@@ -174,7 +176,8 @@ public class MessageServiceImpl implements MessageService {
         Message savedMsg = save(message);
         String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
 
-        //TODO: For non-text messages, consider enriching content with metadata (e.g. filename) instead of just showing [FILE]
+        // TODO: For non-text messages, consider enriching content with metadata (e.g.
+        // filename) instead of just showing [FILE]
         String previewContent = switch (savedMsg.getType() == null ? MessageType.CHAT
                 : savedMsg.getType()) {
             case IMAGE -> "[IMAGE]";
@@ -220,7 +223,8 @@ public class MessageServiceImpl implements MessageService {
 
         // For recipient: isFromMe = false
         notification = notification.toBuilder().isFromMe(false).build();
-        kafkaTemplate.send(socketEventsTopic, new SocketEvent(SocketEventType.MESSAGE, savedMsg.getRecipientId(), "/queue/messages", notification));
+        kafkaTemplate.send(socketEventsTopic,
+                new SocketEvent(SocketEventType.MESSAGE, savedMsg.getRecipientId(), "/queue/messages", notification));
 
         if (!savedMsg.getSenderId().equals(savedMsg.getRecipientId())) {
             ChatNotification senderNotif = messageMapper.mapToChatNotification(savedMsg, baseUrl, senderUnreadCount);
@@ -231,8 +235,17 @@ public class MessageServiceImpl implements MessageService {
 
             // For sender: isFromMe = true (sync self devices)
             senderNotif = senderNotif.toBuilder().isFromMe(true).build();
-            kafkaTemplate.send(socketEventsTopic, new SocketEvent(SocketEventType.MESSAGE, savedMsg.getSenderId(), "/queue/messages", senderNotif));
+            kafkaTemplate.send(socketEventsTopic,
+                    new SocketEvent(SocketEventType.MESSAGE, savedMsg.getSenderId(), "/queue/messages", senderNotif));
         }
+
+        // --- NEW: Ingest into AI system ---
+        log.info("[Kafka] Sending user message to 'message-created' for AI ingestion.");
+        kafkaTemplate.send("message-created", AiMessageSaveEvent.builder()
+                .userId(savedMsg.getSenderId())
+                .chatId(savedMsg.getConversationId())
+                .content(savedMsg.getContent())
+                .build());
     }
 
     private void enrichNotifications(List<ChatNotification> notifs) {
@@ -326,11 +339,13 @@ public class MessageServiceImpl implements MessageService {
 
             String partnerId = conversation.isGroup() ? conversationId
                     : (member.getUserId().equals(conversation.getSenderId())
-                            ? conversation.getRecipientId() : conversation.getSenderId());
+                            ? conversation.getRecipientId()
+                            : conversation.getSenderId());
             personalPayload.put("partnerId", partnerId);
 
             kafkaTemplate.send(socketEventsTopic,
-                    new SocketEvent(SocketEventType.MESSAGE, member.getUserId(), "/queue/status-updates", personalPayload));
+                    new SocketEvent(SocketEventType.MESSAGE, member.getUserId(), "/queue/status-updates",
+                            personalPayload));
         }
     }
 }
