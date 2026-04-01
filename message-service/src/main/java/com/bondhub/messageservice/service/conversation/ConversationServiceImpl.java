@@ -16,7 +16,7 @@ import com.bondhub.messageservice.dto.response.ConversationMemberResponse;
 import com.bondhub.messageservice.dto.response.ReadReceiptNotification;
 import com.bondhub.messageservice.model.enums.MemberRole;
 import com.bondhub.common.enums.MessageType;
-import com.bondhub.common.dto.SocketEvent;
+import com.bondhub.common.dto.client.socketservice.SocketEvent;
 import com.bondhub.common.enums.SocketEventType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

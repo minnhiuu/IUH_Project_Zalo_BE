@@ -1,6 +1,4 @@
-package com.bondhub.common.dto;
-
-import com.bondhub.common.dto.ReplyMetadata;
+package com.bondhub.common.dto.client.messageservice;
 
 /**
  * Request DTO for sending a chat message. 

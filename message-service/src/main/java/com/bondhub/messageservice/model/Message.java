@@ -3,7 +3,7 @@ package com.bondhub.messageservice.model;
 import com.bondhub.common.model.BaseModel;
 import com.bondhub.common.enums.MessageStatus;
 import com.bondhub.common.enums.MessageType;
-import com.bondhub.common.dto.ReplyMetadata;
+import com.bondhub.common.dto.client.messageservice.ReplyMetadata;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
 import lombok.experimental.SuperBuilder;

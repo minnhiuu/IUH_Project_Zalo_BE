@@ -9,7 +9,7 @@ import com.bondhub.messageservice.repository.ChatMessageRepository;
 import com.bondhub.messageservice.repository.ChatRoomRepository;
 import com.bondhub.messageservice.mapper.MessageMapper;
 import com.bondhub.messageservice.dto.response.ChatNotification;
-import com.bondhub.common.dto.SocketEvent;
+import com.bondhub.common.dto.client.socketservice.SocketEvent;
 import com.bondhub.common.enums.SocketEventType;
 import com.bondhub.common.utils.S3Util;
 import org.springframework.beans.factory.annotation.Value;
