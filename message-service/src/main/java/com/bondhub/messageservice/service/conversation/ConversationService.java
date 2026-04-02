@@ -4,21 +4,29 @@ import com.bondhub.common.dto.PageResponse;
 import com.bondhub.messageservice.dto.response.ConversationResponse;
 import com.bondhub.messageservice.model.Conversation;
 
-import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
 
 public interface ConversationService {
-    Optional<Conversation> getDirectConversation(
-            String senderId,
-            String recipientId,
-            boolean createNewRoomIfNotExists);
 
-    Conversation createInitialChatRoom(String userA, String userB, LocalDateTime timestamp);
+    /**
+     * Tìm hoặc tạo mới cuộc trò chuyện 1-1 giữa 2 user.
+     * Đây là entry-point cho "chat mới".
+     */
+    Conversation getOrCreateDirectConversation(String userA, String userB);
 
-    ConversationResponse getConversationForUser(String userId, String partnerId);
+    /**
+     * Lấy (hoặc tạo) ConversationResponse cho currentUser với partnerId.
+     * Dùng tại endpoint GET /conversations/partner/{partnerId}.
+     */
+    ConversationResponse getOrCreateConversationForUser(String partnerId);
 
+    /**
+     * Lấy danh sách phòng chat của currentUser với phân trang.
+     */
     PageResponse<List<ConversationResponse>> getUserConversations(int page, int size);
 
+    /**
+     * Đánh dấu đã đọc conversation — kiểm tra quyền truy cập.
+     */
     void markAsRead(String conversationId);
 }

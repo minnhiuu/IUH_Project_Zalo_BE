@@ -25,11 +25,10 @@ import java.util.Set;
 public class Message extends BaseModel {
     @Id
     String id;
-    String conversationId;
+    String conversationId; // ObjectId của Conversation._id
     String senderId;
     String senderName;
     String senderAvatar;
-    String recipientId;
     String content;
     String clientMessageId;
     MessageType type;

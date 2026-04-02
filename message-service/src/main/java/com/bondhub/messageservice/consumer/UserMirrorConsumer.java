@@ -6,7 +6,7 @@ import com.bondhub.common.enums.SocketEventType;
 import com.bondhub.common.dto.client.socketservice.SocketEvent;
 import com.bondhub.messageservice.model.ChatUser;
 import com.bondhub.messageservice.repository.ChatUserRepository;
-import com.bondhub.messageservice.repository.ChatRoomRepository;
+import com.bondhub.messageservice.repository.ConversationRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -28,7 +28,7 @@ import java.util.Map;
 public class UserMirrorConsumer {
 
     private final ChatUserRepository chatUserRepository;
-    private final ChatRoomRepository chatRoomRepository;
+    private final ConversationRepository conversationRepository;
     private final KafkaTemplate<String, Object> kafkaTemplate;
 
     @Value("${kafka.topics.socket-events}")
@@ -82,12 +82,13 @@ public class UserMirrorConsumer {
 
                     // Notify recent conversation partners who are online
                     Pageable recentChats = PageRequest.of(0, 50, Sort.by(Sort.Direction.DESC, "lastMessage.timestamp"));
-                    chatRoomRepository.findAllRoomsByUserId(event.userId(), recentChats)
-                        .forEach(room -> {
-                            String partnerId = room.getSenderId().equals(event.userId())
-                                    ? room.getRecipientId() : room.getSenderId();
-                            publishSocketRefresh(partnerId);
-                        });
+                    conversationRepository.findAllByMembersUserId(event.userId(), recentChats)
+                        .forEach(room ->
+                            room.getMembers().stream()
+                                .map(m -> m.getUserId())
+                                .filter(uid -> !uid.equals(event.userId()))
+                                .forEach(this::publishSocketRefresh)
+                        );
                 } else {
                     log.info("⏩ Skipped outdated USER_PRIVACY_CHANGED event for userId: {}", event.userId());
                 }
