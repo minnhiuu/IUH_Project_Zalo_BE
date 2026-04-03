@@ -4,6 +4,7 @@ import com.bondhub.common.utils.S3Util;
 import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
+import com.bondhub.messageservice.dto.request.GroupConversationCreateRequest;
 import com.bondhub.messageservice.dto.response.ConversationResponse;
 import com.bondhub.messageservice.event.UserSyncEvent;
 import com.bondhub.messageservice.model.ChatUser;
@@ -18,6 +19,10 @@ import com.bondhub.messageservice.model.enums.MemberRole;
 import com.bondhub.common.enums.MessageType;
 import com.bondhub.common.dto.client.socketservice.SocketEvent;
 import com.bondhub.common.enums.SocketEventType;
+import com.bondhub.messageservice.client.FileServiceClient;
+import com.bondhub.common.dto.client.fileservice.FileUploadResponse;
+import com.bondhub.common.dto.ApiResponse;
+import org.springframework.web.multipart.MultipartFile;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -51,6 +56,7 @@ public class ConversationServiceImpl implements ConversationService {
     private final ApplicationEventPublisher eventPublisher;
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final MongoTemplate mongoTemplate;
+    private final FileServiceClient fileServiceClient;
 
     @Value("${aws.s3.bucket.name}")
     private String bucketName;
@@ -182,6 +188,126 @@ public class ConversationServiceImpl implements ConversationService {
                     broadcastReadReceipt(room, currentUserId, finalReadId);
                 }
             });
+        }
+    }
+
+    @Override
+    public ConversationResponse createGroupConversation(GroupConversationCreateRequest request, MultipartFile file) {
+        String currentUserId = securityUtil.getCurrentUserId();
+
+        String avatarUrl = request.avatar();
+        if (file != null && !file.isEmpty()) {
+            ApiResponse<FileUploadResponse> uploadResponse = fileServiceClient.upload(file);
+            if (uploadResponse != null && uploadResponse.data() != null) {
+                avatarUrl = uploadResponse.data().key();
+            }
+        }
+
+        Set<String> memberIds = new LinkedHashSet<>(request.memberIds());
+        memberIds.remove(currentUserId);
+
+        if (memberIds.size() < 2) {
+            throw new AppException(ErrorCode.CHAT_INVALID_MEMBER_COUNT);
+        }
+
+        List<ChatUser> users = chatUserRepository.findAllById(memberIds);
+        if (users.size() != memberIds.size()) {
+            throw new AppException(ErrorCode.USER_NOT_FOUND);
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+
+        Set<ConversationMember> members = new HashSet<>();
+
+        members.add(ConversationMember.builder()
+                .userId(currentUserId)
+                .role(MemberRole.OWNER)
+                .joinedAt(now)
+                .build());
+
+        memberIds.forEach(id -> members.add(
+                ConversationMember.builder()
+                        .userId(id)
+                        .role(MemberRole.MEMBER)
+                        .joinedAt(now)
+                        .build()
+        ));
+
+        Map<String, Integer> unreadCounts = new HashMap<>();
+        members.forEach(m -> unreadCounts.put(m.getUserId(), 0));
+
+        Conversation conversation = Conversation.builder()
+                .name(request.name().trim())
+                .avatar(avatarUrl)
+                .isGroup(true)
+                .members(members)
+                .unreadCounts(unreadCounts)
+                .lastMessage(LastMessageInfo.builder().timestamp(now).build())
+                .build();
+
+        Conversation saved = conversationRepository.save(conversation);
+        log.info("[Conversation] Created group conversation {} by user {} with {} members",
+                saved.getId(), currentUserId, members.size());
+
+        publishGroupConversationCreated(saved);
+
+        return buildConversationResponseForCurrentUser(saved, currentUserId);
+    }
+
+    private ConversationResponse buildConversationResponseForCurrentUser(
+            Conversation room,
+            String currentUserId
+    ) {
+        Set<String> allUserIds = room.getMembers().stream()
+                .map(ConversationMember::getUserId)
+                .collect(Collectors.toSet());
+
+        Map<String, ChatUser> userCache = chatUserRepository.findAllById(allUserIds).stream()
+                .collect(Collectors.toMap(ChatUser::getId, u -> u));
+
+        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+        boolean viewerCanSee = canViewerSeeStatus(currentUserId, userCache);
+
+        return buildConversationResponse(
+                room,
+                null,
+                currentUserId,
+                userCache,
+                baseUrl,
+                viewerCanSee
+        );
+    }
+
+    private void publishGroupConversationCreated(Conversation conversation) {
+        Set<String> userIds = conversation.getMembers().stream()
+                .map(ConversationMember::getUserId)
+                .collect(Collectors.toSet());
+
+        Map<String, ChatUser> userCache = chatUserRepository.findAllById(userIds).stream()
+                .collect(Collectors.toMap(ChatUser::getId, u -> u));
+
+        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+
+        for (ConversationMember member : conversation.getMembers()) {
+            String viewerId = member.getUserId();
+            boolean viewerCanSee = canViewerSeeStatus(viewerId, userCache);
+
+            ConversationResponse payload = buildConversationResponse(
+                    conversation,
+                    null,
+                    viewerId,
+                    userCache,
+                    baseUrl,
+                    viewerCanSee
+            );
+
+            kafkaTemplate.send(socketEventsTopic,
+                    new SocketEvent(
+                            SocketEventType.CONVERSATION,
+                            viewerId,
+                            "/queue/conversations",
+                            payload
+                    ));
         }
     }
 
