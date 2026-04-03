@@ -3,7 +3,7 @@ package com.bondhub.messageservice.consumer;
 import com.bondhub.common.enums.FriendshipAction;
 import com.bondhub.common.event.friend.FriendshipChangedEvent;
 import com.bondhub.common.enums.SocketEventType;
-import com.bondhub.common.dto.SocketEvent;
+import com.bondhub.common.dto.client.socketservice.SocketEvent;
 import com.bondhub.messageservice.model.ChatUser;
 import com.bondhub.messageservice.service.conversation.ConversationService;
 import lombok.RequiredArgsConstructor;

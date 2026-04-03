@@ -20,14 +20,15 @@ spring:
 
 openai:
   api-key: ${OPENAI_API_KEY}
-  # Analyzer & Grader: logic nhanh, tuân thủ định dạng MISSING:, giá rẻ
   logic-model-name: gpt-4o-mini
   logic-temperature: 0.0
-  # Generator: streaming, văn phong tiếng Việt mượt, tổng hợp đa nguồn
   generator-model-name: gpt-4o
   generator-temperature: 0.7
-  # Embedding: text-embedding-3-small — hiệu năng cao, 1536 chiều
   embedding-model-name: text-embedding-3-small
+
+tavily:
+  api-key: ${TAVILY_API_KEY}
+  base-url: https://api.tavily.com/search
 
 # Qdrant Vector Database
 qdrant:

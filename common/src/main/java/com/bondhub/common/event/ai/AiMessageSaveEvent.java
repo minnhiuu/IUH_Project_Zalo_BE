@@ -10,7 +10,8 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class AiMessageSaveEvent {
-    private String userId;
-    private String chatId;
-    private String content;
+    private String userId; // ID của người dùng (human)
+    private String chatId; // conversationId (MongoDB)
+    private String content; // Nội dung tin nhắn (thô/generator response)
+    private String senderId; // ID của người gửi (có thể là userId hoặc "ai-assistant-001")
 }

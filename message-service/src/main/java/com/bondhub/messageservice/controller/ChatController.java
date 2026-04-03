@@ -2,7 +2,7 @@ package com.bondhub.messageservice.controller;
 
 import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.common.dto.PageResponse;
-import com.bondhub.messageservice.dto.request.MessageSendRequest;
+import com.bondhub.common.dto.client.messageservice.MessageSendRequest;
 import com.bondhub.messageservice.dto.response.ConversationResponse;
 import com.bondhub.messageservice.dto.response.MessageResponse;
 import com.bondhub.messageservice.service.message.MessageService;

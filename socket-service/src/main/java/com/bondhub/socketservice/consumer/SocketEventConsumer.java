@@ -1,6 +1,6 @@
 package com.bondhub.socketservice.consumer;
 
-import com.bondhub.common.dto.SocketEvent;
+import com.bondhub.common.dto.client.socketservice.SocketEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;

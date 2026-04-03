@@ -1,26 +1,44 @@
 package com.bondhub.aiservice.service;
 
+import dev.langchain4j.service.MemoryId;
 import dev.langchain4j.service.SystemMessage;
 import dev.langchain4j.service.UserMessage;
+import dev.langchain4j.service.V;
 
 public interface AnalyzerService {
-
+    // Vũ khí 1: Phân luồng ngay từ đầu
     @SystemMessage("""
-        Bạn là chuyên gia phân tích ý định người dùng cho hệ thống BondHub.
-        Nhiệm vụ: Kiểm tra xem câu hỏi có đủ thông tin để thực hiện hành động hay không.
+        Bạn là bộ điều hướng thông minh của BondHub.
+        THỜI GIAN HIỆN TẠI: {{currentTime}}
         
+        Nhiệm vụ: Phân loại tin nhắn của người dùng.
+
         Quy tắc:
-        - Nếu đủ thông tin: Trả về duy nhất từ 'COMPLETE'.
-        - Nếu thiếu thông tin quan trọng (hỏi thời tiết không có địa điểm, hỏi giá cổ phiếu không có mã):
-          Trả về 'MISSING: [Câu hỏi làm rõ ngắn gọn bằng tiếng Việt]'.
+        1. 'DIRECT':
+           - Chào hỏi, giao tiếp xã hội, cảm ơn.
+           - Câu hỏi về ngày, giờ, thứ hiện tại (vì bạn đã biết dữ liệu này).
+           - CÂU HỎI VỀ BẢN THÂN NGƯỜI DÙNG (Ví dụ: 'Tôi là ai?', 'Tôi tên gì?', 'Sở thích của tôi là gì?').
+           - Câu hỏi về những thông tin đã được đề cập TRƯỚC ĐÓ trong cuộc trò chuyện này.
         
-        Ví dụ:
-        - 'Thời tiết hôm nay sao?' → 'MISSING: Bạn muốn xem thời tiết ở khu vực nào ạ?'
-        - 'Giá cổ phiếu bao nhiêu?' → 'MISSING: Bạn muốn xem mã cổ phiếu của công ty nào?'
-        - 'Huy nói gì về Redis?' → 'COMPLETE' (hệ thống tự lấy tất cả tin nhắn của các Huy)
-        - 'Tóm tắt chat nhóm hôm nay' → 'COMPLETE'
+        2. 'MISSING: [Câu hỏi làm rõ]': Nếu người dùng hỏi về các thông tin có tính chất địa phương (Thời tiết, Giá vàng, Tỷ giá, Tin tức vùng miền) nhưng KHÔNG nói rõ địa điểm/đơn vị cụ thể.
+           - Ví dụ: 'Thời tiết sao?' -> 'MISSING: Bạn muốn xem thời tiết ở tỉnh thành nào?'
         
-        CHỈ trả về 'COMPLETE' hoặc 'MISSING: [câu hỏi]'. Không giải thích thêm.
+        3. 'COMPLETE': Nếu là câu hỏi cần tra cứu dữ liệu doanh nghiệp, dự án, hoặc tin nhắn cũ của người khác (RAG) đã đủ thông tin thực thể để thực hiện tìm kiếm.
+
+        ĐẶC BIỆT: Đối với các câu hỏi về bản thân người dùng hoặc lịch sử chat trực tiếp, hãy phân loại là DIRECT để sử dụng bộ nhớ hội thoại thay vì chạy RAG pipeline.
         """)
-    String analyze(@UserMessage String query);
+    String analyzeAndRoute(@MemoryId String memoryId, @UserMessage String query, @V("currentTime") String currentTime);
+
+    // Vũ khí 2: Nhận diện người dùng "quay xe"
+    @SystemMessage("""
+        Bối cảnh: Bạn vừa hỏi làm rõ '{{lastClarification}}'. 
+        THỜI GIAN HIỆN TẠI: {{currentTime}}
+        User nhắn: '{{userMessage}}'.
+        
+        Nhiệm vụ:
+        - Nếu User trả lời câu hỏi đó: Trả về 'CONTINUE'.
+        - Nếu User nói chủ đề mới hoàn toàn: Trả về 'NEW_INTENT'.
+        - Nếu vẫn thiếu thông tin: Trả về 'MISSING: [Câu hỏi mới]'.
+        """)
+    String checkIntentSwitch(@MemoryId String memoryId, @V("lastClarification") String lastClarification, @UserMessage String userMessage, @V("currentTime") String currentTime);
 }

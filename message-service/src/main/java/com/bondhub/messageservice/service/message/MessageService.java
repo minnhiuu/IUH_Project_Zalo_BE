@@ -1,7 +1,7 @@
 package com.bondhub.messageservice.service.message;
 
 import com.bondhub.common.dto.PageResponse;
-import com.bondhub.messageservice.dto.request.MessageSendRequest;
+import com.bondhub.common.dto.client.messageservice.MessageSendRequest;
 import com.bondhub.messageservice.dto.response.MessageResponse;
 import com.bondhub.messageservice.model.Message;
 

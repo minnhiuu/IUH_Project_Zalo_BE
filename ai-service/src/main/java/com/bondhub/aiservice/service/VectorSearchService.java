@@ -25,6 +25,13 @@ public class VectorSearchService {
         log.debug("[VectorSearch] Searching for: {}", query);
         try {
             Embedding queryEmbedding = embeddingModel.embed(query).content();
+            
+            if (queryEmbedding == null || queryEmbedding.vector().length == 0) {
+                log.warn("[VectorSearch] Empty embedding generated for query: '{}'", query);
+                return Collections.emptyList();
+            }
+            
+            log.debug("[VectorSearch] Query vector size: {}", queryEmbedding.vector().length);
 
             List<EmbeddingMatch<TextSegment>> matches = embeddingStore.search(
                     EmbeddingSearchRequest.builder()

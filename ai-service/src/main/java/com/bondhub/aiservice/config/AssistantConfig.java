@@ -118,23 +118,29 @@ public class AssistantConfig {
     }
 
     @Bean
-    AnalyzerService analyzerService(@Qualifier("logicModel") ChatLanguageModel chatModel) {
+    AnalyzerService analyzerService(@Qualifier("logicModel") ChatLanguageModel chatModel,
+                                    ChatMemoryProvider chatMemoryProvider) {
         return AiServices.builder(AnalyzerService.class)
                 .chatLanguageModel(chatModel)
+                .chatMemoryProvider(chatMemoryProvider)
                 .build();
     }
 
     @Bean
-    GraderService graderService(@Qualifier("logicModel") ChatLanguageModel chatModel) {
+    GraderService graderService(@Qualifier("logicModel") ChatLanguageModel chatModel,
+                                ChatMemoryProvider chatMemoryProvider) {
         return AiServices.builder(GraderService.class)
                 .chatLanguageModel(chatModel)
+                .chatMemoryProvider(chatMemoryProvider)
                 .build();
     }
 
     @Bean
-    GeneratorService generatorService(StreamingChatLanguageModel streamingModel) {
+    GeneratorService generatorService(StreamingChatLanguageModel streamingModel,
+                                      ChatMemoryProvider chatMemoryProvider) {
         return AiServices.builder(GeneratorService.class)
                 .streamingChatLanguageModel(streamingModel)
+                .chatMemoryProvider(chatMemoryProvider)
                 .build();
     }
 }
