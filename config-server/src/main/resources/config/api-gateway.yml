@@ -193,7 +193,7 @@ spring:
               predicates:
                 - Path=/api/messages/**
               filters:
-                - RewritePath=/api/messages/(?<segment>.*), /messages/${segment}
+                - RewritePath=/api/messages/(?<segment>.*), /${segment}
                 - name: CircuitBreaker
                   args:
                     name: messageServiceCircuitBreaker

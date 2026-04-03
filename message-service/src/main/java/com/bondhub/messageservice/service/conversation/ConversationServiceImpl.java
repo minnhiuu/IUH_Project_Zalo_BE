@@ -249,7 +249,7 @@ public class ConversationServiceImpl implements ConversationService {
             String baseUrl, boolean viewerCanSee) {
 
         return room.getMembers().stream()
-                .filter(m -> !m.getUserId().equals(currentUserId))
+                .filter(m -> room.isGroup() || !m.getUserId().equals(currentUserId))
                 .map(m -> {
                     ChatUser memberInfo = userCache.get(m.getUserId());
                     boolean canSeeStatus = viewerCanSee && memberInfo != null
@@ -261,7 +261,7 @@ public class ConversationServiceImpl implements ConversationService {
                             .avatar(memberInfo != null && memberInfo.getAvatar() != null
                                     ? baseUrl + memberInfo.getAvatar() : null)
                             .lastReadMessageId(canSeeStatus ? m.getLastReadMessageId() : null)
-                            .role(m.getRole() != null ? m.getRole().name() : null)
+                            .role(m.getRole() != null ? m.getRole() : null)
                             .build();
                 })
                 .collect(Collectors.toList());

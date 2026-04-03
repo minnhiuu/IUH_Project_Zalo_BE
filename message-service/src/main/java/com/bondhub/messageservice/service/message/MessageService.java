@@ -18,7 +18,7 @@ public interface MessageService {
      * Gửi tin nhắn vào phòng chat.
      * Kiểm tra currentUser có trong members không.
      */
-    void sendMessage(MessageSendRequest request);
+    void sendMessage(String conversationId, MessageSendRequest request);
 
     /**
      * Thu hồi tin nhắn (chỉ người gửi).

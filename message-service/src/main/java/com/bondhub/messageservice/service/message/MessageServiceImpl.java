@@ -90,11 +90,11 @@ public class MessageServiceImpl implements MessageService {
     // ─────────────────────────── Gửi tin nhắn ───────────────────────────
 
     @Override
-    public void sendMessage(MessageSendRequest request) {
+    public void sendMessage(String conversationId, MessageSendRequest request) {
         String currentUserId = securityUtil.getCurrentUserId();
 
         // 1. Tìm phòng chat bằng ObjectId — kiểm tra quyền thành viên
-        Conversation room = conversationRepository.findById(request.conversationId())
+        Conversation room = conversationRepository.findById(conversationId)
                 .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
         assertMember(room, currentUserId);
 
