@@ -17,7 +17,6 @@ public record MessageResponse(
                 String senderId,
                 String senderName,
                 String senderAvatar,
-                String recipientId,
                 String content,
                 String clientMessageId,
                 MessageType type,

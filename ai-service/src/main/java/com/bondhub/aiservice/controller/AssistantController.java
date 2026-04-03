@@ -27,8 +27,8 @@ public class AssistantController {
             @RequestHeader(value = "X-User-Id", required = false, defaultValue = "anonymous") String userId,
             @RequestBody MessageSendRequest request) {
         log.info("[Assistant] Received agentic chat request from user: {} for conversation: {}", 
-                userId, request.recipientId());
-        return agenticCragService.handleChat(request.content(), request.recipientId(), userId);
+                userId, request.conversationId());
+        return agenticCragService.handleChat(request.content(), request.conversationId(), userId);
     }
 
     @PostMapping("/smart-reply")
