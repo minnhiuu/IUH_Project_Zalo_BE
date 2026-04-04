@@ -6,6 +6,7 @@ import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.Builder;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 
 import lombok.With;
 
@@ -24,5 +25,6 @@ public record MessageResponse(
                 @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss", timezone = "Asia/Ho_Chi_Minh") LocalDateTime lastModifiedAt,
                 ReplyMetadataResponse replyTo,
                 boolean isForwarded,
-                MessageStatus status) {
+                MessageStatus status,
+                Map<String, Object> metadata) {
 }

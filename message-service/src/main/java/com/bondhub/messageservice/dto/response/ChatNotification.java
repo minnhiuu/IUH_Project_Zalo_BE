@@ -6,6 +6,7 @@ import lombok.Builder;
 
 import com.bondhub.common.enums.MessageType;
 import java.time.LocalDateTime;
+import java.util.Map;
 
 import lombok.With;
 
@@ -29,5 +30,6 @@ public record ChatNotification(
                 ReplyMetadataResponse replyTo,
                 boolean isForwarded,
                 boolean isFromMe,
-                MessageStatus status) {
+                MessageStatus status,
+                Map<String, Object> metadata) {
 }

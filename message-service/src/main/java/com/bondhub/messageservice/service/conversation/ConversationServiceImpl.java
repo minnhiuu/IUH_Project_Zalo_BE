@@ -1,6 +1,7 @@
 package com.bondhub.messageservice.service.conversation;
 
 import com.bondhub.common.enums.Status;
+import com.bondhub.common.enums.SystemActionType;
 import com.bondhub.common.utils.S3Util;
 import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.common.exception.AppException;
@@ -12,8 +13,10 @@ import com.bondhub.messageservice.model.ChatUser;
 import com.bondhub.messageservice.model.Conversation;
 import com.bondhub.messageservice.model.ConversationMember;
 import com.bondhub.messageservice.model.LastMessageInfo;
+import com.bondhub.messageservice.model.Message;
 import com.bondhub.messageservice.repository.ConversationRepository;
 import com.bondhub.messageservice.repository.ChatUserRepository;
+import com.bondhub.messageservice.repository.MessageRepository;
 import com.bondhub.messageservice.dto.response.ConversationMemberResponse;
 import com.bondhub.messageservice.dto.response.LastMessageResponse;
 import com.bondhub.messageservice.dto.response.ReadReceiptNotification;
@@ -58,6 +61,7 @@ public class ConversationServiceImpl implements ConversationService {
     private final ApplicationEventPublisher eventPublisher;
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final MongoTemplate mongoTemplate;
+    private final MessageRepository messageRepository;
     private final FileServiceClient fileServiceClient;
 
     @Value("${aws.s3.bucket.name}")
@@ -254,6 +258,29 @@ public class ConversationServiceImpl implements ConversationService {
                 .build();
 
         Conversation saved = conversationRepository.save(conversation);
+
+        Message systemMsg = Message.builder()
+                .conversationId(saved.getId())
+                .senderId(currentUserId)
+                .type(MessageType.SYSTEM)
+                .metadata(Map.of(
+                        "action", SystemActionType.ADD_MEMBERS,
+                        "actorId", currentUserId,
+                        "targetIds", memberIds
+                ))
+                .build();
+        systemMsg.setCreatedAt(now);
+        messageRepository.save(systemMsg);
+
+        saved.setLastMessage(LastMessageInfo.builder()
+                .messageId(systemMsg.getId())
+                .senderId(currentUserId)
+                .type(MessageType.SYSTEM)
+                .metadata(systemMsg.getMetadata())
+                .timestamp(now)
+                .build());
+        conversationRepository.save(saved);
+
         log.info("[Conversation] Created group conversation {} by user {} with {} members",
                 saved.getId(), currentUserId, members.size());
 
@@ -396,6 +423,7 @@ public class ConversationServiceImpl implements ConversationService {
                         .type(last.getType())
                         .status(last.getStatus())
                         .isFromMe(last.getSenderId() != null && last.getSenderId().equals(currentUserId))
+                        .metadata(last.getMetadata())
                         .build() : null)
                 .members(members)
                 .build();

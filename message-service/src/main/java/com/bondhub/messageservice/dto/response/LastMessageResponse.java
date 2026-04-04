@@ -5,6 +5,7 @@ import com.bondhub.common.enums.MessageType;
 import lombok.Builder;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 
 @Builder
 public record LastMessageResponse(
@@ -15,6 +16,7 @@ public record LastMessageResponse(
         LocalDateTime timestamp,
         MessageType type,
         MessageStatus status,
-        boolean isFromMe
+        boolean isFromMe,
+        Map<String, Object> metadata
 ) {
 }
