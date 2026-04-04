@@ -19,4 +19,12 @@ public interface ConversationService {
     void markAsRead(String conversationId);
 
     ConversationResponse createGroupConversation(GroupConversationCreateRequest request, MultipartFile file);
+    
+    ConversationResponse updateGroupName(String conversationId, String name);
+    
+    ConversationResponse updateGroupAvatar(String conversationId, MultipartFile file);
+    
+    void broadcastConversationUpdate(String conversationId);
+    
+    void broadcastConversationUpdate(Conversation room);
 }

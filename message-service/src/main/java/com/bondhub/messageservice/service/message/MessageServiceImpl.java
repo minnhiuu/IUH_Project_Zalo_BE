@@ -1,5 +1,6 @@
 package com.bondhub.messageservice.service.message;
 
+import com.bondhub.common.enums.SystemActionType;
 import com.bondhub.common.utils.S3Util;
 import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.common.exception.AppException;
@@ -38,6 +39,7 @@ import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.data.mongodb.core.FindAndModifyOptions;
 
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -289,6 +291,56 @@ public class MessageServiceImpl implements MessageService {
                 .set("lastMessage.content", "Tin nhắn đã được thu hồi")
                 .set("lastMessage.status", MessageStatus.REVOKED);
         mongoTemplate.updateFirst(query, update, Conversation.class);
+    }
+
+    @Override
+    public Conversation sendSystemMessage(String conversationId, String actorId, String actorName,
+                                 SystemActionType action, Map<String, Object> extraMetadata) {
+        LocalDateTime now = LocalDateTime.now();
+
+        Map<String, Object> metadata = new HashMap<>();
+        metadata.put("action", action.name());
+        metadata.put("actorId", actorId);
+        metadata.put("actorName", actorName);
+        if (extraMetadata != null) {
+            metadata.putAll(extraMetadata);
+        }
+
+        Message message = Message.builder()
+                .conversationId(conversationId)
+                .senderId(actorId)
+                .senderName(actorName)
+                .type(MessageType.SYSTEM)
+                .metadata(metadata)
+                .build();
+        message.setCreatedAt(now);
+        messageRepository.save(message);
+
+        LastMessageInfo lastInfo = LastMessageInfo.builder()
+                .messageId(message.getId())
+                .senderId(actorId)
+                .type(MessageType.SYSTEM)
+                .metadata(message.getMetadata())
+                .timestamp(now)
+                .build();
+
+        Query query = new Query(Criteria.where("id").is(conversationId));
+        Update update = new Update().set("lastMessage", lastInfo);
+        Conversation conversation = mongoTemplate.findAndModify(query, update, 
+                FindAndModifyOptions.options().returnNew(true), Conversation.class);
+
+        if (conversation == null) return null;
+
+        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+        ChatNotification notification = messageMapper.mapToChatNotification(message, baseUrl, 0);
+
+        conversation.getMembers().forEach(member -> {
+            kafkaTemplate.send(socketEventsTopic,
+                    new SocketEvent(SocketEventType.MESSAGE, member.getUserId(),
+                            "/queue/messages", notification));
+        });
+        
+        return conversation;
     }
 
     private void broadcastStatusChange(String conversationId, String messageId, MessageStatus newStatus) {

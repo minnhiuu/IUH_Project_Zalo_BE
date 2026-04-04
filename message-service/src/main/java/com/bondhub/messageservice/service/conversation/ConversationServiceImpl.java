@@ -1,5 +1,6 @@
 package com.bondhub.messageservice.service.conversation;
 
+import com.bondhub.common.enums.MessageType;
 import com.bondhub.common.enums.Status;
 import com.bondhub.common.enums.SystemActionType;
 import com.bondhub.common.utils.S3Util;
@@ -7,26 +8,21 @@ import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
 import com.bondhub.messageservice.dto.request.GroupConversationCreateRequest;
-import com.bondhub.messageservice.dto.response.ConversationResponse;
+import com.bondhub.messageservice.dto.response.*;
 import com.bondhub.messageservice.event.UserSyncEvent;
 import com.bondhub.messageservice.model.ChatUser;
 import com.bondhub.messageservice.model.Conversation;
 import com.bondhub.messageservice.model.ConversationMember;
 import com.bondhub.messageservice.model.LastMessageInfo;
-import com.bondhub.messageservice.model.Message;
 import com.bondhub.messageservice.repository.ConversationRepository;
 import com.bondhub.messageservice.repository.ChatUserRepository;
-import com.bondhub.messageservice.repository.MessageRepository;
-import com.bondhub.messageservice.dto.response.ConversationMemberResponse;
-import com.bondhub.messageservice.dto.response.LastMessageResponse;
-import com.bondhub.messageservice.dto.response.ReadReceiptNotification;
 import com.bondhub.messageservice.model.enums.MemberRole;
-import com.bondhub.common.enums.MessageType;
 import com.bondhub.common.dto.client.socketservice.SocketEvent;
 import com.bondhub.common.enums.SocketEventType;
 import com.bondhub.messageservice.client.FileServiceClient;
 import com.bondhub.common.dto.client.fileservice.FileUploadResponse;
 import com.bondhub.common.dto.ApiResponse;
+import com.bondhub.messageservice.service.message.MessageService;
 import org.springframework.web.multipart.MultipartFile;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -61,7 +57,7 @@ public class ConversationServiceImpl implements ConversationService {
     private final ApplicationEventPublisher eventPublisher;
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final MongoTemplate mongoTemplate;
-    private final MessageRepository messageRepository;
+    private final MessageService messageService;
     private final FileServiceClient fileServiceClient;
 
     @Value("${aws.s3.bucket.name}")
@@ -259,34 +255,141 @@ public class ConversationServiceImpl implements ConversationService {
 
         Conversation saved = conversationRepository.save(conversation);
 
-        Message systemMsg = Message.builder()
-                .conversationId(saved.getId())
-                .senderId(currentUserId)
-                .type(MessageType.SYSTEM)
-                .metadata(Map.of(
-                        "action", SystemActionType.ADD_MEMBERS,
-                        "actorId", currentUserId,
-                        "targetIds", memberIds
-                ))
-                .build();
-        systemMsg.setCreatedAt(now);
-        messageRepository.save(systemMsg);
+        ChatUser actor = chatUserRepository.findById(currentUserId).orElse(null);
+        String actorName = actor != null ? actor.getFullName() : "Người dùng";
 
-        saved.setLastMessage(LastMessageInfo.builder()
-                .messageId(systemMsg.getId())
-                .senderId(currentUserId)
-                .type(MessageType.SYSTEM)
-                .metadata(systemMsg.getMetadata())
-                .timestamp(now)
-                .build());
+        messageService.sendSystemMessage(saved.getId(), currentUserId, actorName, SystemActionType.ADD_MEMBERS, Map.of("targetIds", memberIds));
+
         conversationRepository.save(saved);
 
         log.info("[Conversation] Created group conversation {} by user {} with {} members",
                 saved.getId(), currentUserId, members.size());
 
-        publishGroupConversationCreated(saved);
+        broadcastConversationUpdate(saved);
 
         return buildConversationResponseForCurrentUser(saved, currentUserId);
+    }
+
+    @Override
+    public ConversationResponse updateGroupName(String conversationId, String name) {
+        String currentUserId = securityUtil.getCurrentUserId();
+        Conversation conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
+
+        if (!conversation.isGroup()) {
+            throw new AppException(ErrorCode.UNAUTHORIZED);
+        }
+        assertMember(conversation, currentUserId);
+
+        String oldName = conversation.getName();
+        if (oldName != null && oldName.equals(name)) {
+            return buildConversationResponseForCurrentUser(conversation, currentUserId);
+        }
+        conversation.setName(name);
+
+        ChatUser actor = chatUserRepository.findById(currentUserId).orElse(null);
+        String actorName = actor != null ? actor.getFullName() : "User";
+
+        conversationRepository.save(conversation);
+
+        Conversation updated = messageService.sendSystemMessage(conversationId, currentUserId, actorName, SystemActionType.UPDATE_NAME, 
+                Map.of("payload", Map.of(
+                        "oldName", oldName,
+                        "newName", name
+                )));
+
+        broadcastConversationUpdate(updated);
+        return buildConversationResponseForCurrentUser(updated, currentUserId);
+    }
+
+    @Override
+    public ConversationResponse updateGroupAvatar(String conversationId, MultipartFile file) {
+        String currentUserId = securityUtil.getCurrentUserId();
+        Conversation conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
+
+        if (!conversation.isGroup()) {
+            throw new AppException(ErrorCode.UNAUTHORIZED);
+        }
+        assertMember(conversation, currentUserId);
+
+        if (file != null && !file.isEmpty()) {
+            ApiResponse<FileUploadResponse> uploadResponse = fileServiceClient.upload(file);
+            if (uploadResponse != null && uploadResponse.data() != null) {
+                String avatarKey = uploadResponse.data().key();
+                conversation.setAvatar(avatarKey);
+
+                ChatUser actor = chatUserRepository.findById(currentUserId).orElse(null);
+                String actorName = actor != null ? actor.getFullName() : "User";
+
+                conversationRepository.save(conversation);
+
+                Conversation updated = messageService.sendSystemMessage(conversationId, currentUserId, actorName, SystemActionType.UPDATE_AVATAR, 
+                        Map.of());
+
+                broadcastConversationUpdate(updated);
+                return buildConversationResponseForCurrentUser(updated, currentUserId);
+            }
+        }
+
+        broadcastConversationUpdate(conversation);
+        return buildConversationResponseForCurrentUser(conversation, currentUserId);
+    }
+
+    @Override
+    public void broadcastConversationUpdate(String conversationId) {
+        Conversation room = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
+        broadcastConversationUpdate(room);
+    }
+
+    @Override
+    public void broadcastConversationUpdate(Conversation room) {
+        Set<String> userIds = room.getMembers().stream()
+                .map(ConversationMember::getUserId)
+                .collect(Collectors.toSet());
+
+        if (room.getLastMessage() != null && room.getLastMessage().getSenderId() != null) {
+            userIds.add(room.getLastMessage().getSenderId());
+        }
+
+        Map<String, ChatUser> userCache = chatUserRepository.findAllById(userIds).stream()
+                .collect(Collectors.toMap(ChatUser::getId, u -> u));
+
+        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+
+        for (ConversationMember member : room.getMembers()) {
+            String viewerId = member.getUserId();
+            boolean viewerCanSee = canViewerSeeStatus(viewerId, userCache);
+
+            // Xử lý partner cho 1-1
+            ChatUser partner = null;
+            if (!room.isGroup()) {
+                String partnerId = room.getMembers().stream()
+                        .map(ConversationMember::getUserId)
+                        .filter(uid -> !uid.equals(viewerId))
+                        .findFirst()
+                        .orElse(viewerId);
+                partner = resolvePartner(partnerId, viewerId, userCache);
+            }
+
+            ConversationResponse payload = buildConversationResponse(
+                    room,
+                    partner,
+                    viewerId,
+                    userCache,
+                    baseUrl,
+                    viewerCanSee
+            );
+
+            kafkaTemplate.send(socketEventsTopic,
+                    new SocketEvent(
+                            SocketEventType.CONVERSATION,
+                            viewerId,
+                            "/queue/conversations",
+                            payload
+                    ));
+        }
     }
 
     private ConversationResponse buildConversationResponseForCurrentUser(
@@ -304,11 +407,23 @@ public class ConversationServiceImpl implements ConversationService {
                 .collect(Collectors.toMap(ChatUser::getId, u -> u));
 
         String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+
+        // Xử lý partner cho 1-1
+        ChatUser partner = null;
+        if (!room.isGroup()) {
+            String partnerId = room.getMembers().stream()
+                    .map(ConversationMember::getUserId)
+                    .filter(uid -> !uid.equals(currentUserId))
+                    .findFirst()
+                    .orElse(currentUserId);
+            partner = resolvePartner(partnerId, currentUserId, userCache);
+        }
+
         boolean viewerCanSee = canViewerSeeStatus(currentUserId, userCache);
 
         return buildConversationResponse(
                 room,
-                null,
+                partner,
                 currentUserId,
                 userCache,
                 baseUrl,
@@ -316,43 +431,15 @@ public class ConversationServiceImpl implements ConversationService {
         );
     }
 
-    private void publishGroupConversationCreated(Conversation conversation) {
-        Set<String> userIds = conversation.getMembers().stream()
-                .map(ConversationMember::getUserId)
-                .collect(Collectors.toSet());
-        if (conversation.getLastMessage() != null && conversation.getLastMessage().getSenderId() != null) {
-            userIds.add(conversation.getLastMessage().getSenderId());
-        }
+    // ─────────────────────────── Private helpers ───────────────────────────
 
-        Map<String, ChatUser> userCache = chatUserRepository.findAllById(userIds).stream()
-                .collect(Collectors.toMap(ChatUser::getId, u -> u));
-
-        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
-
-        for (ConversationMember member : conversation.getMembers()) {
-            String viewerId = member.getUserId();
-            boolean viewerCanSee = canViewerSeeStatus(viewerId, userCache);
-
-            ConversationResponse payload = buildConversationResponse(
-                    conversation,
-                    null,
-                    viewerId,
-                    userCache,
-                    baseUrl,
-                    viewerCanSee
-            );
-
-            kafkaTemplate.send(socketEventsTopic,
-                    new SocketEvent(
-                            SocketEventType.CONVERSATION,
-                            viewerId,
-                            "/queue/conversations",
-                            payload
-                    ));
+    private void assertMember(Conversation room, String userId) {
+        boolean isMember = room.getMembers().stream()
+                .anyMatch(m -> m.getUserId().equals(userId));
+        if (!isMember) {
+            throw new AppException(ErrorCode.UNAUTHORIZED);
         }
     }
-
-    // ─────────────────────────── Private helpers ───────────────────────────
 
     /**
      * Resolve đối tượng ChatUser cho partner,
@@ -393,14 +480,14 @@ public class ConversationServiceImpl implements ConversationService {
 
         Status displayStatus = room.isGroup()
                 ? (room.getMembers().stream()
-                        .filter(m -> {
-                            if (m.getUserId().equals(currentUserId)) return false;
-                            ChatUser memberInfo = userCache.get(m.getUserId());
-                            return memberInfo == null || !currentUserId.equals(memberInfo.getAccountId());
-                        })
-                        .map(m -> userCache.get(m.getUserId()))
-                        .filter(Objects::nonNull)
-                        .anyMatch(u -> u.getStatus() == Status.ONLINE) ? Status.ONLINE : Status.OFFLINE)
+                .filter(m -> {
+                    if (m.getUserId().equals(currentUserId)) return false;
+                    ChatUser memberInfo = userCache.get(m.getUserId());
+                    return memberInfo == null || !currentUserId.equals(memberInfo.getAccountId());
+                })
+                .map(m -> userCache.get(m.getUserId()))
+                .filter(Objects::nonNull)
+                .anyMatch(u -> u.getStatus() == Status.ONLINE) ? Status.ONLINE : Status.OFFLINE)
                 : partner.getStatus();
 
         return ConversationResponse.builder()
@@ -417,7 +504,7 @@ public class ConversationServiceImpl implements ConversationService {
                         .senderId(last.getSenderId())
                         .senderName(last.getSenderId() != null
                                 ? userCache.getOrDefault(last.getSenderId(),
-                                        ChatUser.builder().fullName("").build()).getFullName() : null)
+                                ChatUser.builder().fullName("").build()).getFullName() : null)
                         .content(last.getContent())
                         .timestamp(last.getTimestamp())
                         .type(last.getType())

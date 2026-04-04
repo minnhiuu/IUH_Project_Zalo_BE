@@ -56,4 +56,22 @@ public class ConversationController {
         return ResponseEntity.ok(ApiResponse.success(
                 conversationService.createGroupConversation(request, file)));
     }
+
+    @PatchMapping("/{conversationId}/name")
+    @Operation(summary = "Update group conversation name")
+    public ResponseEntity<ApiResponse<ConversationResponse>> updateGroupName(
+            @PathVariable String conversationId,
+            @RequestParam String name) {
+        return ResponseEntity.ok(ApiResponse.success(
+                conversationService.updateGroupName(conversationId, name)));
+    }
+
+    @PatchMapping(value = "/{conversationId}/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "Update group conversation avatar")
+    public ResponseEntity<ApiResponse<ConversationResponse>> updateGroupAvatar(
+            @PathVariable String conversationId,
+            @RequestPart("file") MultipartFile file) {
+        return ResponseEntity.ok(ApiResponse.success(
+                conversationService.updateGroupAvatar(conversationId, file)));
+    }
 }
