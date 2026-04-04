@@ -1,5 +1,6 @@
 package com.bondhub.messageservice.service.conversation;
 
+import com.bondhub.common.enums.Status;
 import com.bondhub.common.utils.S3Util;
 import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.common.exception.AppException;
@@ -14,6 +15,7 @@ import com.bondhub.messageservice.model.LastMessageInfo;
 import com.bondhub.messageservice.repository.ConversationRepository;
 import com.bondhub.messageservice.repository.ChatUserRepository;
 import com.bondhub.messageservice.dto.response.ConversationMemberResponse;
+import com.bondhub.messageservice.dto.response.LastMessageResponse;
 import com.bondhub.messageservice.dto.response.ReadReceiptNotification;
 import com.bondhub.messageservice.model.enums.MemberRole;
 import com.bondhub.common.enums.MessageType;
@@ -97,6 +99,9 @@ public class ConversationServiceImpl implements ConversationService {
         userIds.add(currentUserId);
         userIds.add(partnerId);
         room.getMembers().forEach(m -> userIds.add(m.getUserId()));
+        if (room.getLastMessage() != null && room.getLastMessage().getSenderId() != null) {
+            userIds.add(room.getLastMessage().getSenderId());
+        }
 
         Map<String, ChatUser> userCache = chatUserRepository.findAllById(userIds).stream()
                 .collect(Collectors.toMap(ChatUser::getId, u -> u));
@@ -124,9 +129,12 @@ public class ConversationServiceImpl implements ConversationService {
         // Gom tất cả userId cần fetch trong 1 lượt
         Set<String> allUserIds = new HashSet<>();
         allUserIds.add(currentUserId);
-        roomsPage.getContent().forEach(room ->
-                room.getMembers().forEach(m -> allUserIds.add(m.getUserId()))
-        );
+        roomsPage.getContent().forEach(room -> {
+            room.getMembers().forEach(m -> allUserIds.add(m.getUserId()));
+            if (room.getLastMessage() != null && room.getLastMessage().getSenderId() != null) {
+                allUserIds.add(room.getLastMessage().getSenderId());
+            }
+        });
 
         Map<String, ChatUser> userCache = chatUserRepository.findAllById(allUserIds).stream()
                 .collect(Collectors.toMap(ChatUser::getId, u -> u));
@@ -261,6 +269,9 @@ public class ConversationServiceImpl implements ConversationService {
         Set<String> allUserIds = room.getMembers().stream()
                 .map(ConversationMember::getUserId)
                 .collect(Collectors.toSet());
+        if (room.getLastMessage() != null && room.getLastMessage().getSenderId() != null) {
+            allUserIds.add(room.getLastMessage().getSenderId());
+        }
 
         Map<String, ChatUser> userCache = chatUserRepository.findAllById(allUserIds).stream()
                 .collect(Collectors.toMap(ChatUser::getId, u -> u));
@@ -282,6 +293,9 @@ public class ConversationServiceImpl implements ConversationService {
         Set<String> userIds = conversation.getMembers().stream()
                 .map(ConversationMember::getUserId)
                 .collect(Collectors.toSet());
+        if (conversation.getLastMessage() != null && conversation.getLastMessage().getSenderId() != null) {
+            userIds.add(conversation.getLastMessage().getSenderId());
+        }
 
         Map<String, ChatUser> userCache = chatUserRepository.findAllById(userIds).stream()
                 .collect(Collectors.toMap(ChatUser::getId, u -> u));
@@ -350,22 +364,39 @@ public class ConversationServiceImpl implements ConversationService {
                 ? (room.getAvatar() != null ? baseUrl + room.getAvatar() : null)
                 : (partner.getAvatar() != null ? baseUrl + partner.getAvatar() : null);
 
+        Status displayStatus = room.isGroup()
+                ? (room.getMembers().stream()
+                        .filter(m -> {
+                            if (m.getUserId().equals(currentUserId)) return false;
+                            ChatUser memberInfo = userCache.get(m.getUserId());
+                            return memberInfo == null || !currentUserId.equals(memberInfo.getAccountId());
+                        })
+                        .map(m -> userCache.get(m.getUserId()))
+                        .filter(Objects::nonNull)
+                        .anyMatch(u -> u.getStatus() == Status.ONLINE) ? Status.ONLINE : Status.OFFLINE)
+                : partner.getStatus();
+
         return ConversationResponse.builder()
                 .id(room.getId())
                 .name(displayName)
                 .avatar(displayAvatar)
-                .status(room.isGroup() ? null : partner.getStatus())
+                .status(displayStatus)
                 .lastSeenAt(room.isGroup() ? null : partner.getLastUpdatedAt())
                 .isGroup(room.isGroup())
-                .lastMessage(last != null ? last.getContent() : "")
-                .lastMessageId(last != null ? last.getMessageId() : null)
-                .lastMessageTime(last != null ? last.getTimestamp() : null)
-                .isLastMessageFromMe(last != null && last.getSenderId() != null
-                        && last.getSenderId().equals(currentUserId))
-                .lastMessageType(last != null ? last.getType() : MessageType.CHAT)
                 .unreadCount(room.getUnreadCounts() != null
                         ? room.getUnreadCounts().getOrDefault(currentUserId, 0) : 0)
-                .lastMessageStatus(last != null ? last.getStatus() : null)
+                .lastMessage(last != null ? LastMessageResponse.builder()
+                        .id(last.getMessageId())
+                        .senderId(last.getSenderId())
+                        .senderName(last.getSenderId() != null
+                                ? userCache.getOrDefault(last.getSenderId(),
+                                        ChatUser.builder().fullName("").build()).getFullName() : null)
+                        .content(last.getContent())
+                        .timestamp(last.getTimestamp())
+                        .type(last.getType())
+                        .status(last.getStatus())
+                        .isFromMe(last.getSenderId() != null && last.getSenderId().equals(currentUserId))
+                        .build() : null)
                 .members(members)
                 .build();
     }

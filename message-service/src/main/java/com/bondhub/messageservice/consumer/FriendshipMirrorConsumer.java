@@ -7,7 +7,9 @@ import com.bondhub.common.dto.client.socketservice.SocketEvent;
 import com.bondhub.messageservice.model.ChatUser;
 import com.bondhub.messageservice.model.Conversation;
 import com.bondhub.messageservice.model.LastMessageInfo;
+import com.bondhub.common.enums.MessageType;
 import com.bondhub.messageservice.dto.response.ConversationResponse;
+import com.bondhub.messageservice.dto.response.LastMessageResponse;
 import com.bondhub.messageservice.repository.ChatUserRepository;
 import com.bondhub.messageservice.service.conversation.ConversationService;
 import com.bondhub.common.utils.S3Util;
@@ -92,10 +94,20 @@ public class FriendshipMirrorConsumer {
                 .avatar(partner.getAvatar() != null ? baseUrl + partner.getAvatar() : null)
                 .status(partner.getStatus())
                 .isGroup(false)
-                .lastMessage(last != null ? last.getContent() : "")
-                .lastMessageTime(last != null ? last.getTimestamp() : null)
                 .unreadCount(room.getUnreadCounts() != null
                         ? room.getUnreadCounts().getOrDefault(viewerId, 0) : 0)
+                .lastMessage(last != null ? LastMessageResponse.builder()
+                        .id(last.getMessageId())
+                        .senderId(last.getSenderId())
+                        .senderName(last.getSenderId() != null
+                                ? userCache.getOrDefault(last.getSenderId(),
+                                        ChatUser.builder().fullName("").build()).getFullName() : null)
+                        .content(last.getContent())
+                        .timestamp(last.getTimestamp())
+                        .type(last.getType())
+                        .status(last.getStatus())
+                        .isFromMe(last.getSenderId() != null && last.getSenderId().equals(viewerId))
+                        .build() : null)
                 .members(Collections.emptyList())
                 .build();
     }

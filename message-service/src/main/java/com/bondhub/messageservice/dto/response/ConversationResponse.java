@@ -1,8 +1,6 @@
 package com.bondhub.messageservice.dto.response;
 
-import com.bondhub.common.enums.MessageStatus;
 import com.bondhub.common.enums.Status;
-import com.bondhub.common.enums.MessageType;
 import lombok.Builder;
 
 import java.time.LocalDateTime;
@@ -16,12 +14,7 @@ public record ConversationResponse(
         Status status,                    // Online/Offline của partner (chỉ 1-1)
         LocalDateTime lastSeenAt,         // Thời điểm online gần nhất của partner
         boolean isGroup,
-        String lastMessage,
-        String lastMessageId,
-        LocalDateTime lastMessageTime,
-        boolean isLastMessageFromMe,
-        MessageType lastMessageType,
         Integer unreadCount,
-        MessageStatus lastMessageStatus,
+        LastMessageResponse lastMessage,
         List<ConversationMemberResponse> members) {
 }
