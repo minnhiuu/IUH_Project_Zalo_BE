@@ -187,7 +187,7 @@ public class MessageServiceImpl implements MessageService {
                 .orElseThrow(() -> new AppException(ErrorCode.MESSAGE_NOT_FOUND));
 
         if (!message.getSenderId().equals(currentUserId)) {
-            throw new AppException(ErrorCode.UNAUTHORIZED);
+            throw new AppException(ErrorCode.CHAT_NOT_SENDER);
         }
 
         message.setStatus(MessageStatus.REVOKED);
@@ -217,7 +217,7 @@ public class MessageServiceImpl implements MessageService {
         boolean isMember = room.getMembers().stream()
                 .anyMatch(m -> m.getUserId().equals(userId));
         if (!isMember) {
-            throw new AppException(ErrorCode.UNAUTHORIZED);
+            throw new AppException(ErrorCode.CHAT_MEMBER_NOT_FOUND);
         }
     }
 
@@ -323,9 +323,9 @@ public class MessageServiceImpl implements MessageService {
                 .type(MessageType.SYSTEM)
                 .metadata(savedMessage.getMetadata())
                 .build());
-        
-        Conversation room = mongoTemplate.findAndModify(query, update, 
-                FindAndModifyOptions.options().returnNew(true), 
+
+        Conversation room = mongoTemplate.findAndModify(query, update,
+                FindAndModifyOptions.options().returnNew(true),
                 Conversation.class);
 
         if (room != null) {
@@ -360,5 +360,12 @@ public class MessageServiceImpl implements MessageService {
                     new SocketEvent(SocketEventType.MESSAGE, member.getUserId(),
                             "/queue/status-updates", payload));
         }
+    }
+
+    @Override
+    public void deleteAllMessagesByConversationId(String conversationId) {
+        log.info("[Chat] Deleting all messages for conversation: {}", conversationId);
+        Query query = new Query(Criteria.where("conversationId").is(conversationId));
+        mongoTemplate.remove(query, Message.class);
     }
 }

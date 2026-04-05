@@ -15,6 +15,7 @@ public record ConversationResponse(
         Status status,                    // Online/Offline của partner (chỉ 1-1)
         @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss.SSSXXX", timezone = "GMT+7") OffsetDateTime lastSeenAt,         // Thời điểm online gần nhất của partner
         boolean isGroup,
+        boolean isDisbanded,
         Integer unreadCount,
         LastMessageResponse lastMessage,
         List<ConversationMemberResponse> members) {

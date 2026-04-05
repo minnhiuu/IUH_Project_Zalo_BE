@@ -178,7 +178,7 @@ public class ConversationServiceImpl implements ConversationService {
         boolean isMember = room.getMembers().stream()
                 .anyMatch(m -> m.getUserId().equals(currentUserId));
         if (!isMember) {
-            throw new AppException(ErrorCode.UNAUTHORIZED);
+            throw new AppException(ErrorCode.CHAT_MEMBER_NOT_FOUND);
         }
 
         String finalReadId = room.getLastMessage() != null ? room.getLastMessage().getMessageId() : null;
@@ -272,7 +272,7 @@ public class ConversationServiceImpl implements ConversationService {
                 .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
 
         if (!conversation.isGroup()) {
-            throw new AppException(ErrorCode.UNAUTHORIZED);
+            throw new AppException(ErrorCode.CHAT_NOT_A_GROUP);
         }
         assertMember(conversation, currentUserId);
 
@@ -304,7 +304,7 @@ public class ConversationServiceImpl implements ConversationService {
                 .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
 
         if (!conversation.isGroup()) {
-            throw new AppException(ErrorCode.UNAUTHORIZED);
+            throw new AppException(ErrorCode.CHAT_NOT_A_GROUP);
         }
         assertMember(conversation, currentUserId);
 
@@ -445,7 +445,7 @@ public class ConversationServiceImpl implements ConversationService {
         boolean isMember = room.getMembers().stream()
                 .anyMatch(m -> m.getUserId().equals(userId));
         if (!isMember) {
-            throw new AppException(ErrorCode.UNAUTHORIZED);
+            throw new AppException(ErrorCode.CHAT_MEMBER_NOT_FOUND);
         }
     }
 
@@ -505,6 +505,7 @@ public class ConversationServiceImpl implements ConversationService {
                 .status(displayStatus)
                 .lastSeenAt(room.isGroup() ? null : toOffset(partner.getLastUpdatedAt()))
                 .isGroup(room.isGroup())
+                .isDisbanded(room.isDisbanded())
                 .unreadCount(room.getUnreadCounts() != null
                         ? room.getUnreadCounts().getOrDefault(currentUserId, 0) : 0)
                 .lastMessage(last != null ? LastMessageResponse.builder()
@@ -567,6 +568,38 @@ public class ConversationServiceImpl implements ConversationService {
                         }
                     });
                 });
+    }
+
+    @Override
+    public void disbandGroup(String conversationId) {
+        String currentUserId = securityUtil.getCurrentUserId();
+        Conversation conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
+
+        if (!conversation.isGroup()) {
+            throw new AppException(ErrorCode.CHAT_NOT_A_GROUP);
+        }
+
+        boolean isOwner = conversation.getMembers().stream()
+                .anyMatch(m -> m.getUserId().equals(currentUserId) && m.getRole() == MemberRole.OWNER);
+
+        if (!isOwner) {
+            log.warn("[Conversation] User {} tried to disband group {} but is not the owner", currentUserId, conversationId);
+            throw new AppException(ErrorCode.CHAT_NOT_OWNER);
+        }
+
+        conversation.setDisbanded(true);
+        conversationRepository.save(conversation);
+
+        messageService.deleteAllMessagesByConversationId(conversationId);
+
+        ChatUser actor = chatUserRepository.findById(currentUserId).orElse(null);
+        String actorName = actor != null ? actor.getFullName() : "Owner";
+        messageService.sendSystemMessage(conversationId, currentUserId, actorName, SystemActionType.DISBAND_GROUP, Map.of());
+
+        broadcastConversationUpdate(conversationId);
+
+        log.info("[Conversation] Group {} has been disbanded by owner {}", conversationId, currentUserId);
     }
 
     private OffsetDateTime toOffset(LocalDateTime time) {

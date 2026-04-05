@@ -47,4 +47,8 @@ public class Conversation extends BaseModel {
 
     @Builder.Default
     Map<String, Integer> unreadCounts = new HashMap<>();
+
+    @Indexed
+    @Builder.Default
+    boolean isDisbanded = false;
 }

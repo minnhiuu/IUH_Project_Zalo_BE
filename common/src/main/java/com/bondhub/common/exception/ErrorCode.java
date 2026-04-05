@@ -92,6 +92,10 @@ public enum ErrorCode {
         MESSAGE_NOT_FOUND(HttpStatus.NOT_FOUND, 4002, "error.message.not.found"),
         UNAUTHORIZED(HttpStatus.FORBIDDEN, 4003, "error.unauthorized"),
         CHAT_INVALID_MEMBER_COUNT(HttpStatus.BAD_REQUEST, 4005, "error.chat.group.member.count.invalid"),
+        CHAT_NOT_A_GROUP(HttpStatus.BAD_REQUEST, 4006, "error.chat.not.a.group"),
+        CHAT_NOT_OWNER(HttpStatus.FORBIDDEN, 4007, "error.chat.not.owner"),
+        CHAT_MEMBER_NOT_FOUND(HttpStatus.FORBIDDEN, 4008, "error.chat.member.not.found"),
+        CHAT_NOT_SENDER(HttpStatus.FORBIDDEN, 4009, "error.chat.not.sender"),
 
         //  NOTIFICATION_TEMPLATE (23xx)
         NOTIFICATION_TEMPLATE_NOT_FOUND(HttpStatus.NOT_FOUND, 2300, "error.notification.template.not.found"),

@@ -5,5 +5,6 @@ public enum SystemActionType {
     REMOVE_MEMBER,
     LEAVE_GROUP,
     UPDATE_NAME,
-    UPDATE_AVATAR
+    UPDATE_AVATAR,
+    DISBAND_GROUP
 }

@@ -34,4 +34,6 @@ public interface MessageService {
 
     void sendSystemMessage(String conversationId, String actorId, String actorName,
                                    SystemActionType action, Map<String, Object> extraMetadata);
+
+    void deleteAllMessagesByConversationId(String conversationId);
 }
