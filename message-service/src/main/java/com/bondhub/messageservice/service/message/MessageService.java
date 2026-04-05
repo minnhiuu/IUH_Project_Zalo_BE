@@ -4,8 +4,7 @@ import com.bondhub.common.dto.PageResponse;
 import com.bondhub.common.dto.client.messageservice.MessageSendRequest;
 import com.bondhub.common.enums.SystemActionType;
 import com.bondhub.messageservice.dto.response.MessageResponse;
-import com.bondhub.messageservice.model.Conversation;
-
+import com.bondhub.messageservice.model.Message;
 import java.util.List;
 import java.util.Map;
 
@@ -33,6 +32,6 @@ public interface MessageService {
      */
     void deleteMessageForMe(String messageId);
 
-    Conversation sendSystemMessage(String conversationId, String actorId, String actorName,
+    Message sendSystemMessage(String conversationId, String actorId, String actorName,
                                    SystemActionType action, Map<String, Object> extraMetadata);
 }

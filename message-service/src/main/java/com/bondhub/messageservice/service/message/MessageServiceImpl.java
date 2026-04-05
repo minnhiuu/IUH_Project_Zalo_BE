@@ -294,8 +294,8 @@ public class MessageServiceImpl implements MessageService {
     }
 
     @Override
-    public Conversation sendSystemMessage(String conversationId, String actorId, String actorName,
-                                 SystemActionType action, Map<String, Object> extraMetadata) {
+    public Message sendSystemMessage(String conversationId, String actorId, String actorName,
+                                  SystemActionType action, Map<String, Object> extraMetadata) {
         LocalDateTime now = LocalDateTime.now();
 
         Map<String, Object> metadata = new HashMap<>();
@@ -314,33 +314,21 @@ public class MessageServiceImpl implements MessageService {
                 .metadata(metadata)
                 .build();
         message.setCreatedAt(now);
-        messageRepository.save(message);
+        Message savedMessage = messageRepository.save(message);
 
-        LastMessageInfo lastInfo = LastMessageInfo.builder()
-                .messageId(message.getId())
-                .senderId(actorId)
-                .type(MessageType.SYSTEM)
-                .metadata(message.getMetadata())
-                .timestamp(now)
-                .build();
+        Conversation conversation = conversationRepository.findById(conversationId).orElse(null);
+        if (conversation != null) {
+            String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+            ChatNotification notification = messageMapper.mapToChatNotification(savedMessage, baseUrl, 0);
 
-        Query query = new Query(Criteria.where("id").is(conversationId));
-        Update update = new Update().set("lastMessage", lastInfo);
-        Conversation conversation = mongoTemplate.findAndModify(query, update, 
-                FindAndModifyOptions.options().returnNew(true), Conversation.class);
+            conversation.getMembers().forEach(member -> {
+                kafkaTemplate.send(socketEventsTopic,
+                        new SocketEvent(SocketEventType.MESSAGE, member.getUserId(),
+                                "/queue/messages", notification));
+            });
+        }
 
-        if (conversation == null) return null;
-
-        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
-        ChatNotification notification = messageMapper.mapToChatNotification(message, baseUrl, 0);
-
-        conversation.getMembers().forEach(member -> {
-            kafkaTemplate.send(socketEventsTopic,
-                    new SocketEvent(SocketEventType.MESSAGE, member.getUserId(),
-                            "/queue/messages", notification));
-        });
-        
-        return conversation;
+        return savedMessage;
     }
 
     private void broadcastStatusChange(String conversationId, String messageId, MessageStatus newStatus) {

@@ -4,6 +4,7 @@ import com.bondhub.messageservice.dto.response.ChatNotification;
 import com.bondhub.messageservice.dto.response.MessageResponse;
 import com.bondhub.messageservice.dto.response.ReplyMetadataResponse;
 import com.bondhub.messageservice.model.Message;
+import com.bondhub.messageservice.model.LastMessageInfo;
 import com.bondhub.common.dto.client.messageservice.ReplyMetadata;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
@@ -25,4 +26,8 @@ public interface MessageMapper {
     ChatNotification mapToChatNotification(Message msg, String baseUrl, Integer unreadCount);
 
     ReplyMetadataResponse mapToReplyMetadataResponse(ReplyMetadata metadata);
+
+    @Mapping(target = "messageId", source = "msg.id")
+    @Mapping(target = "timestamp", source = "msg.createdAt")
+    LastMessageInfo mapToLastMessageInfo(Message msg);
 }

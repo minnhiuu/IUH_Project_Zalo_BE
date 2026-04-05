@@ -1,6 +1,5 @@
 package com.bondhub.messageservice.service.conversation;
 
-import com.bondhub.common.enums.MessageType;
 import com.bondhub.common.enums.Status;
 import com.bondhub.common.enums.SystemActionType;
 import com.bondhub.common.utils.S3Util;
@@ -14,12 +13,14 @@ import com.bondhub.messageservice.model.ChatUser;
 import com.bondhub.messageservice.model.Conversation;
 import com.bondhub.messageservice.model.ConversationMember;
 import com.bondhub.messageservice.model.LastMessageInfo;
+import com.bondhub.messageservice.model.Message;
 import com.bondhub.messageservice.repository.ConversationRepository;
 import com.bondhub.messageservice.repository.ChatUserRepository;
 import com.bondhub.messageservice.model.enums.MemberRole;
 import com.bondhub.common.dto.client.socketservice.SocketEvent;
 import com.bondhub.common.enums.SocketEventType;
 import com.bondhub.messageservice.client.FileServiceClient;
+import com.bondhub.messageservice.mapper.MessageMapper;
 import com.bondhub.common.dto.client.fileservice.FileUploadResponse;
 import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.messageservice.service.message.MessageService;
@@ -59,6 +60,7 @@ public class ConversationServiceImpl implements ConversationService {
     private final MongoTemplate mongoTemplate;
     private final MessageService messageService;
     private final FileServiceClient fileServiceClient;
+    private final MessageMapper messageMapper;
 
     @Value("${aws.s3.bucket.name}")
     private String bucketName;
@@ -258,16 +260,17 @@ public class ConversationServiceImpl implements ConversationService {
         ChatUser actor = chatUserRepository.findById(currentUserId).orElse(null);
         String actorName = actor != null ? actor.getFullName() : "Người dùng";
 
-        messageService.sendSystemMessage(saved.getId(), currentUserId, actorName, SystemActionType.ADD_MEMBERS, Map.of("targetIds", memberIds));
+        Message systemMsg = messageService.sendSystemMessage(saved.getId(), currentUserId, actorName,
+                SystemActionType.ADD_MEMBERS, Map.of("targetIds", memberIds));
 
-        conversationRepository.save(saved);
+        saved.setLastMessage(messageMapper.mapToLastMessageInfo(systemMsg));
+        Conversation updated = conversationRepository.save(saved);
 
         log.info("[Conversation] Created group conversation {} by user {} with {} members",
-                saved.getId(), currentUserId, members.size());
+                updated.getId(), updated.getMembers().size(), currentUserId);
 
-        broadcastConversationUpdate(saved);
-
-        return buildConversationResponseForCurrentUser(saved, currentUserId);
+        broadcastConversationUpdate(updated);
+        return buildConversationResponseForCurrentUser(updated, currentUserId);
     }
 
     @Override
@@ -292,11 +295,14 @@ public class ConversationServiceImpl implements ConversationService {
 
         conversationRepository.save(conversation);
 
-        Conversation updated = messageService.sendSystemMessage(conversationId, currentUserId, actorName, SystemActionType.UPDATE_NAME, 
+        Message systemMsg = messageService.sendSystemMessage(conversationId, currentUserId, actorName, SystemActionType.UPDATE_NAME, 
                 Map.of("payload", Map.of(
                         "oldName", oldName,
                         "newName", name
                 )));
+
+        conversation.setLastMessage(messageMapper.mapToLastMessageInfo(systemMsg));
+        Conversation updated = conversationRepository.save(conversation);
 
         broadcastConversationUpdate(updated);
         return buildConversationResponseForCurrentUser(updated, currentUserId);
@@ -324,8 +330,11 @@ public class ConversationServiceImpl implements ConversationService {
 
                 conversationRepository.save(conversation);
 
-                Conversation updated = messageService.sendSystemMessage(conversationId, currentUserId, actorName, SystemActionType.UPDATE_AVATAR, 
+                Message systemMsg = messageService.sendSystemMessage(conversationId, currentUserId, actorName, SystemActionType.UPDATE_AVATAR, 
                         Map.of());
+
+                conversation.setLastMessage(messageMapper.mapToLastMessageInfo(systemMsg));
+                Conversation updated = conversationRepository.save(conversation);
 
                 broadcastConversationUpdate(updated);
                 return buildConversationResponseForCurrentUser(updated, currentUserId);
