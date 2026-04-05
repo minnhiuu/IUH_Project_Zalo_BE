@@ -118,20 +118,29 @@ public class AssistantConfig {
     }
 
     @Bean
-    AnalyzerService analyzerService(@Qualifier("logicModel") ChatLanguageModel chatModel,
-                                    ChatMemoryProvider chatMemoryProvider) {
+    AnalyzerService analyzerService(@Qualifier("logicModel") ChatLanguageModel chatModel) {
         return AiServices.builder(AnalyzerService.class)
                 .chatLanguageModel(chatModel)
-                .chatMemoryProvider(chatMemoryProvider)
+                // KHÔNG có .chatMemoryProvider() — Stateless by design
+                // Analyzer chỉ ra quyết định, không lưu gì vào DB
                 .build();
     }
 
     @Bean
-    GraderService graderService(@Qualifier("logicModel") ChatLanguageModel chatModel,
-                                ChatMemoryProvider chatMemoryProvider) {
+    GraderService graderService(@Qualifier("logicModel") ChatLanguageModel chatModel) {
         return AiServices.builder(GraderService.class)
                 .chatLanguageModel(chatModel)
-                .chatMemoryProvider(chatMemoryProvider)
+                // KHÔNG có .chatMemoryProvider() — Stateless by design
+                // Grader chỉ chấm điểm, không lưu gì vào DB
+                .build();
+    }
+
+    /** QueryRewriter: gpt-4o-mini — stateless, biến câu hỏi mơ hồ thành câu đầy đủ thực thể */
+    @Bean
+    QueryRewriterService queryRewriterService(@Qualifier("logicModel") ChatLanguageModel chatModel) {
+        return AiServices.builder(QueryRewriterService.class)
+                .chatLanguageModel(chatModel)
+                // KHÔNG có .chatMemoryProvider() — Stateless by design
                 .build();
     }
 
