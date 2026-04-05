@@ -1,4 +1,4 @@
-package com.bondhub.aiservice.service;
+package com.bondhub.aiservice.service.retrival.vectorsearch;
 
 import dev.langchain4j.data.embedding.Embedding;
 import dev.langchain4j.data.segment.TextSegment;
@@ -19,19 +19,12 @@ import static dev.langchain4j.store.embedding.filter.MetadataFilterBuilder.metad
 @Service
 @Slf4j
 @RequiredArgsConstructor
-public class VectorSearchService {
+public class VectorSearchServiceImpl implements VectorSearchService {
 
     private final EmbeddingModel embeddingModel;
     private final EmbeddingStore<TextSegment> embeddingStore;
 
-    /**
-     * Tìm kiếm vector có lọc theo conversationId (chat_id trong Qdrant metadata).
-     * Đảm bảo AI chỉ đọc tin nhắn trong đúng phòng chat, không "đọc trộm" người khác.
-     *
-     * @param query          Câu hỏi của user
-     * @param conversationId ID cuộc hội thoại (chatId = conversationId trong message-service)
-     * @param topK           Số kết quả tối đa muốn lấy
-     */
+    @Override
     public List<String> search(String query, String conversationId, int topK) {
         log.debug("[VectorSearch] Searching for: '{}' in conversation: {}", query, conversationId);
         try {
@@ -44,7 +37,6 @@ public class VectorSearchService {
 
             log.debug("[VectorSearch] Query vector size: {}", queryEmbedding.vector().length);
 
-            // Lọc chỉ lấy các vectors thuộc đúng conversation này (metadata key: "chat_id")
             Filter conversationFilter = metadataKey("chat_id").isEqualTo(conversationId);
 
             List<EmbeddingMatch<TextSegment>> matches = embeddingStore.search(

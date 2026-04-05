@@ -1,4 +1,4 @@
-package com.bondhub.aiservice.dto;
+package com.bondhub.aiservice.model.enums;
 
 /**
  * Enum trạng thái xử lý AI Pipeline.

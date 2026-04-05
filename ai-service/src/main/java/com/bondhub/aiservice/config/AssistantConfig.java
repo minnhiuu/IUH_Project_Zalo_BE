@@ -1,7 +1,8 @@
 package com.bondhub.aiservice.config;
 
 import com.bondhub.aiservice.model.MongoChatMemoryStore;
-import com.bondhub.aiservice.service.*;
+import com.bondhub.aiservice.service.ai.*;
+import com.bondhub.aiservice.tools.ZaloAssistantTools;
 import dev.langchain4j.memory.chat.ChatMemoryProvider;
 import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 import dev.langchain4j.model.chat.ChatLanguageModel;
@@ -144,12 +145,22 @@ public class AssistantConfig {
                 .build();
     }
 
+    /**
+     * GeneratorService — Streaming + ChatMemory + ZaloTools.
+     * ZaloAssistantTools được đăng ký để AI có thể gọi Tool Calling:
+     *   - getMyProfile()         → UserService
+     *   - getMyFriends()         → FriendService
+     *   - getMyConversations()   → MessageService
+     *   - getRecentMessages(id)  → MessageService
+     */
     @Bean
     GeneratorService generatorService(StreamingChatLanguageModel streamingModel,
-                                      ChatMemoryProvider chatMemoryProvider) {
+                                      ChatMemoryProvider chatMemoryProvider,
+                                      ZaloAssistantTools zaloTools) {
         return AiServices.builder(GeneratorService.class)
                 .streamingChatLanguageModel(streamingModel)
                 .chatMemoryProvider(chatMemoryProvider)
+                .tools(zaloTools)
                 .build();
     }
 }
