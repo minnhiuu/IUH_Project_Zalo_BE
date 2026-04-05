@@ -24,6 +24,8 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -103,7 +105,7 @@ public class FriendshipMirrorConsumer {
                                 ? userCache.getOrDefault(last.getSenderId(),
                                         ChatUser.builder().fullName("").build()).getFullName() : null)
                         .content(last.getContent())
-                        .timestamp(last.getTimestamp())
+                        .timestamp(last.getTimestamp() != null ? last.getTimestamp().atOffset(ZoneOffset.ofHours(7)) : null)
                         .type(last.getType())
                         .status(last.getStatus())
                         .isFromMe(last.getSenderId() != null && last.getSenderId().equals(viewerId))

@@ -32,6 +32,6 @@ public interface MessageService {
      */
     void deleteMessageForMe(String messageId);
 
-    Message sendSystemMessage(String conversationId, String actorId, String actorName,
+    void sendSystemMessage(String conversationId, String actorId, String actorName,
                                    SystemActionType action, Map<String, Object> extraMetadata);
 }

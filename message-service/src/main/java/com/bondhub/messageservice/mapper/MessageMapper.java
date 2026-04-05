@@ -10,8 +10,17 @@ import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.ReportingPolicy;
 
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+
 @Mapper(componentModel = "spring", unmappedTargetPolicy = ReportingPolicy.IGNORE)
 public interface MessageMapper {
+    
+    default OffsetDateTime map(LocalDateTime value) {
+        if (value == null) return null;
+        return value.atOffset(ZoneOffset.ofHours(7));
+    }
 
     @Mapping(target = "senderAvatar", expression = "java(msg.getSenderAvatar() != null ? baseUrl + msg.getSenderAvatar() : null)")
     @Mapping(target = "replyTo", source = "msg.replyTo")

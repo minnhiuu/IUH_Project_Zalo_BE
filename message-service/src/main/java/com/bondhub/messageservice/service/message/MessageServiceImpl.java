@@ -294,14 +294,12 @@ public class MessageServiceImpl implements MessageService {
     }
 
     @Override
-    public Message sendSystemMessage(String conversationId, String actorId, String actorName,
+    public void sendSystemMessage(String conversationId, String actorId, String actorName,
                                   SystemActionType action, Map<String, Object> extraMetadata) {
         LocalDateTime now = LocalDateTime.now();
 
         Map<String, Object> metadata = new HashMap<>();
         metadata.put("action", action.name());
-        metadata.put("actorId", actorId);
-        metadata.put("actorName", actorName);
         if (extraMetadata != null) {
             metadata.putAll(extraMetadata);
         }
@@ -316,19 +314,35 @@ public class MessageServiceImpl implements MessageService {
         message.setCreatedAt(now);
         Message savedMessage = messageRepository.save(message);
 
-        Conversation conversation = conversationRepository.findById(conversationId).orElse(null);
-        if (conversation != null) {
-            String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
-            ChatNotification notification = messageMapper.mapToChatNotification(savedMessage, baseUrl, 0);
+        Query query = new Query(Criteria.where("id").is(conversationId));
+        Update update = new Update().set("lastMessage", LastMessageInfo.builder()
+                .messageId(savedMessage.getId())
+                .senderId(actorId)
+                .content(null)
+                .timestamp(savedMessage.getCreatedAt())
+                .type(MessageType.SYSTEM)
+                .metadata(savedMessage.getMetadata())
+                .build());
+        
+        Conversation room = mongoTemplate.findAndModify(query, update, 
+                FindAndModifyOptions.options().returnNew(true), 
+                Conversation.class);
 
-            conversation.getMembers().forEach(member -> {
+        if (room != null) {
+            String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+
+            room.getMembers().forEach(member -> {
+                Integer currentUnread = room.getUnreadCounts().getOrDefault(member.getUserId(), 0);
+                boolean isFromMe = member.getUserId().equals(actorId);
+
+                ChatNotification notification = messageMapper.mapToChatNotification(savedMessage, baseUrl, currentUnread);
+                notification = notification.toBuilder().isFromMe(isFromMe).build();
+
                 kafkaTemplate.send(socketEventsTopic,
                         new SocketEvent(SocketEventType.MESSAGE, member.getUserId(),
                                 "/queue/messages", notification));
             });
         }
-
-        return savedMessage;
     }
 
     private void broadcastStatusChange(String conversationId, String messageId, MessageStatus newStatus) {

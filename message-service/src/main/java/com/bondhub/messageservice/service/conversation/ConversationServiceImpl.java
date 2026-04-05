@@ -44,6 +44,8 @@ import org.springframework.data.mongodb.core.query.Update;
 import com.mongodb.client.result.UpdateResult;
 
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -260,17 +262,14 @@ public class ConversationServiceImpl implements ConversationService {
         ChatUser actor = chatUserRepository.findById(currentUserId).orElse(null);
         String actorName = actor != null ? actor.getFullName() : "Người dùng";
 
-        Message systemMsg = messageService.sendSystemMessage(saved.getId(), currentUserId, actorName,
+        messageService.sendSystemMessage(saved.getId(), currentUserId, actorName,
                 SystemActionType.ADD_MEMBERS, Map.of("targetIds", memberIds));
 
-        saved.setLastMessage(messageMapper.mapToLastMessageInfo(systemMsg));
-        Conversation updated = conversationRepository.save(saved);
-
         log.info("[Conversation] Created group conversation {} by user {} with {} members",
-                updated.getId(), updated.getMembers().size(), currentUserId);
+                saved.getId(), saved.getMembers().size(), currentUserId);
 
-        broadcastConversationUpdate(updated);
-        return buildConversationResponseForCurrentUser(updated, currentUserId);
+        broadcastConversationUpdate(saved.getId());
+        return buildConversationResponseForCurrentUser(saved, currentUserId);
     }
 
     @Override
@@ -295,17 +294,14 @@ public class ConversationServiceImpl implements ConversationService {
 
         conversationRepository.save(conversation);
 
-        Message systemMsg = messageService.sendSystemMessage(conversationId, currentUserId, actorName, SystemActionType.UPDATE_NAME, 
+        messageService.sendSystemMessage(conversationId, currentUserId, actorName, SystemActionType.UPDATE_NAME, 
                 Map.of("payload", Map.of(
                         "oldName", oldName,
                         "newName", name
                 )));
 
-        conversation.setLastMessage(messageMapper.mapToLastMessageInfo(systemMsg));
-        Conversation updated = conversationRepository.save(conversation);
-
-        broadcastConversationUpdate(updated);
-        return buildConversationResponseForCurrentUser(updated, currentUserId);
+        broadcastConversationUpdate(conversationId);
+        return buildConversationResponseForCurrentUser(conversation, currentUserId);
     }
 
     @Override
@@ -330,14 +326,11 @@ public class ConversationServiceImpl implements ConversationService {
 
                 conversationRepository.save(conversation);
 
-                Message systemMsg = messageService.sendSystemMessage(conversationId, currentUserId, actorName, SystemActionType.UPDATE_AVATAR, 
+                messageService.sendSystemMessage(conversationId, currentUserId, actorName, SystemActionType.UPDATE_AVATAR, 
                         Map.of());
 
-                conversation.setLastMessage(messageMapper.mapToLastMessageInfo(systemMsg));
-                Conversation updated = conversationRepository.save(conversation);
-
-                broadcastConversationUpdate(updated);
-                return buildConversationResponseForCurrentUser(updated, currentUserId);
+                broadcastConversationUpdate(conversationId);
+                return buildConversationResponseForCurrentUser(conversation, currentUserId);
             }
         }
 
@@ -504,7 +497,7 @@ public class ConversationServiceImpl implements ConversationService {
                 .name(displayName)
                 .avatar(displayAvatar)
                 .status(displayStatus)
-                .lastSeenAt(room.isGroup() ? null : partner.getLastUpdatedAt())
+                .lastSeenAt(room.isGroup() ? null : toOffset(partner.getLastUpdatedAt()))
                 .isGroup(room.isGroup())
                 .unreadCount(room.getUnreadCounts() != null
                         ? room.getUnreadCounts().getOrDefault(currentUserId, 0) : 0)
@@ -515,7 +508,7 @@ public class ConversationServiceImpl implements ConversationService {
                                 ? userCache.getOrDefault(last.getSenderId(),
                                 ChatUser.builder().fullName("").build()).getFullName() : null)
                         .content(last.getContent())
-                        .timestamp(last.getTimestamp())
+                        .timestamp(toOffset(last.getTimestamp()))
                         .type(last.getType())
                         .status(last.getStatus())
                         .isFromMe(last.getSenderId() != null && last.getSenderId().equals(currentUserId))
@@ -568,5 +561,10 @@ public class ConversationServiceImpl implements ConversationService {
                         }
                     });
                 });
+    }
+
+    private OffsetDateTime toOffset(LocalDateTime time) {
+        if (time == null) return null;
+        return time.atOffset(ZoneOffset.ofHours(7));
     }
 }

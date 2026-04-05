@@ -5,7 +5,7 @@ import com.bondhub.common.enums.MessageType;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.Builder;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.Map;
 
 import lombok.With;
@@ -21,8 +21,8 @@ public record MessageResponse(
                 String content,
                 String clientMessageId,
                 MessageType type,
-                @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss", timezone = "GMT+7") LocalDateTime createdAt,
-                @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss", timezone = "GMT+7") LocalDateTime lastModifiedAt,
+                @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss.SSSXXX", timezone = "GMT+7") OffsetDateTime createdAt,
+                @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss.SSSXXX", timezone = "GMT+7") OffsetDateTime lastModifiedAt,
                 ReplyMetadataResponse replyTo,
                 boolean isForwarded,
                 MessageStatus status,
