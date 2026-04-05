@@ -48,13 +48,12 @@ public class ConversationController {
         return ResponseEntity.ok(ApiResponse.success(null));
     }
 
-    @PostMapping(value = "/groups", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PostMapping("/groups")
     @Operation(summary = "Create a conversation")
     public ResponseEntity<ApiResponse<ConversationResponse>> createGroupConversation(
-            @RequestPart("request") @Valid GroupConversationCreateRequest request,
-            @RequestPart(value = "file", required = false) MultipartFile file) {
+            @RequestBody @Valid GroupConversationCreateRequest request) {
         return ResponseEntity.ok(ApiResponse.success(
-                conversationService.createGroupConversation(request, file)));
+                conversationService.createGroupConversation(request)));
     }
 
     @PatchMapping("/{conversationId}/name")

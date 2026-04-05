@@ -18,7 +18,7 @@ public interface ConversationService {
 
     void markAsRead(String conversationId);
 
-    ConversationResponse createGroupConversation(GroupConversationCreateRequest request, MultipartFile file);
+    ConversationResponse createGroupConversation(GroupConversationCreateRequest request);
     
     ConversationResponse updateGroupName(String conversationId, String name);
     

@@ -13,7 +13,6 @@ import com.bondhub.messageservice.model.ChatUser;
 import com.bondhub.messageservice.model.Conversation;
 import com.bondhub.messageservice.model.ConversationMember;
 import com.bondhub.messageservice.model.LastMessageInfo;
-import com.bondhub.messageservice.model.Message;
 import com.bondhub.messageservice.repository.ConversationRepository;
 import com.bondhub.messageservice.repository.ChatUserRepository;
 import com.bondhub.messageservice.model.enums.MemberRole;
@@ -204,16 +203,10 @@ public class ConversationServiceImpl implements ConversationService {
     }
 
     @Override
-    public ConversationResponse createGroupConversation(GroupConversationCreateRequest request, MultipartFile file) {
+    public ConversationResponse createGroupConversation(GroupConversationCreateRequest request) {
         String currentUserId = securityUtil.getCurrentUserId();
 
         String avatarUrl = request.avatar();
-        if (file != null && !file.isEmpty()) {
-            ApiResponse<FileUploadResponse> uploadResponse = fileServiceClient.upload(file);
-            if (uploadResponse != null && uploadResponse.data() != null) {
-                avatarUrl = uploadResponse.data().key();
-            }
-        }
 
         Set<String> memberIds = new LinkedHashSet<>(request.memberIds());
         memberIds.remove(currentUserId);
@@ -294,7 +287,7 @@ public class ConversationServiceImpl implements ConversationService {
 
         conversationRepository.save(conversation);
 
-        messageService.sendSystemMessage(conversationId, currentUserId, actorName, SystemActionType.UPDATE_NAME, 
+        messageService.sendSystemMessage(conversationId, currentUserId, actorName, SystemActionType.UPDATE_NAME,
                 Map.of("payload", Map.of(
                         "oldName", oldName,
                         "newName", name
@@ -318,7 +311,9 @@ public class ConversationServiceImpl implements ConversationService {
         if (file != null && !file.isEmpty()) {
             ApiResponse<FileUploadResponse> uploadResponse = fileServiceClient.upload(file);
             if (uploadResponse != null && uploadResponse.data() != null) {
+                String oldAvatarKey = conversation.getAvatar();
                 String avatarKey = uploadResponse.data().key();
+
                 conversation.setAvatar(avatarKey);
 
                 ChatUser actor = chatUserRepository.findById(currentUserId).orElse(null);
@@ -326,7 +321,17 @@ public class ConversationServiceImpl implements ConversationService {
 
                 conversationRepository.save(conversation);
 
-                messageService.sendSystemMessage(conversationId, currentUserId, actorName, SystemActionType.UPDATE_AVATAR, 
+                if (oldAvatarKey != null && !oldAvatarKey.isBlank() && !oldAvatarKey.equals(avatarKey)) {
+                    try {
+                        fileServiceClient.delete(oldAvatarKey);
+                        log.info("[Conversation] Deleted old avatar {} for conversation {}", oldAvatarKey, conversationId);
+                    } catch (Exception e) {
+                        log.warn("[Conversation] Failed to delete old avatar {} for conversation {}: {}",
+                                oldAvatarKey, conversationId, e.getMessage());
+                    }
+                }
+
+                messageService.sendSystemMessage(conversationId, currentUserId, actorName, SystemActionType.UPDATE_AVATAR,
                         Map.of());
 
                 broadcastConversationUpdate(conversationId);
@@ -337,6 +342,7 @@ public class ConversationServiceImpl implements ConversationService {
         broadcastConversationUpdate(conversation);
         return buildConversationResponseForCurrentUser(conversation, currentUserId);
     }
+
 
     @Override
     public void broadcastConversationUpdate(String conversationId) {

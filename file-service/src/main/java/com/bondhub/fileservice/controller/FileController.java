@@ -33,8 +33,14 @@ public class FileController {
                 .body(data);
     }
 
+    @DeleteMapping(params = "key")
+    public ResponseEntity<ApiResponse<Void>> deleteByQuery(@RequestParam("key") String key) {
+        fileService.deleteFile(key);
+        return ResponseEntity.ok(ApiResponse.successWithoutData());
+    }
+
     @DeleteMapping("/{key}")
-    public ResponseEntity<ApiResponse<Void>> delete(@PathVariable String key) {
+    public ResponseEntity<ApiResponse<Void>> deleteByPath(@PathVariable String key) {
         fileService.deleteFile(key);
         return ResponseEntity.ok(ApiResponse.successWithoutData());
     }
