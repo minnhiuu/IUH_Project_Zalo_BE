@@ -74,6 +74,13 @@ public class ConversationController {
                 conversationService.updateGroupAvatar(conversationId, file)));
     }
 
+    @DeleteMapping("/{conversationId}")
+    @Operation(summary = "Delete conversation only for current user")
+    public ResponseEntity<ApiResponse<Void>> deleteConversation(@PathVariable String conversationId) {
+        conversationService.deleteConversationForMe(conversationId);
+        return ResponseEntity.ok(ApiResponse.success(null));
+    }
+
     @DeleteMapping("/{conversationId}/groups")
     @Operation(summary = "Disband group conversation (Owner only)")
     public ResponseEntity<ApiResponse<Void>> disbandGroup(@PathVariable String conversationId) {

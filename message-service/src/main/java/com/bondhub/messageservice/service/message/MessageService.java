@@ -36,4 +36,6 @@ public interface MessageService {
                                    SystemActionType action, Map<String, Object> extraMetadata);
 
     void deleteAllMessagesByConversationId(String conversationId);
+    
+    void deleteAllMessagesByConversationIdForMe(String conversationId);
 }

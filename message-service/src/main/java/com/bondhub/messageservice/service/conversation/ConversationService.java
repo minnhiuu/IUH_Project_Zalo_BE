@@ -29,4 +29,6 @@ public interface ConversationService {
     void broadcastConversationUpdate(Conversation room);
 
     void disbandGroup(String conversationId);
+    
+    void deleteConversationForMe(String conversationId);
 }

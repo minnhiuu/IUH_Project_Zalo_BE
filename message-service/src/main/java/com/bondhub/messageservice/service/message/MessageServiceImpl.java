@@ -368,4 +368,13 @@ public class MessageServiceImpl implements MessageService {
         Query query = new Query(Criteria.where("conversationId").is(conversationId));
         mongoTemplate.remove(query, Message.class);
     }
+
+    @Override
+    public void deleteAllMessagesByConversationIdForMe(String conversationId) {
+        String currentUserId = securityUtil.getCurrentUserId();
+        log.info("[Chat] User {} deleting all messages for conversation: {}", currentUserId, conversationId);
+        Query query = new Query(Criteria.where("conversationId").is(conversationId));
+        Update update = new Update().addToSet("deletedBy", currentUserId);
+        mongoTemplate.updateMulti(query, update, Message.class);
+    }
 }

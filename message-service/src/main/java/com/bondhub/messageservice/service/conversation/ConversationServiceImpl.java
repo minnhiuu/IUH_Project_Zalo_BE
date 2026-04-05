@@ -602,6 +602,20 @@ public class ConversationServiceImpl implements ConversationService {
         log.info("[Conversation] Group {} has been disbanded by owner {}", conversationId, currentUserId);
     }
 
+    @Override
+    public void deleteConversationForMe(String conversationId) {
+        String currentUserId = securityUtil.getCurrentUserId();
+
+        messageService.deleteAllMessagesByConversationIdForMe(conversationId);
+
+        Query query = new Query(Criteria.where("id").is(conversationId));
+        Update update = new Update().pull("members", Query.query(Criteria.where("userId").is(currentUserId)));
+        update.unset("unreadCounts." + currentUserId);
+
+        mongoTemplate.updateFirst(query, update, Conversation.class);
+        log.info("[Conversation] User {} deleted conversation {}", currentUserId, conversationId);
+    }
+
     private OffsetDateTime toOffset(LocalDateTime time) {
         if (time == null) return null;
         return time.atOffset(ZoneOffset.ofHours(7));
