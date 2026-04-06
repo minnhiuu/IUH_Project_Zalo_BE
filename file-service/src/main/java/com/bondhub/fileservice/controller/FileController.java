@@ -20,7 +20,7 @@ public class FileController {
 
     @PostMapping("/upload")
     public ResponseEntity<ApiResponse<FileUploadResponse>> upload(
-            @RequestParam("file") MultipartFile file) throws IOException {
+            @RequestPart("file") MultipartFile file) throws IOException {
         FileUploadResponse fileUploadResponse = fileService.uploadFile(file);
         return ResponseEntity.ok(ApiResponse.success(fileUploadResponse));
     }
