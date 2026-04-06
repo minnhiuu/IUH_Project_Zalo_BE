@@ -4,6 +4,7 @@ import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.common.dto.PageResponse;
 import com.bondhub.messageservice.dto.request.GroupConversationCreateRequest;
 import com.bondhub.messageservice.dto.response.ConversationResponse;
+import com.bondhub.messageservice.dto.response.SearchMemberResponse;
 import com.bondhub.messageservice.service.conversation.ConversationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequiredArgsConstructor
@@ -86,5 +88,25 @@ public class ConversationController {
     public ResponseEntity<ApiResponse<Void>> disbandGroup(@PathVariable String conversationId) {
         conversationService.disbandGroup(conversationId);
         return ResponseEntity.ok(ApiResponse.success(null));
+    }
+
+    @GetMapping("/friends-directory")
+    @Operation(summary = "Get initial friends list grouped by alphabet (A-Z)")
+    public ResponseEntity<ApiResponse<Map<String, List<SearchMemberResponse>>>> getFriendsDirectory(
+            @RequestParam(required = false) String conversationId) {
+        return ResponseEntity.ok(ApiResponse.success(
+                conversationService.getFriendsDirectory(conversationId)));
+    }
+
+
+    @GetMapping("/search-members")
+    @Operation(summary = "Search friends (by name) or strangers (by phone) to add to group")
+    public ResponseEntity<ApiResponse<PageResponse<List<SearchMemberResponse>>>> searchMembersToAdd(
+            @RequestParam(required = false) String conversationId,
+            @RequestParam String query,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(ApiResponse.success(
+                conversationService.searchMembersToAdd(conversationId, query, page, size)));
     }
 }

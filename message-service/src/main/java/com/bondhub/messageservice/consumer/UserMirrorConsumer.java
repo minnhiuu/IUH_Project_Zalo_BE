@@ -43,6 +43,7 @@ public class UserMirrorConsumer {
                 if (user.getLastUpdatedAt() == null || user.getLastUpdatedAt().isBefore(eventTime)) {
                     user.setFullName(event.fullName());
                     user.setAvatar(event.avatar());
+                    user.setPhoneNumber(event.phoneNumber());
                     user.setLastUpdatedAt(eventTime);
                     chatUserRepository.save(user);
                     log.info("✅ Updated ChatUser mirror for userId: {}", event.userId());
@@ -54,6 +55,7 @@ public class UserMirrorConsumer {
                         .id(event.userId())
                         .fullName(event.fullName())
                         .avatar(event.avatar())
+                        .phoneNumber(event.phoneNumber())
                         .lastUpdatedAt(new Timestamp(event.timestamp()).toLocalDateTime())
                         .build();
                 chatUserRepository.save(newUser);

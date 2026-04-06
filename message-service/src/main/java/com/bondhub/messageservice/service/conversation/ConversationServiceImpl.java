@@ -32,6 +32,7 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -42,6 +43,7 @@ import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
 import com.mongodb.client.result.UpdateResult;
 
+import java.text.Normalizer;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -614,6 +616,101 @@ public class ConversationServiceImpl implements ConversationService {
 
         mongoTemplate.updateFirst(query, update, Conversation.class);
         log.info("[Conversation] User {} deleted conversation {}", currentUserId, conversationId);
+    }
+
+    @Override
+    public Map<String, List<SearchMemberResponse>> getFriendsDirectory(String conversationId) {
+        String currentUserId = securityUtil.getCurrentUserId();
+        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+
+        final Set<String> memberIds = (conversationId == null || conversationId.isBlank())
+                ? new HashSet<>()
+                : conversationRepository.findById(conversationId)
+                    .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND))
+                    .getMembers().stream()
+                    .map(ConversationMember::getUserId)
+                    .collect(Collectors.toSet());
+
+        ChatUser currentUser = chatUserRepository.findById(currentUserId).orElse(null);
+        if (currentUser == null || currentUser.getFriendIds().isEmpty()) {
+            return new TreeMap<>();
+        }
+
+        List<ChatUser> friends = chatUserRepository.findAllById(currentUser.getFriendIds());
+
+        return friends.stream()
+                .map(u -> SearchMemberResponse.builder()
+                        .userId(u.getId())
+                        .fullName(u.getFullName())
+                        .avatar(u.getAvatar() != null ? baseUrl + u.getAvatar() : null)
+                        .isAlreadyMember(memberIds.contains(u.getId()))
+                        .build())
+                .sorted(Comparator.comparing(u -> normalizeForSort(u.fullName())))
+                .collect(Collectors.groupingBy(
+                        u -> getNormalizedFirstLetter(u.fullName()),
+                        TreeMap::new,
+                        Collectors.toList()
+                ));
+    }
+
+
+    private String normalizeForSort(String name) {
+        if (name == null || name.isBlank()) return "";
+        String normalized = Normalizer.normalize(name.trim().toUpperCase().replace('Đ', 'D'), Normalizer.Form.NFD);
+        return normalized.replaceAll("\\p{InCombiningDiacriticalMarks}+", "");
+    }
+
+    private String getNormalizedFirstLetter(String name) {
+        String normalized = normalizeForSort(name);
+        if (normalized.isEmpty()) return "#";
+
+        char firstChar = normalized.charAt(0);
+        if (firstChar >= 'A' && firstChar <= 'Z') return String.valueOf(firstChar);
+        if (Character.isDigit(firstChar)) return String.valueOf(firstChar);
+        return "#";
+    }
+
+    @Override
+    public PageResponse<List<SearchMemberResponse>> searchMembersToAdd(String conversationId, String query, int page, int size) {
+        String currentUserId = securityUtil.getCurrentUserId();
+        Pageable pageable = PageRequest.of(page, size);
+
+        final Set<String> memberIds = (conversationId == null || conversationId.isBlank())
+                ? new HashSet<>()
+                : conversationRepository.findById(conversationId)
+                    .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND))
+                    .getMembers().stream()
+                    .map(ConversationMember::getUserId)
+                    .collect(Collectors.toSet());
+
+        Page<ChatUser> candidatesPage;
+
+        if (isPhoneNumber(query)) {
+            Optional<ChatUser> userOpt = chatUserRepository.findByPhoneNumber(query.trim());
+            List<ChatUser> list = userOpt.map(Collections::singletonList).orElse(Collections.emptyList());
+            candidatesPage = new PageImpl<>(list, pageable, list.size());
+        } else {
+            ChatUser currentUser = chatUserRepository.findById(currentUserId).orElse(null);
+            if (currentUser != null && !currentUser.getFriendIds().isEmpty()) {
+                candidatesPage = chatUserRepository.findByIdInAndFullNameContainingIgnoreCase(
+                        currentUser.getFriendIds(), query.trim(), pageable);
+            } else {
+                candidatesPage = Page.empty(pageable);
+            }
+        }
+
+        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+        return PageResponse.fromPage(candidatesPage, u -> SearchMemberResponse.builder()
+                .userId(u.getId())
+                .fullName(u.getFullName())
+                .avatar(u.getAvatar() != null ? baseUrl + u.getAvatar() : null)
+                .phoneNumber(isPhoneNumber(query) ? u.getPhoneNumber() : null)
+                .isAlreadyMember(memberIds.contains(u.getId()))
+                .build());
+    }
+
+    private boolean isPhoneNumber(String query) {
+        return query.matches("\\d{9,11}");
     }
 
     private OffsetDateTime toOffset(LocalDateTime time) {
