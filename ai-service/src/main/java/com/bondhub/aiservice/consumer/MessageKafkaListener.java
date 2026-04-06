@@ -1,13 +1,11 @@
 package com.bondhub.aiservice.consumer;
 
-import com.bondhub.aiservice.service.MessageIngestionService;
+import com.bondhub.aiservice.service.retrival.memory.MessageIngestionService;
 import com.bondhub.common.event.ai.AiMessageSaveEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
-
-import java.util.UUID;
 
 @Component
 @Slf4j
