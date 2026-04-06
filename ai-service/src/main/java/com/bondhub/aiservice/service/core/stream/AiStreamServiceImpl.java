@@ -1,4 +1,4 @@
-package com.bondhub.aiservice.service;
+package com.bondhub.aiservice.service.core.stream;
 
 import com.bondhub.aiservice.config.BondHubAssistant;
 import com.bondhub.common.event.ai.AiMessageSaveEvent;
@@ -12,10 +12,12 @@ import reactor.core.publisher.Sinks;
 @Service
 @Slf4j
 @RequiredArgsConstructor
-public class AiStreamService {
+public class AiStreamServiceImpl implements AiStreamService {
+
     private final BondHubAssistant assistant;
     private final KafkaTemplate<String, Object> kafkaTemplate;
 
+    @Override
     public Flux<String> streamChat(String userId, String chatId, String userMessage) {
         Sinks.Many<String> sink = Sinks.many().unicast().onBackpressureBuffer();
         StringBuilder fullContent = new StringBuilder();

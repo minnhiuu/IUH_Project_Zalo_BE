@@ -17,7 +17,7 @@ import com.bondhub.userservice.client.FileServiceClient;
 import com.bondhub.userservice.dto.request.BioUpdateRequest;
 import com.bondhub.userservice.dto.request.elasticsearch.UserIndexRequest;
 import com.bondhub.userservice.dto.request.user.UserCreateRequest;
-import com.bondhub.userservice.dto.request.user.UserUpdateRequest;
+import com.bondhub.common.dto.client.userservice.user.request.UserUpdateRequest;
 import com.bondhub.userservice.dto.request.user.AvatarUpdateRequest;
 import com.bondhub.userservice.dto.request.user.BackgroundUpdateRequest;
 import com.bondhub.userservice.dto.response.user.AccountResponse;
@@ -268,8 +268,10 @@ public class UserServiceImpl implements UserService {
 
         String oldAvatarKey = user.getAvatar();
 
+        String email = securityUtil.getCurrentEmail();
+
         ApiResponse<FileUploadResponse> response = fileServiceClient
-                .uploadFile(request.file());
+                .uploadFile(accountId, email, request.file());
         if (response != null && response.data() != null) {
             String key = response.data().key();
             user.setAvatar(key);
@@ -306,8 +308,10 @@ public class UserServiceImpl implements UserService {
 
         String oldBackgroundKey = user.getBackground();
 
+        String email = securityUtil.getCurrentEmail();
+
         ApiResponse<FileUploadResponse> response = fileServiceClient
-                .uploadFile(request.file());
+                .uploadFile(accountId, email, request.file());
         if (response != null && response.data() != null) {
             String key = response.data().key();
             user.setBackground(key);

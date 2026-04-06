@@ -1,7 +1,8 @@
 package com.bondhub.aiservice.config;
 
 import com.bondhub.aiservice.model.MongoChatMemoryStore;
-import com.bondhub.aiservice.service.*;
+import com.bondhub.aiservice.service.ai.*;
+import com.bondhub.aiservice.tools.ZaloAssistantTools;
 import dev.langchain4j.memory.chat.ChatMemoryProvider;
 import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 import dev.langchain4j.model.chat.ChatLanguageModel;
@@ -118,29 +119,48 @@ public class AssistantConfig {
     }
 
     @Bean
-    AnalyzerService analyzerService(@Qualifier("logicModel") ChatLanguageModel chatModel,
-                                    ChatMemoryProvider chatMemoryProvider) {
+    AnalyzerService analyzerService(@Qualifier("logicModel") ChatLanguageModel chatModel) {
         return AiServices.builder(AnalyzerService.class)
                 .chatLanguageModel(chatModel)
-                .chatMemoryProvider(chatMemoryProvider)
+                // KHÔNG có .chatMemoryProvider() — Stateless by design
+                // Analyzer chỉ ra quyết định, không lưu gì vào DB
                 .build();
     }
 
     @Bean
-    GraderService graderService(@Qualifier("logicModel") ChatLanguageModel chatModel,
-                                ChatMemoryProvider chatMemoryProvider) {
+    GraderService graderService(@Qualifier("logicModel") ChatLanguageModel chatModel) {
         return AiServices.builder(GraderService.class)
                 .chatLanguageModel(chatModel)
-                .chatMemoryProvider(chatMemoryProvider)
+                // KHÔNG có .chatMemoryProvider() — Stateless by design
+                // Grader chỉ chấm điểm, không lưu gì vào DB
                 .build();
     }
 
+    /** QueryRewriter: gpt-4o-mini — stateless, biến câu hỏi mơ hồ thành câu đầy đủ thực thể */
+    @Bean
+    QueryRewriterService queryRewriterService(@Qualifier("logicModel") ChatLanguageModel chatModel) {
+        return AiServices.builder(QueryRewriterService.class)
+                .chatLanguageModel(chatModel)
+                // KHÔNG có .chatMemoryProvider() — Stateless by design
+                .build();
+    }
+
+    /**
+     * GeneratorService — Streaming + ChatMemory + ZaloTools.
+     * ZaloAssistantTools được đăng ký để AI có thể gọi Tool Calling:
+     *   - getMyProfile()         → UserService
+     *   - getMyFriends()         → FriendService
+     *   - getMyConversations()   → MessageService
+     *   - getRecentMessages(id)  → MessageService
+     */
     @Bean
     GeneratorService generatorService(StreamingChatLanguageModel streamingModel,
-                                      ChatMemoryProvider chatMemoryProvider) {
+                                      ChatMemoryProvider chatMemoryProvider,
+                                      ZaloAssistantTools zaloTools) {
         return AiServices.builder(GeneratorService.class)
                 .streamingChatLanguageModel(streamingModel)
                 .chatMemoryProvider(chatMemoryProvider)
+                .tools(zaloTools)
                 .build();
     }
 }

@@ -18,31 +18,37 @@ import java.util.List;
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/messages")
-@Tag(name = "Chat", description = "Real-time chat REST API")
-public class ChatController {
+@Tag(name = "Conversation", description = "Room-centric Chat REST API (ObjectId-based)")
+public class ConversationController {
 
     private final MessageService messageService;
     private final ConversationService conversationService;
 
+    // ─── Gửi tin nhắn ────────────────────────────────────────────────────────
+
     @PostMapping("/send")
-    @Operation(summary = "Send a message (REST). Delivery via Kafka → socket-service → WebSocket.")
+    @Operation(summary = "Gửi tin nhắn vào phòng chat. Delivery via Kafka → socket-service → WebSocket.")
     public ResponseEntity<ApiResponse<Void>> sendMessage(@RequestBody MessageSendRequest request) {
         messageService.sendMessage(request);
         return ResponseEntity.ok(ApiResponse.success(null));
     }
 
-    @GetMapping("/{recipientId}")
-    @Operation(summary = "Get chat messages by recipient ID")
+    // ─── Lấy tin nhắn theo conversationId (ObjectId) ─────────────────────────
+
+    @GetMapping("/conversations/{conversationId}/messages")
+    @Operation(summary = "Lấy tin nhắn của phòng chat theo conversationId. Kiểm tra quyền thành viên.")
     public ResponseEntity<ApiResponse<PageResponse<List<MessageResponse>>>> getChatMessages(
-            @PathVariable String recipientId,
+            @PathVariable String conversationId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         return ResponseEntity.ok(ApiResponse.success(
-                messageService.findChatMessages(recipientId, page, size)));
+                messageService.findChatMessages(conversationId, page, size)));
     }
 
+    // ─── Danh sách phòng chat ─────────────────────────────────────────────────
+
     @GetMapping("/conversations")
-    @Operation(summary = "Get all chat rooms/conversations for the current user")
+    @Operation(summary = "Lấy danh sách phòng chat của currentUser (phân trang, sắp xếp theo lastMessage)")
     public ResponseEntity<ApiResponse<PageResponse<List<ConversationResponse>>>> getMyConversations(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
@@ -50,22 +56,36 @@ public class ChatController {
                 conversationService.getUserConversations(page, size)));
     }
 
+    // ─── Get-or-create phòng chat 1-1 với partner ────────────────────────────
+
+    @GetMapping("/conversations/partner/{partnerId}")
+    @Operation(summary = "Lấy hoặc tạo phòng chat 1-1 với partner. Frontend gọi trước khi gửi tin nhắn mới.")
+    public ResponseEntity<ApiResponse<ConversationResponse>> getOrCreateConversationWithPartner(
+            @PathVariable String partnerId) {
+        return ResponseEntity.ok(ApiResponse.success(
+                conversationService.getOrCreateConversationForUser(partnerId)));
+    }
+
+    // ─── Đọc / Read-receipt ───────────────────────────────────────────────────
+
     @PutMapping("/conversations/{conversationId}/read")
-    @Operation(summary = "Mark a conversation as read")
+    @Operation(summary = "Đánh dấu đã đọc conversation. Kiểm tra quyền thành viên.")
     public ResponseEntity<ApiResponse<Void>> markAsRead(@PathVariable String conversationId) {
         conversationService.markAsRead(conversationId);
         return ResponseEntity.ok(ApiResponse.success(null));
     }
 
+    // ─── Thu hồi / Xóa ───────────────────────────────────────────────────────
+
     @PatchMapping("/{id}/revoke")
-    @Operation(summary = "Revoke a message for everyone (sender only)")
+    @Operation(summary = "Thu hồi tin nhắn (chỉ người gửi)")
     public ResponseEntity<ApiResponse<Void>> revokeMessage(@PathVariable String id) {
         messageService.revokeMessage(id);
         return ResponseEntity.ok(ApiResponse.success(null));
     }
 
     @DeleteMapping("/me/{id}")
-    @Operation(summary = "Delete a message only for the current user")
+    @Operation(summary = "Xóa tin nhắn chỉ phía mình")
     public ResponseEntity<ApiResponse<Void>> deleteMessageForMe(@PathVariable String id) {
         messageService.deleteMessageForMe(id);
         return ResponseEntity.ok(ApiResponse.success(null));

@@ -23,7 +23,11 @@ public class FeignErrorDecoder implements ErrorDecoder {
     @Override
     public Exception decode(String methodKey, Response response) {
         try (InputStream bodyIs = response.body().asInputStream()) {
-            ApiResponse<?> apiResponse = objectMapper.readValue(bodyIs, ApiResponse.class);
+            byte[] bodyBytes = bodyIs.readAllBytes();
+            String responseBody = new String(bodyBytes, java.nio.charset.StandardCharsets.UTF_8);
+            log.error("==========================================={}", responseBody);
+            
+            ApiResponse<?> apiResponse = objectMapper.readValue(responseBody, ApiResponse.class);
             ErrorCode errorCode = ErrorCode.fromCode(apiResponse.code());
             log.error("Feign error: {} - {}", errorCode.getCode(), errorCode.getMessageKey());
             return new AppException(errorCode);

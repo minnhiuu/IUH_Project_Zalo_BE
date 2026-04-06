@@ -1,11 +1,9 @@
 package com.bondhub.messageservice.service.message;
 
-import com.bondhub.common.dto.client.userservice.user.response.UserSummaryResponse;
 import com.bondhub.common.utils.S3Util;
 import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
-import com.bondhub.messageservice.client.UserServiceClient;
 import com.bondhub.messageservice.dto.response.ChatNotification;
 import com.bondhub.messageservice.dto.response.ReplyMetadataResponse;
 import com.bondhub.messageservice.model.Conversation;
@@ -15,15 +13,15 @@ import com.bondhub.messageservice.model.Message;
 import com.bondhub.messageservice.model.ChatUser;
 import com.bondhub.common.enums.MessageStatus;
 import com.bondhub.common.enums.MessageType;
-import com.bondhub.messageservice.repository.ChatMessageRepository;
+import com.bondhub.messageservice.repository.ConversationRepository;
+import com.bondhub.messageservice.repository.MessageRepository;
 import com.bondhub.messageservice.repository.ChatUserRepository;
-import com.bondhub.messageservice.service.conversation.ConversationService;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import com.bondhub.common.dto.client.socketservice.SocketEvent;
-import com.bondhub.common.enums.SocketEventType;
 import com.bondhub.common.dto.client.messageservice.MessageSendRequest;
 import com.bondhub.common.event.ai.AiMessageSaveEvent;
+import com.bondhub.common.dto.client.socketservice.SocketEvent;
+import com.bondhub.common.enums.SocketEventType;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -40,7 +38,6 @@ import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.data.mongodb.core.FindAndModifyOptions;
 
-import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -48,12 +45,12 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 @Slf4j
 public class MessageServiceImpl implements MessageService {
-    private final ChatMessageRepository chatMessageRepository;
+
+    private final MessageRepository messageRepository;
+    private final ConversationRepository conversationRepository;
     private final ChatUserRepository chatUserRepository;
-    private final ConversationService conversationService;
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final SecurityUtil securityUtil;
-    private final UserServiceClient userServiceClient;
     private final MongoTemplate mongoTemplate;
     private final MessageMapper messageMapper;
 
@@ -66,230 +63,125 @@ public class MessageServiceImpl implements MessageService {
     @Value("${kafka.topics.socket-events}")
     private String socketEventsTopic;
 
-    @Override
-    public Message save(Message message) {
-        var room = conversationService
-                .getDirectConversation(message.getSenderId(), message.getRecipientId(), true)
-                .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
-        message.setConversationId(room.getConversationId());
-
-        // Lookup sender info for snapshot (Cold Start if missing)
-        ChatUser sender = chatUserRepository.findById(message.getSenderId())
-                .orElseGet(() -> fetchAndSaveUserFromUserService(message.getSenderId()));
-
-        message.setSenderName(sender.getFullName());
-        message.setSenderAvatar(sender.getAvatar());
-
-        chatMessageRepository.save(message);
-        return message;
-    }
-
-    private ChatUser fetchAndSaveUserFromUserService(String userId) {
-
-        log.info("Cold Start: Fetching user {} from user-service", userId);
-        UserSummaryResponse userDto = userServiceClient.getUserById(userId).data();
-        ChatUser mirrorUser = ChatUser.builder()
-                .id(userDto.id())
-                .fullName(userDto.fullName())
-                .avatar(userDto.avatar())
-                .lastUpdatedAt(LocalDateTime.now())
-                .build();
-        return chatUserRepository.save(mirrorUser);
-    }
+    // ─────────────────────────── Lấy tin nhắn ───────────────────────────
 
     @Override
-    public PageResponse<List<MessageResponse>> findChatMessages(String recipientId, int page, int size) {
+    public PageResponse<List<MessageResponse>> findChatMessages(String conversationId, int page, int size) {
         String currentUserId = securityUtil.getCurrentUserId();
-        var roomOpt = conversationService.getDirectConversation(currentUserId, recipientId, false);
+
+        // Kiểm tra quyền: user phải là thành viên của phòng chat
+        Conversation room = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
+        assertMember(room, currentUserId);
 
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+        Page<Message> messagePage = messageRepository.findByConversationIdAndNotDeleted(
+                conversationId, currentUserId, pageable);
 
-        if (roomOpt.isEmpty()) {
-            return PageResponse.empty(pageable);
-        }
-
-        Page<Message> messagePage = chatMessageRepository.findByConversationIdAndNotDeleted(
-                roomOpt.get().getConversationId(),
-                currentUserId, pageable);
         String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
-
         List<MessageResponse> dtos = messagePage.getContent().stream()
                 .map(msg -> messageMapper.mapToMessageResponse(msg, baseUrl))
                 .collect(Collectors.toList());
 
         enrichMessages(dtos);
-
         return PageResponse.fromPageData(messagePage, dtos);
     }
 
-    private void enrichMessages(List<MessageResponse> dtos) {
-        Set<String> userIds = new HashSet<>();
-        dtos.forEach(d -> {
-            userIds.add(d.senderId());
-            if (d.replyTo() != null) {
-                userIds.add(d.replyTo().senderId());
-            }
-        });
-
-        if (userIds.isEmpty())
-            return;
-
-        Map<String, ChatUser> userMap = chatUserRepository.findAllById(userIds).stream()
-                .collect(Collectors.toMap(ChatUser::getId, u -> u));
-
-        // Note: record fields are accessed via methodName() not getMethodName()
-        for (int i = 0; i < dtos.size(); i++) {
-            MessageResponse d = dtos.get(i);
-            MessageResponse enriched = d;
-
-            ChatUser sender = userMap.get(d.senderId());
-            if (sender != null) {
-                enriched = enriched.withSenderName(sender.getFullName())
-                        .withSenderAvatar(sender.getAvatar() != null
-                                ? S3Util.getS3BaseUrl(bucketName, region) + sender.getAvatar()
-                                : null);
-            }
-
-            if (d.replyTo() != null) {
-                ChatUser replySender = userMap.get(d.replyTo().senderId());
-                if (replySender != null) {
-                    ReplyMetadataResponse enrichedReply = d.replyTo().withSenderName(replySender.getFullName());
-                    enriched = enriched.withReplyTo(enrichedReply);
-                }
-            }
-            dtos.set(i, enriched);
-        }
-    }
+    // ─────────────────────────── Gửi tin nhắn ───────────────────────────
 
     @Override
     public void sendMessage(MessageSendRequest request) {
+        String currentUserId = securityUtil.getCurrentUserId();
+
+        // 1. Tìm phòng chat bằng ObjectId — kiểm tra quyền thành viên
+        Conversation room = conversationRepository.findById(request.conversationId())
+                .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
+        assertMember(room, currentUserId);
+
+        // 2. Enrich sender info
+        ChatUser sender = chatUserRepository.findById(currentUserId).orElse(null);
+
+        // 3. Lưu tin nhắn
         Message message = Message.builder()
-                .senderId(securityUtil.getCurrentUserId())
-                .recipientId(request.recipientId())
+                .conversationId(room.getId())
+                .senderId(currentUserId)
+                .senderName(sender != null ? sender.getFullName() : null)
+                .senderAvatar(sender != null ? sender.getAvatar() : null)
                 .content(request.content())
                 .clientMessageId(request.clientMessageId())
                 .replyTo(request.replyTo())
                 .isForwarded(request.isForwarded())
                 .type(MessageType.CHAT)
                 .build();
+        messageRepository.save(message);
 
-        Message savedMsg = save(message);
-        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
-
-        // TODO: For non-text messages, consider enriching content with metadata (e.g.
-        // filename) instead of just showing [FILE]
-        String previewContent = switch (savedMsg.getType() == null ? MessageType.CHAT
-                : savedMsg.getType()) {
+        // 4. Xây dựng last message preview
+        String previewContent = switch (message.getType() == null ? MessageType.CHAT : message.getType()) {
             case IMAGE -> "[IMAGE]";
             case FILE -> "[FILE]";
-            default -> savedMsg.getContent();
+            default -> message.getContent();
         };
-
         LastMessageInfo lastInfo = LastMessageInfo.builder()
-                .messageId(savedMsg.getId())
-                .senderId(savedMsg.getSenderId())
+                .messageId(message.getId())
+                .senderId(currentUserId)
                 .content(previewContent)
-                .timestamp(savedMsg.getCreatedAt())
-                .type(savedMsg.getType())
-                .status(savedMsg.getStatus())
+                .timestamp(message.getCreatedAt())
+                .type(message.getType())
+                .status(message.getStatus())
                 .build();
 
-        Query query = new Query(Criteria.where("conversationId").is(savedMsg.getConversationId()));
-        Update update = new Update()
-                .set("lastMessage", lastInfo)
-                .inc("unreadCounts." + savedMsg.getRecipientId(), 1);
+        // 5. Cập nhật lastMessage + tăng unreadCount cho tất cả member trừ sender
+        Query query = new Query(Criteria.where("id").is(room.getId()));
+        Update update = new Update().set("lastMessage", lastInfo);
+        room.getMembers().stream()
+                .filter(m -> !m.getUserId().equals(currentUserId))
+                .forEach(m -> update.inc("unreadCounts." + m.getUserId(), 1));
 
         Conversation updatedRoom = mongoTemplate.findAndModify(
-                query,
-                update,
+                query, update,
                 FindAndModifyOptions.options().returnNew(true),
                 Conversation.class);
 
-        Integer recipientUnreadCount = updatedRoom != null
-                ? updatedRoom.getUnreadCounts().getOrDefault(savedMsg.getRecipientId(), 0)
-                : 1;
-        Integer senderUnreadCount = updatedRoom != null
-                ? updatedRoom.getUnreadCounts().getOrDefault(savedMsg.getSenderId(), 0)
-                : 0;
+        log.info("[Chat] Saved message & updated conversation state for room: {}", room.getId());
 
-        log.info("[Chat] Publishing real-time message event for: {}", savedMsg.getRecipientId());
+        // 6. Push notification qua Kafka cho từng thành viên
+        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+        Conversation finalRoom = updatedRoom != null ? updatedRoom : room;
 
-        ChatNotification notification = messageMapper.mapToChatNotification(savedMsg, baseUrl, recipientUnreadCount);
+        List<ChatNotification> notifPrototypes = new ArrayList<>(
+                List.of(messageMapper.mapToChatNotification(message, baseUrl, 0)));
+        enrichNotifications(notifPrototypes);
+        ChatNotification baseNotif = notifPrototypes.get(0);
 
-        // Enrich notification before sending
-        List<ChatNotification> notifList = new ArrayList<>(List.of(notification));
-        enrichNotifications(notifList);
-        notification = notifList.get(0);
+        finalRoom.getMembers().forEach(member -> {
+            boolean isFromMe = member.getUserId().equals(currentUserId);
+            Integer unreadCount = finalRoom.getUnreadCounts().getOrDefault(member.getUserId(), 0);
 
-        // For recipient: isFromMe = false
-        notification = notification.toBuilder().isFromMe(false).build();
-        kafkaTemplate.send(socketEventsTopic,
-                new SocketEvent(SocketEventType.MESSAGE, savedMsg.getRecipientId(), "/queue/messages", notification));
+            ChatNotification personalNotif = baseNotif.toBuilder()
+                    .isFromMe(isFromMe)
+                    .unreadCount(unreadCount)
+                    .build();
 
-        if (!savedMsg.getSenderId().equals(savedMsg.getRecipientId())) {
-            ChatNotification senderNotif = messageMapper.mapToChatNotification(savedMsg, baseUrl, senderUnreadCount);
-
-            List<ChatNotification> senderNotifList = new ArrayList<>(List.of(senderNotif));
-            enrichNotifications(senderNotifList);
-            senderNotif = senderNotifList.get(0);
-
-            // For sender: isFromMe = true (sync self devices)
-            senderNotif = senderNotif.toBuilder().isFromMe(true).build();
             kafkaTemplate.send(socketEventsTopic,
-                    new SocketEvent(SocketEventType.MESSAGE, savedMsg.getSenderId(), "/queue/messages", senderNotif));
-        }
+                    new SocketEvent(SocketEventType.MESSAGE, member.getUserId(),
+                            "/queue/messages", personalNotif));
+        });
 
-        // --- NEW: Ingest into AI system ---
+        // 7. Ingest vào AI system
         log.info("[Kafka] Sending user message to 'message-created' for AI ingestion.");
         kafkaTemplate.send("message-created", AiMessageSaveEvent.builder()
-                .userId(savedMsg.getSenderId())
-                .chatId(savedMsg.getConversationId())
-                .content(savedMsg.getContent())
+                .userId(currentUserId)
+                .chatId(room.getId())
+                .content(message.getContent())
                 .build());
     }
 
-    private void enrichNotifications(List<ChatNotification> notifs) {
-        Set<String> userIds = new HashSet<>();
-        notifs.forEach(n -> {
-            userIds.add(n.senderId());
-            if (n.replyTo() != null) {
-                userIds.add(n.replyTo().senderId());
-            }
-        });
-
-        if (userIds.isEmpty())
-            return;
-
-        Map<String, ChatUser> userMap = chatUserRepository.findAllById(userIds).stream()
-                .collect(Collectors.toMap(ChatUser::getId, u -> u));
-
-        for (int i = 0; i < notifs.size(); i++) {
-            ChatNotification n = notifs.get(i);
-            ChatNotification enriched = n;
-
-            ChatUser sender = userMap.get(n.senderId());
-            if (sender != null) {
-                enriched = enriched.withSenderName(sender.getFullName())
-                        .withSenderAvatar(sender.getAvatar() != null
-                                ? S3Util.getS3BaseUrl(bucketName, region) + sender.getAvatar()
-                                : null);
-            }
-
-            if (n.replyTo() != null) {
-                ChatUser replySender = userMap.get(n.replyTo().senderId());
-                if (replySender != null) {
-                    ReplyMetadataResponse enrichedReply = n.replyTo().withSenderName(replySender.getFullName());
-                    enriched = enriched.withReplyTo(enrichedReply);
-                }
-            }
-            notifs.set(i, enriched);
-        }
-    }
+    // ─────────────────────────── Thu hồi / Xóa ───────────────────────────
 
     @Override
     public void revokeMessage(String messageId) {
         String currentUserId = securityUtil.getCurrentUserId();
-        Message message = chatMessageRepository.findById(messageId)
+        Message message = messageRepository.findById(messageId)
                 .orElseThrow(() -> new AppException(ErrorCode.MESSAGE_NOT_FOUND));
 
         if (!message.getSenderId().equals(currentUserId)) {
@@ -299,7 +191,7 @@ public class MessageServiceImpl implements MessageService {
         message.setStatus(MessageStatus.REVOKED);
         message.setContent(null);
         message.setReplyTo(null);
-        chatMessageRepository.save(message);
+        messageRepository.save(message);
 
         updateLastMessageIfRevoked(message);
         broadcastStatusChange(message.getConversationId(), messageId, MessageStatus.REVOKED);
@@ -313,39 +205,106 @@ public class MessageServiceImpl implements MessageService {
         mongoTemplate.updateFirst(query, update, Message.class);
     }
 
+    // ─────────────────────────── Private helpers ───────────────────────────
+
+    /**
+     * Kiểm tra user có trong members của conversation không.
+     * Nếu không → throw UNAUTHORIZED (403).
+     */
+    private void assertMember(Conversation room, String userId) {
+        boolean isMember = room.getMembers().stream()
+                .anyMatch(m -> m.getUserId().equals(userId));
+        if (!isMember) {
+            throw new AppException(ErrorCode.UNAUTHORIZED);
+        }
+    }
+
+    private void enrichMessages(List<MessageResponse> dtos) {
+        Set<String> userIds = new HashSet<>();
+        dtos.forEach(d -> {
+            userIds.add(d.senderId());
+            if (d.replyTo() != null) userIds.add(d.replyTo().senderId());
+        });
+        if (userIds.isEmpty()) return;
+
+        Map<String, ChatUser> userMap = chatUserRepository.findAllById(userIds).stream()
+                .collect(Collectors.toMap(ChatUser::getId, u -> u));
+        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+
+        for (int i = 0; i < dtos.size(); i++) {
+            MessageResponse d = dtos.get(i);
+            MessageResponse enriched = d;
+            ChatUser sender = userMap.get(d.senderId());
+            if (sender != null) {
+                enriched = enriched.withSenderName(sender.getFullName())
+                        .withSenderAvatar(sender.getAvatar() != null
+                                ? baseUrl + sender.getAvatar() : null);
+            }
+            if (d.replyTo() != null) {
+                ChatUser replySender = userMap.get(d.replyTo().senderId());
+                if (replySender != null) {
+                    enriched = enriched.withReplyTo(d.replyTo().withSenderName(replySender.getFullName()));
+                }
+            }
+            dtos.set(i, enriched);
+        }
+    }
+
+    private void enrichNotifications(List<ChatNotification> notifs) {
+        Set<String> userIds = new HashSet<>();
+        notifs.forEach(n -> {
+            userIds.add(n.senderId());
+            if (n.replyTo() != null) userIds.add(n.replyTo().senderId());
+        });
+        if (userIds.isEmpty()) return;
+
+        Map<String, ChatUser> userMap = chatUserRepository.findAllById(userIds).stream()
+                .collect(Collectors.toMap(ChatUser::getId, u -> u));
+        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+
+        for (int i = 0; i < notifs.size(); i++) {
+            ChatNotification n = notifs.get(i);
+            ChatNotification enriched = n;
+            ChatUser sender = userMap.get(n.senderId());
+            if (sender != null) {
+                enriched = enriched.withSenderName(sender.getFullName())
+                        .withSenderAvatar(sender.getAvatar() != null
+                                ? baseUrl + sender.getAvatar() : null);
+            }
+            if (n.replyTo() != null) {
+                ChatUser replySender = userMap.get(n.replyTo().senderId());
+                if (replySender != null) {
+                    ReplyMetadataResponse enrichedReply = n.replyTo().withSenderName(replySender.getFullName());
+                    enriched = enriched.withReplyTo(enrichedReply);
+                }
+            }
+            notifs.set(i, enriched);
+        }
+    }
+
     private void updateLastMessageIfRevoked(Message revokedMsg) {
-        Query query = new Query(Criteria.where("conversationId").is(revokedMsg.getConversationId())
+        Query query = new Query(Criteria.where("id").is(revokedMsg.getConversationId())
                 .and("lastMessage.messageId").is(revokedMsg.getId()));
         Update update = new Update()
                 .set("lastMessage.content", "Tin nhắn đã được thu hồi")
-                .set("lastMessage.status", com.bondhub.common.enums.MessageStatus.REVOKED);
+                .set("lastMessage.status", MessageStatus.REVOKED);
         mongoTemplate.updateFirst(query, update, Conversation.class);
     }
 
     private void broadcastStatusChange(String conversationId, String messageId, MessageStatus newStatus) {
-        Conversation conversation = mongoTemplate.findOne(
-                new Query(Criteria.where("conversationId").is(conversationId)),
-                Conversation.class);
-
-        if (conversation == null)
-            return;
+        Conversation conversation = conversationRepository.findById(conversationId).orElse(null);
+        if (conversation == null) return;
 
         for (ConversationMember member : conversation.getMembers()) {
-            Map<String, Object> personalPayload = new HashMap<>();
-            personalPayload.put("type", "MESSAGE_STATUS_UPDATE");
-            personalPayload.put("conversationId", conversationId);
-            personalPayload.put("messageId", messageId);
-            personalPayload.put("newStatus", newStatus);
-
-            String partnerId = conversation.isGroup() ? conversationId
-                    : (member.getUserId().equals(conversation.getSenderId())
-                            ? conversation.getRecipientId()
-                            : conversation.getSenderId());
-            personalPayload.put("partnerId", partnerId);
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("type", "MESSAGE_STATUS_UPDATE");
+            payload.put("conversationId", conversationId);
+            payload.put("messageId", messageId);
+            payload.put("newStatus", newStatus);
 
             kafkaTemplate.send(socketEventsTopic,
-                    new SocketEvent(SocketEventType.MESSAGE, member.getUserId(), "/queue/status-updates",
-                            personalPayload));
+                    new SocketEvent(SocketEventType.MESSAGE, member.getUserId(),
+                            "/queue/status-updates", payload));
         }
     }
 }

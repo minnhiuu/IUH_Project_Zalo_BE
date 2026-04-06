@@ -45,3 +45,7 @@ eureka:
     fetch-registry: true
   instance:
     prefer-ip-address: true
+
+feign:
+  okhttp:
+    enabled: true

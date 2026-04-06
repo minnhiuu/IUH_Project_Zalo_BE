@@ -21,7 +21,6 @@ public record ChatNotification(
                 String senderId,
                 String senderName,
                 String senderAvatar,
-                String recipientId,
                 String content,
                 MessageType type,
                 String clientMessageId,
