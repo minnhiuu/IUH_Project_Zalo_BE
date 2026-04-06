@@ -3,8 +3,8 @@ package com.bondhub.aiservice.tools;
 import com.bondhub.aiservice.client.friendservice.FriendServiceClient;
 import com.bondhub.aiservice.client.messageservice.MessageServiceClient;
 import com.bondhub.aiservice.client.userservice.UserServiceClient;
-import com.bondhub.aiservice.security.AiSecurityContextHolder;
-import com.bondhub.aiservice.security.AiUserContextInterceptor;
+import com.bondhub.aiservice.util.HeaderUtil;
+import com.bondhub.aiservice.util.StringUtil;
 import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.common.dto.client.userservice.user.request.BioUpdateRequest;
 import com.bondhub.common.dto.client.userservice.user.request.UserUpdateRequest;
@@ -14,10 +14,14 @@ import dev.langchain4j.agent.tool.Tool;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
 import java.time.LocalDate;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+
+import static com.bondhub.aiservice.util.HeaderUtil.*;
+import static com.bondhub.aiservice.util.StringUtil.clean;
 
 @Component
 @RequiredArgsConstructor
@@ -40,23 +44,7 @@ public class ZaloAssistantTools {
         CONV_TO_USER.remove(convId);
     }
 
-    private void activateHeaders() {
-        Map<String, String> headers = null;
-        for (Map.Entry<String, String> entry : CONV_TO_USER.entrySet()) {
-            headers = AiSecurityContextHolder.getByUserId(entry.getValue());
-            if (headers != null) break;
-        }
-        if (headers != null) {
-            AiUserContextInterceptor.FORWARD_HEADERS.set(headers);
-            log.info("[Tool] Headers activated: {}", headers.keySet());
-        } else {
-            log.warn("[Tool] No headers found from any registered conversation!");
-        }
-    }
 
-    private void deactivateHeaders() {
-        AiUserContextInterceptor.FORWARD_HEADERS.remove();
-    }
 
     // ══ USER TOOLS ════════════════════════════════════════════════════════════
 
@@ -64,7 +52,7 @@ public class ZaloAssistantTools {
     public String getMyProfile() {
         log.info("[Tool] getMyProfile called");
         try {
-            activateHeaders();
+            activateHeaders(CONV_TO_USER);
             var resp = userClient.getMyProfile();
             return toToolResult(resp, "profile người dùng");
         } catch (Exception e) {
@@ -75,22 +63,23 @@ public class ZaloAssistantTools {
         }
     }
 
-    @Tool("Cập nhật thông tin hồ sơ cá nhân: họ tên, ngày sinh, bio, giới tính. Dùng khi user muốn thay đổi tên hoặc nhiều trường cùng lúc.")
+    @Tool("Cập nhật thông tin hồ sơ cá nhân. Chỉ truyền các trường cần thay đổi, các trường khác để trống.")
     public String updateMyProfile(
-            @P("Họ và tên đầy đủ (bắt buộc)") String fullName,
-            @P("Ngày sinh định dạng yyyy-MM-dd (tuỳ chọn, để null nếu không cập nhật)") String dob,
-            @P("Tiểu sử ngắn (tuỳ chọn, để null nếu không cập nhật)") String bio,
-            @P("Giới tính: MALE, FEMALE hoặc OTHER (tuỳ chọn, để null nếu không cập nhật)") String gender) {
-        log.info("[Tool] updateMyProfile called: fullName={}, dob={}, gender={}", fullName, dob, gender);
+            @P("Họ tên mới (chỉ truyền nếu muốn đổi)") String fullName,
+            @P("Ngày sinh yyyy-MM-dd (chỉ truyền nếu muốn đổi)") String dob,
+            @P("Tiểu sử (chỉ truyền nếu muốn đổi)") String bio,
+            @P("Giới tính: MALE, FEMALE (chỉ truyền nếu muốn đổi)") String gender) {
+        log.info("[Tool] updateMyProfile called: fullName={}, dob={}, bio={}, gender={}", fullName, dob, bio, gender);
         try {
-            activateHeaders();
-            LocalDate parsedDob = (dob != null && !dob.isBlank()) ? LocalDate.parse(dob) : null;
+            activateHeaders(CONV_TO_USER);
+
             UserUpdateRequest request = UserUpdateRequest.builder()
-                    .fullName(fullName)
-                    .dob(parsedDob)
-                    .bio(bio)
-                    .gender(gender)
+                    .fullName(clean(fullName)) 
+                    .dob(StringUtils.hasText(clean(dob)) ? LocalDate.parse(clean(dob)) : null)
+                    .bio(clean(bio))
+                    .gender(clean(gender))
                     .build();
+
             var resp = userClient.updateMyProfile(request);
             return toToolResult(resp, "cập nhật hồ sơ");
         } catch (Exception e) {
@@ -105,7 +94,7 @@ public class ZaloAssistantTools {
     public String updateMyBio(@P("Nội dung bio mới muốn cập nhật") String bio) {
         log.info("[Tool] updateMyBio called with bio='{}'", bio);
         try {
-            activateHeaders();
+            activateHeaders(CONV_TO_USER);
             var resp = userClient.updateMyBio(new BioUpdateRequest(bio));
             return toToolResult(resp, "cập nhật bio");
         } catch (Exception e) {
@@ -123,7 +112,7 @@ public class ZaloAssistantTools {
     public String getMyFriends() {
         log.info("[Tool] getMyFriends called");
         try {
-            activateHeaders();
+            activateHeaders(CONV_TO_USER);
             var resp = friendClient.getMyFriends(0, 50);
             return toToolResult(resp, "danh sách bạn bè");
         } catch (Exception e) {
@@ -138,7 +127,7 @@ public class ZaloAssistantTools {
     public String countMutualFriends(@P("userId của người dùng cần kiểm tra") String userId) {
         log.info("[Tool] countMutualFriends called for userId={}", userId);
         try {
-            activateHeaders();
+            activateHeaders(CONV_TO_USER);
             var resp = friendClient.countMutualFriends(userId);
             return toToolResult(resp, "số bạn bè chung");
         } catch (Exception e) {
@@ -157,7 +146,7 @@ public class ZaloAssistantTools {
     public String getMyConversations() {
         log.info("[Tool] getMyConversations called");
         try {
-            activateHeaders();
+            activateHeaders(CONV_TO_USER);
             var resp = messageClient.getMyConversations(0, 20);
             return toToolResult(resp, "danh sách phòng chat");
         } catch (Exception e) {
@@ -172,7 +161,7 @@ public class ZaloAssistantTools {
     public String getRecentMessages(@P("ID của phòng chat (conversationId)") String conversationId) {
         log.info("[Tool] getRecentMessages called for conversationId={}", conversationId);
         try {
-            activateHeaders();
+            activateHeaders(CONV_TO_USER);
             var resp = messageClient.getMessages(conversationId, 0, 10);
             return toToolResult(resp, "tin nhắn phòng chat");
         } catch (Exception e) {

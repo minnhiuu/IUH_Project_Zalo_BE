@@ -1,11 +1,16 @@
 package com.bondhub.aiservice.util;
 
+import com.bondhub.aiservice.security.AiSecurityContextHolder;
+import com.bondhub.aiservice.security.AiUserContextInterceptor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
+@Slf4j
 public class HeaderUtil {
 
     /** Các header cần forward sang downstream services — đúng case */
@@ -32,5 +37,23 @@ public class HeaderUtil {
             }
         }
         return result;
+    }
+
+    public static void activateHeaders(ConcurrentHashMap<String, String> convToUser) {
+        Map<String, String> headers = null;
+        for (Map.Entry<String, String> entry : convToUser.entrySet()) {
+            headers = AiSecurityContextHolder.getByUserId(entry.getValue());
+            if (headers != null) break;
+        }
+        if (headers != null) {
+            AiUserContextInterceptor.FORWARD_HEADERS.set(headers);
+            log.info("[Tool] Headers activated: {}", headers.keySet());
+        } else {
+            log.warn("[Tool] No headers found from any registered conversation!");
+        }
+    }
+
+    public static void deactivateHeaders() {
+        AiUserContextInterceptor.FORWARD_HEADERS.remove();
     }
 }

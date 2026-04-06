@@ -28,7 +28,8 @@ public class MongoChatMemoryStore implements dev.langchain4j.store.memory.chat.C
             RawChatMemory raw = mongoTemplate.findOne(
                     Query.query(Criteria.where("_id").is(memoryId.toString())),
                     RawChatMemory.class, COLLECTION_NAME);
-            if (raw == null || raw.getMessages() == null) return new ArrayList<>();
+            if (raw == null || raw.getMessages() == null)
+                return new ArrayList<>();
             return raw.getMessages().stream()
                     .map(MongoChatMemoryStore::fromDoc)
                     .filter(Objects::nonNull)
@@ -90,7 +91,8 @@ public class MongoChatMemoryStore implements dev.langchain4j.store.memory.chat.C
     private static ChatMessage fromDoc(Map<String, Object> doc) {
         String type = (String) doc.get("type");
         String text = (String) doc.getOrDefault("text", "");
-        if (type == null) return null;
+        if (type == null)
+            return null;
         return switch (type) {
             case "USER" -> UserMessage.from(text);
             case "AI" -> {
@@ -125,7 +127,8 @@ public class MongoChatMemoryStore implements dev.langchain4j.store.memory.chat.C
 
     public String getCleanHistory(Object memoryId, int limit) {
         List<ChatMessage> allMessages = getMessages(memoryId);
-        if (allMessages.isEmpty()) return "";
+        if (allMessages.isEmpty())
+            return "";
 
         List<String> cleaned = allMessages.stream()
                 .filter(msg -> !(msg instanceof SystemMessage))
@@ -146,9 +149,12 @@ public class MongoChatMemoryStore implements dev.langchain4j.store.memory.chat.C
 
     private static String extractText(ChatMessage msg) {
         try {
-            if (msg instanceof UserMessage um) return um.singleText() != null ? um.singleText().trim() : "";
-            if (msg instanceof AiMessage ai)  return ai.text()       != null ? ai.text().trim()       : "";
-        } catch (Exception ignored) {}
+            if (msg instanceof UserMessage um)
+                return um.singleText() != null ? um.singleText().trim() : "";
+            if (msg instanceof AiMessage ai)
+                return ai.text() != null ? ai.text().trim() : "";
+        } catch (Exception ignored) {
+        }
         return "";
     }
 }

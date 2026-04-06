@@ -14,35 +14,35 @@ public interface AnalyzerService {
          TUYỆT ĐỐI không viết thêm bất kỳ ký tự nào ngoài token đó.
 
          ═══════════════════════════════════════════════
-         QUY TẮC VÀNG (ưu tiên tuyệt đối):
-         - Nếu câu hỏi đã có ĐỦ [Chủ thể] + [Vùng/Đơn vị rõ ràng] → LUÔN trả về COMPLETE.
-         - CÁC CÂU HỎI VỀ DANH TÍNH/CÁ NHÂN (Tên, Email, SĐT, Bio) -> LUÔN trả về COMPLETE để gọi Tool.
-         - Nếu câu hỏi đã rõ ràng → TUYỆT ĐỐI KHÔNG hỏi lại.
-         ═══════════════════════════════════════════════
+         QUY TẮC VÀNG (ưu tiên từ trên xuống dưới):
+         1. CÁC CÂU HỎI VÀ THAO TÁC VỀ BẢN THÂN / CÁ NHÂN (Đổi tên, Cập nhật bio, Bạn bè, Tin nhắn, Đăng xuất) -> LUÔN LUÔN trả về DIRECT. (Bỏ qua các quy tắc dưới).
+         2. Nếu câu hỏi yêu cầu dữ liệu thực tế VÀ đã có ĐỦ [Chủ thể] + [Vùng/Đơn vị rõ ràng] (ví dụ: thời tiết Hà Nội, giá vàng SJC) → LUÔN trả về COMPLETE.
+         3. Nếu câu hỏi đã rõ ràng → TUYỆT ĐỐI KHÔNG hỏi lại bằng MISSING.
+         ════════════════════════════════════════════════════
 
          PHÂN LOẠI:
-         1. DIRECT — câu hỏi KHÔNG cần tìm kiếm dữ liệu mới:
+         1. DIRECT — câu hỏi KHÔNG cần tìm kiếm dữ liệu mới từ Web/RAG:
             - Chào hỏi, giao tiếp xã hội, cảm ơn.
             - Câu hỏi ngày, giờ (đã biết từ thời gian hiện tại).
-            - Câu hỏi về thông tin đã được đề cập trong cuộc trò chuyện.
-
+            - THÔNG TIN CÁ NHÂN VÀ TÀI KHOẢN: 'Tôi là ai?', 'Profile của tôi', 'Xem hồ sơ', 'Tên tôi là gì'.
+            - THAO TÁC CÁ NHÂN: 'Đổi tên', 'Cập nhật bio'.
+         
          2. MISSING:[câu làm rõ] — CHỈ khi câu hỏi THỰC SỰ mơ hồ, thiếu thông tin địa điểm/đối tượng:
             - Thời tiết/giá cả mà KHÔNG có địa điểm nào → hỏi lại.
 
-         3. COMPLETE — câu hỏi cần TRUY XUẤT dữ liệu (Tool Calling, RAG hoặc Web):
-            - THÔNG TIN CÁ NHÂN: 'Tôi là ai?', 'Tên tôi là gì?', 'Số điện thoại của tôi?', 'Profile của tôi'.
+         3. COMPLETE — câu hỏi cần TRUY XUẤT dữ liệu (RAG hoặc Web):
             - Dữ liệu thực tế: Thời tiết/giá vàng/giá xăng KÈM địa điểm.
-            - Tin tức, dự án, dữ liệu doanh nghiệp.
+            - Tin tức, dự án, dữ liệu doanh nghiệp, kiến thức chung.
 
          VÍ DỤ (theo đúng format):
          - 'Xin chào' → DIRECT
-         - 'Tên tôi là gì?' → COMPLETE
-         - 'Tôi là ai?' → COMPLETE
-         - 'Email của tôi là gì?' → COMPLETE
+         - 'Tên tôi là gì?' → DIRECT
+         - 'Hồ sơ của tôi có gì' → DIRECT
+         - 'Cập nhật bio của tôi' → DIRECT
          - 'Thời tiết hôm nay?' → MISSING:Bạn muốn xem thời tiết ở tỉnh/thành phố nào?
          - 'Giá xăng Sài Gòn hôm nay' → COMPLETE
          """)
-   String analyzeAndRoute(@UserMessage String query, @V("currentTime") String currentTime);
+    String analyzeAndRoute(@UserMessage String query, @V("currentTime") String currentTime);
 
    @SystemMessage("""
          Bối cảnh: Bạn vừa hỏi làm rõ '{{lastClarification}}'.
