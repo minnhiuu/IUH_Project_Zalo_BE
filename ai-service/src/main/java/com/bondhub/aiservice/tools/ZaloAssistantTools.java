@@ -6,6 +6,8 @@ import com.bondhub.aiservice.client.userservice.UserServiceClient;
 import com.bondhub.aiservice.security.AiSecurityContextHolder;
 import com.bondhub.aiservice.security.AiUserContextInterceptor;
 import com.bondhub.common.dto.ApiResponse;
+import com.bondhub.common.dto.client.userservice.user.request.BioUpdateRequest;
+import com.bondhub.common.dto.client.userservice.user.request.UserUpdateRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
@@ -13,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDate;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -37,17 +40,7 @@ public class ZaloAssistantTools {
         CONV_TO_USER.remove(convId);
     }
 
-    // ══════════════════════════════════════════════════════════════════════════
-    // INTERNAL: resolve headers → set ThreadLocal → Feign interceptor picks up
-    // ══════════════════════════════════════════════════════════════════════════
-
-    /**
-     * Tìm userId từ bất kỳ convId nào có trong CONV_TO_USER,
-     * rồi lấy headers từ AiSecurityContextHolder.
-     * Set vào ThreadLocal để AiUserContextInterceptor forward cho Feign.
-     */
     private void activateHeaders() {
-        // Lấy entry đầu tiên (hoặc unique match) — mỗi user 1 active AI request
         Map<String, String> headers = null;
         for (Map.Entry<String, String> entry : CONV_TO_USER.entrySet()) {
             headers = AiSecurityContextHolder.getByUserId(entry.getValue());
@@ -65,9 +58,7 @@ public class ZaloAssistantTools {
         AiUserContextInterceptor.FORWARD_HEADERS.remove();
     }
 
-    // ══════════════════════════════════════════════════════════════════════════
-    // USER TOOLS
-    // ══════════════════════════════════════════════════════════════════════════
+    // ══ USER TOOLS ════════════════════════════════════════════════════════════
 
     @Tool("Lấy thông tin cá nhân của người dùng đang đăng nhập: tên, email, số điện thoại, bio, avatar")
     public String getMyProfile() {
@@ -84,9 +75,49 @@ public class ZaloAssistantTools {
         }
     }
 
-    // ══════════════════════════════════════════════════════════════════════════
-    // FRIEND TOOLS
-    // ══════════════════════════════════════════════════════════════════════════
+    @Tool("Cập nhật thông tin hồ sơ cá nhân: họ tên, ngày sinh, bio, giới tính. Dùng khi user muốn thay đổi tên hoặc nhiều trường cùng lúc.")
+    public String updateMyProfile(
+            @P("Họ và tên đầy đủ (bắt buộc)") String fullName,
+            @P("Ngày sinh định dạng yyyy-MM-dd (tuỳ chọn, để null nếu không cập nhật)") String dob,
+            @P("Tiểu sử ngắn (tuỳ chọn, để null nếu không cập nhật)") String bio,
+            @P("Giới tính: MALE, FEMALE hoặc OTHER (tuỳ chọn, để null nếu không cập nhật)") String gender) {
+        log.info("[Tool] updateMyProfile called: fullName={}, dob={}, gender={}", fullName, dob, gender);
+        try {
+            activateHeaders();
+            LocalDate parsedDob = (dob != null && !dob.isBlank()) ? LocalDate.parse(dob) : null;
+            UserUpdateRequest request = UserUpdateRequest.builder()
+                    .fullName(fullName)
+                    .dob(parsedDob)
+                    .bio(bio)
+                    .gender(gender)
+                    .build();
+            var resp = userClient.updateMyProfile(request);
+            return toToolResult(resp, "cập nhật hồ sơ");
+        } catch (Exception e) {
+            log.error("[Tool] updateMyProfile failed: {}", e.getMessage());
+            return "Không thể cập nhật hồ sơ lúc này: " + e.getMessage();
+        } finally {
+            deactivateHeaders();
+        }
+    }
+
+    @Tool("Cập nhật chỉ tiểu sử (bio) của người dùng đang đăng nhập. Dùng khi user chỉ muốn thay đổi bio/giới thiệu bản thân.")
+    public String updateMyBio(@P("Nội dung bio mới muốn cập nhật") String bio) {
+        log.info("[Tool] updateMyBio called with bio='{}'", bio);
+        try {
+            activateHeaders();
+            var resp = userClient.updateMyBio(new BioUpdateRequest(bio));
+            return toToolResult(resp, "cập nhật bio");
+        } catch (Exception e) {
+            log.error("[Tool] updateMyBio failed: {}", e.getMessage());
+            return "Không thể cập nhật bio lúc này: " + e.getMessage();
+        } finally {
+            deactivateHeaders();
+        }
+    }
+
+    // ══ FRIEND TOOLS ══════════════════════════════════════════════════════════
+
 
     @Tool("Lấy danh sách bạn bè hiện tại của người dùng đang đăng nhập")
     public String getMyFriends() {

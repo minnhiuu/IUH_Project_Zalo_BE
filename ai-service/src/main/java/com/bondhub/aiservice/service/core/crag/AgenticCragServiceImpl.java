@@ -250,15 +250,17 @@ public class AgenticCragServiceImpl implements AgenticCragService {
     private Mono<Void> emitMissing(String missingResult, String convId, String conversationId,
                                     String userId, String originalQuery, Sinks.Many<String> sink) {
         return Mono.fromRunnable(() -> {
-            String msg = missingResult.replaceAll("(?i)^MISSING:\\s*", "").trim();
-            saveMessageToDb(conversationId, userId, "ai-assistant-001", msg);
+            String questionText = missingResult.replaceAll("(?i)^MISSING:\\s*", "").trim();
+            // Wrap trong <question> tag để FE có thể nhận dạng khi load lại từ DB
+            String persistContent = "<question>" + questionText + "</question>";
+            saveMessageToDb(conversationId, userId, "ai-assistant-001", persistContent);
             agentStateService.save(convId, AgentState.builder()
                     .conversationId(convId)
-                    .lastQuery(msg)
+                    .lastQuery(questionText)
                     .originalQuery(originalQuery)
                     .currentState("WAIT_FOR_CONTEXT")
                     .build());
-            sink.tryEmitNext("{\"type\":\"CLARIFICATION\",\"content\":\"" + escapeJson(msg) + "\"}");
+            sink.tryEmitNext("{\"type\":\"CLARIFICATION\",\"content\":\"" + escapeJson(questionText) + "\"}");
             sink.tryEmitComplete();
         });
     }

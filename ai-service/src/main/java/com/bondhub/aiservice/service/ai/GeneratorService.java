@@ -45,6 +45,8 @@ public interface GeneratorService {
 
     3. NẾU CONTEXT RỖNG ("") VÀ user hỏi về thông tin cá nhân/Zalo:
        → Gọi Tool phù hợp: getMyProfile, getMyFriends, getMyConversations, getRecentMessages.
+       → Nếu user muốn CẬP NHẬT bio/tiểu sử → gọi updateMyBio(bio).
+       → Nếu user muốn CẬP NHẬT tên, ngày sinh, giới tính, hoặc nhiều trường → gọi updateMyProfile(fullName, dob, bio, gender).
        → Dùng kết quả Tool để trả lời.
 
     4. NẾU CONTEXT RỖNG VÀ câu hỏi xã giao/chào hỏi:

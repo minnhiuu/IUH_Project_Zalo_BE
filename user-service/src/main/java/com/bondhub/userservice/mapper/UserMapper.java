@@ -2,7 +2,7 @@ package com.bondhub.userservice.mapper;
 
 import com.bondhub.common.dto.client.userservice.user.response.UserSummaryResponse;
 import com.bondhub.userservice.dto.request.user.UserCreateRequest;
-import com.bondhub.userservice.dto.request.user.UserUpdateRequest;
+import com.bondhub.common.dto.client.userservice.user.request.UserUpdateRequest;
 import com.bondhub.userservice.dto.response.user.UserResponse;
 import com.bondhub.userservice.dto.response.user.UserImageResponse;
 import com.bondhub.userservice.model.User;
