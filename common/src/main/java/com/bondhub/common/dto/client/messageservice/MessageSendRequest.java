@@ -7,6 +7,7 @@ package com.bondhub.common.dto.client.messageservice;
  */
 public record MessageSendRequest(
         String conversationId, // ObjectId of the target Conversation
+        String recipientId,    // Used for the first message (1-1) when conversation is not yet created
         String content,
         String clientMessageId,
         ReplyMetadata replyTo,

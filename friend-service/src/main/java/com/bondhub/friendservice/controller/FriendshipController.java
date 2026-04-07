@@ -109,4 +109,11 @@ public class FriendshipController {
             @PathVariable String userId) {
         return ResponseEntity.ok(ApiResponse.success(friendshipService.getMutualFriendsCount(userId)));
     }
+
+    @PostMapping("/batch-status")
+    @Operation(summary = "Batch check friendship status", description = "Check friendship statuses with a list of users")
+    public ResponseEntity<ApiResponse<java.util.Map<String, String>>> batchCheckFriendshipStatus(
+            @RequestBody List<String> targetUserIds) {
+        return ResponseEntity.ok(ApiResponse.success(friendshipService.batchCheckFriendshipStatus(targetUserIds)));
+    }
 }

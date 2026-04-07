@@ -29,10 +29,10 @@ public class FileServiceImpl implements FileService {
         private String region;
 
         @Override
-        public FileUploadResponse uploadFile(MultipartFile file)
+        public FileUploadResponse uploadFile(MultipartFile file, String folder)
                         throws IOException {
                 String fileName = file.getOriginalFilename();
-                String key = UUID.randomUUID() + "_" + fileName;
+                String key = folder + "/" + UUID.randomUUID() + "_" + fileName;
                 s3Client.putObject(PutObjectRequest.builder()
                                 .bucket(bucketName)
                                 .key(key)

@@ -35,6 +35,9 @@ public class Conversation extends BaseModel {
     String name;
     String avatar;
 
+    @Indexed(unique = true, sparse = true)
+    String uniqueKey;
+
     @Indexed
     @Builder.Default
     boolean isGroup = false;

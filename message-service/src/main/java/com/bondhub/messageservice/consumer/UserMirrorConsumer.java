@@ -41,8 +41,12 @@ public class UserMirrorConsumer {
             chatUserRepository.findById(event.userId()).ifPresentOrElse(user -> {
                 LocalDateTime eventTime = new Timestamp(event.timestamp()).toLocalDateTime();
                 if (user.getLastUpdatedAt() == null || user.getLastUpdatedAt().isBefore(eventTime)) {
-                    user.setFullName(event.fullName());
-                    user.setAvatar(event.avatar());
+                    if (event.fullName() != null && !event.fullName().isBlank()) {
+                        user.setFullName(event.fullName());
+                    }
+                    if (event.avatar() != null && !event.avatar().isBlank()) {
+                        user.setAvatar(event.avatar());
+                    }
                     user.setLastUpdatedAt(eventTime);
                     chatUserRepository.save(user);
                     log.info("✅ Updated ChatUser mirror for userId: {}", event.userId());
@@ -52,8 +56,10 @@ public class UserMirrorConsumer {
             }, () -> {
                 ChatUser newUser = ChatUser.builder()
                         .id(event.userId())
-                        .fullName(event.fullName())
-                        .avatar(event.avatar())
+                        .fullName(event.fullName() != null && !event.fullName().isBlank()
+                                ? event.fullName()
+                                : "Người dùng")
+                        .avatar(event.avatar() != null && !event.avatar().isBlank() ? event.avatar() : null)
                         .lastUpdatedAt(new Timestamp(event.timestamp()).toLocalDateTime())
                         .build();
                 chatUserRepository.save(newUser);
