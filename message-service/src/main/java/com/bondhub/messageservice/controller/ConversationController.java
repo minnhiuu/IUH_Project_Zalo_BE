@@ -2,6 +2,7 @@ package com.bondhub.messageservice.controller;
 
 import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.common.dto.PageResponse;
+import com.bondhub.messageservice.dto.request.AddMembersRequest;
 import com.bondhub.messageservice.dto.request.GroupConversationCreateRequest;
 import com.bondhub.messageservice.dto.response.ConversationResponse;
 import com.bondhub.messageservice.dto.response.SearchMemberResponse;
@@ -108,5 +109,14 @@ public class ConversationController {
             @RequestParam(defaultValue = "20") int size) {
         return ResponseEntity.ok(ApiResponse.success(
                 conversationService.searchMembersToAdd(conversationId, query, page, size)));
+    }
+
+    @PostMapping("/{conversationId}/members")
+    @Operation(summary = "Add members to group conversation")
+    public ResponseEntity<ApiResponse<ConversationResponse>> addMembersToGroup(
+            @PathVariable String conversationId,
+            @RequestBody @Valid AddMembersRequest request) {
+        return ResponseEntity.ok(ApiResponse.success(
+                conversationService.addMembersToGroup(conversationId, request.memberIds())));
     }
 }

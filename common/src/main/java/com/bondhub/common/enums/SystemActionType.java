@@ -1,6 +1,7 @@
 package com.bondhub.common.enums;
 
 public enum SystemActionType {
+    CREATE_GROUP,
     ADD_MEMBERS,
     REMOVE_MEMBER,
     LEAVE_GROUP,

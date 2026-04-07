@@ -258,10 +258,70 @@ public class ConversationServiceImpl implements ConversationService {
         String actorName = actor != null ? actor.getFullName() : "Người dùng";
 
         messageService.sendSystemMessage(saved.getId(), currentUserId, actorName,
-                SystemActionType.ADD_MEMBERS, Map.of("targetIds", memberIds));
+            SystemActionType.CREATE_GROUP, Map.of("targetIds", memberIds));
 
         log.info("[Conversation] Created group conversation {} by user {} with {} members",
                 saved.getId(), saved.getMembers().size(), currentUserId);
+
+        broadcastConversationUpdate(saved.getId());
+        return buildConversationResponseForCurrentUser(saved, currentUserId);
+    }
+
+    @Override
+    public ConversationResponse addMembersToGroup(String conversationId, List<String> memberIds) {
+        String currentUserId = securityUtil.getCurrentUserId();
+
+        Conversation conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
+
+        if (!conversation.isGroup()) {
+            throw new AppException(ErrorCode.CHAT_NOT_A_GROUP);
+        }
+        assertMember(conversation, currentUserId);
+
+        Set<String> requestedIds = new LinkedHashSet<>(memberIds != null ? memberIds : Collections.emptyList());
+        requestedIds.remove(currentUserId);
+
+        if (requestedIds.isEmpty()) {
+            return buildConversationResponseForCurrentUser(conversation, currentUserId);
+        }
+
+        Set<String> existingMemberIds = conversation.getMembers().stream()
+                .map(ConversationMember::getUserId)
+                .collect(Collectors.toSet());
+
+        requestedIds.removeAll(existingMemberIds);
+
+        if (requestedIds.isEmpty()) {
+            return buildConversationResponseForCurrentUser(conversation, currentUserId);
+        }
+
+        List<ChatUser> users = chatUserRepository.findAllById(requestedIds);
+        if (users.size() != requestedIds.size()) {
+            throw new AppException(ErrorCode.USER_NOT_FOUND);
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        requestedIds.forEach(id -> conversation.getMembers().add(
+                ConversationMember.builder()
+                        .userId(id)
+                        .role(MemberRole.MEMBER)
+                        .joinedAt(now)
+                        .build()
+        ));
+
+        if (conversation.getUnreadCounts() == null) {
+            conversation.setUnreadCounts(new HashMap<>());
+        }
+        requestedIds.forEach(id -> conversation.getUnreadCounts().putIfAbsent(id, 0));
+
+        Conversation saved = conversationRepository.save(conversation);
+
+        ChatUser actor = chatUserRepository.findById(currentUserId).orElse(null);
+        String actorName = actor != null ? actor.getFullName() : "Người dùng";
+
+        messageService.sendSystemMessage(conversationId, currentUserId, actorName,
+                SystemActionType.ADD_MEMBERS, Map.of("targetIds", requestedIds));
 
         broadcastConversationUpdate(saved.getId());
         return buildConversationResponseForCurrentUser(saved, currentUserId);
@@ -639,6 +699,7 @@ public class ConversationServiceImpl implements ConversationService {
         List<ChatUser> friends = chatUserRepository.findAllById(currentUser.getFriendIds());
 
         return friends.stream()
+                .filter(u -> !u.getId().equals(currentUserId))
                 .map(u -> SearchMemberResponse.builder()
                         .userId(u.getId())
                         .fullName(u.getFullName())
@@ -686,14 +747,17 @@ public class ConversationServiceImpl implements ConversationService {
         Page<ChatUser> candidatesPage;
 
         if (isPhoneNumber(query)) {
-            Optional<ChatUser> userOpt = chatUserRepository.findByPhoneNumber(query.trim());
+            Optional<ChatUser> userOpt = chatUserRepository.findByPhoneNumber(query.trim())
+                    .filter(u -> !u.getId().equals(currentUserId));
             List<ChatUser> list = userOpt.map(Collections::singletonList).orElse(Collections.emptyList());
             candidatesPage = new PageImpl<>(list, pageable, list.size());
         } else {
             ChatUser currentUser = chatUserRepository.findById(currentUserId).orElse(null);
             if (currentUser != null && !currentUser.getFriendIds().isEmpty()) {
+                Set<String> friendIds = new HashSet<>(currentUser.getFriendIds());
+                friendIds.remove(currentUserId);
                 candidatesPage = chatUserRepository.findByIdInAndFullNameContainingIgnoreCase(
-                        currentUser.getFriendIds(), query.trim(), pageable);
+                        friendIds, query.trim(), pageable);
             } else {
                 candidatesPage = Page.empty(pageable);
             }

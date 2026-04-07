@@ -21,6 +21,8 @@ public interface ConversationService {
     void markAsRead(String conversationId);
 
     ConversationResponse createGroupConversation(GroupConversationCreateRequest request);
+
+    ConversationResponse addMembersToGroup(String conversationId, List<String> memberIds);
     
     ConversationResponse updateGroupName(String conversationId, String name);
     
