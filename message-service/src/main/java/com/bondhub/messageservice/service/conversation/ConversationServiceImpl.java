@@ -12,9 +12,11 @@ import com.bondhub.messageservice.model.ConversationMember;
 import com.bondhub.messageservice.model.LastMessageInfo;
 import com.bondhub.messageservice.repository.ConversationRepository;
 import com.bondhub.messageservice.repository.ChatUserRepository;
+import com.bondhub.messageservice.client.FriendServiceClient;
 import com.bondhub.messageservice.dto.response.ConversationMemberResponse;
 import com.bondhub.messageservice.dto.response.ReadReceiptNotification;
 import com.bondhub.messageservice.model.enums.MemberRole;
+import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.common.enums.MessageType;
 import com.bondhub.common.dto.client.socketservice.SocketEvent;
 import com.bondhub.common.enums.SocketEventType;
@@ -51,6 +53,7 @@ public class ConversationServiceImpl implements ConversationService {
     private final ApplicationEventPublisher eventPublisher;
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final MongoTemplate mongoTemplate;
+    private final FriendServiceClient friendServiceClient;
 
     @Value("${aws.s3.bucket.name}")
     private String bucketName;
@@ -68,7 +71,9 @@ public class ConversationServiceImpl implements ConversationService {
         return conversationRepository.findDirectConversation(userA, userB)
                 .orElseGet(() -> {
                     LocalDateTime now = LocalDateTime.now();
+                    String uniqueKey = (userA.compareTo(userB) < 0) ? userA + "_" + userB : userB + "_" + userA;
                     Conversation newRoom = Conversation.builder()
+                            .uniqueKey(uniqueKey)
                             .members(new HashSet<>(Arrays.asList(
                                     ConversationMember.builder()
                                             .userId(userA).role(MemberRole.OWNER).joinedAt(now).build(),
@@ -99,7 +104,17 @@ public class ConversationServiceImpl implements ConversationService {
         boolean viewerCanSee = canViewerSeeStatus(currentUserId, userCache);
         String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
 
-        return buildConversationResponse(room, partner, currentUserId, userCache, baseUrl, viewerCanSee);
+        String friendshipStatus = null;
+        try {
+            ApiResponse<Map<String, String>> response = friendServiceClient.getFriendshipStatuses(Collections.singletonList(partnerId));
+            if (response != null && response.data() != null) {
+                friendshipStatus = response.data().get(partnerId);
+            }
+        } catch (Exception e) {
+            log.error("Failed to fetch friendship status for user {}", partnerId, e);
+        }
+
+        return buildConversationResponse(room, partner, currentUserId, userCache, baseUrl, viewerCanSee, friendshipStatus);
     }
 
     // ─────────────────────────── Query: Danh sách phòng chat ───────────────────────────
@@ -125,6 +140,16 @@ public class ConversationServiceImpl implements ConversationService {
         Map<String, ChatUser> userCache = chatUserRepository.findAllById(allUserIds).stream()
                 .collect(Collectors.toMap(ChatUser::getId, u -> u));
 
+        Map<String, String> tempMap;
+        try {
+            ApiResponse<Map<String, String>> response = friendServiceClient.getFriendshipStatuses(new ArrayList<>(allUserIds));
+            tempMap = (response != null && response.data() != null) ? response.data() : Collections.emptyMap();
+        } catch (Exception e) {
+            log.error("Failed to fetch batch friendship statuses", e);
+            tempMap = Collections.emptyMap();
+        }
+        final Map<String, String> friendshipStatusMap = tempMap;
+
         boolean viewerCanSee = canViewerSeeStatus(currentUserId, userCache);
         String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
 
@@ -143,7 +168,8 @@ public class ConversationServiceImpl implements ConversationService {
             }
 
             ChatUser partner = resolvePartner(partnerId, currentUserId, userCache);
-            return buildConversationResponse(room, partner, currentUserId, userCache, baseUrl, viewerCanSee);
+            String friendshipStatus = friendshipStatusMap.get(partnerId);
+            return buildConversationResponse(room, partner, currentUserId, userCache, baseUrl, viewerCanSee, friendshipStatus);
         });
     }
 
@@ -211,7 +237,7 @@ public class ConversationServiceImpl implements ConversationService {
 
     private ConversationResponse buildConversationResponse(
             Conversation room, ChatUser partner, String currentUserId,
-            Map<String, ChatUser> userCache, String baseUrl, boolean viewerCanSee) {
+            Map<String, ChatUser> userCache, String baseUrl, boolean viewerCanSee, String friendshipStatus) {
 
         LastMessageInfo last = room.getLastMessage();
         List<ConversationMemberResponse> members = buildMembersWithCache(
@@ -224,12 +250,16 @@ public class ConversationServiceImpl implements ConversationService {
                 ? (room.getAvatar() != null ? baseUrl + room.getAvatar() : null)
                 : (partner.getAvatar() != null ? baseUrl + partner.getAvatar() : null);
 
+        boolean isFriend = "ACCEPTED".equals(friendshipStatus);
+
         return ConversationResponse.builder()
                 .id(room.getId())
+                .recipientId(partner.getId())
                 .name(displayName)
                 .avatar(displayAvatar)
-                .status(room.isGroup() ? null : partner.getStatus())
-                .lastSeenAt(room.isGroup() ? null : partner.getLastUpdatedAt())
+                .status(isFriend ? (room.isGroup() ? null : partner.getStatus()) : null)
+                .lastSeenAt(isFriend ? (room.isGroup() ? null : partner.getLastUpdatedAt()) : null)
+                .friendshipStatus(friendshipStatus)
                 .isGroup(room.isGroup())
                 .lastMessage(last != null ? last.getContent() : "")
                 .lastMessageId(last != null ? last.getMessageId() : null)

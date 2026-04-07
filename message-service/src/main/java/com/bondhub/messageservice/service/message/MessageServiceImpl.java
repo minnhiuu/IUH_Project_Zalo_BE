@@ -16,6 +16,7 @@ import com.bondhub.common.enums.MessageType;
 import com.bondhub.messageservice.repository.ConversationRepository;
 import com.bondhub.messageservice.repository.MessageRepository;
 import com.bondhub.messageservice.repository.ChatUserRepository;
+import com.bondhub.messageservice.service.conversation.ConversationService;
 import com.bondhub.common.dto.client.messageservice.MessageSendRequest;
 import com.bondhub.common.event.ai.AiMessageSaveEvent;
 import com.bondhub.common.dto.client.socketservice.SocketEvent;
@@ -53,6 +54,7 @@ public class MessageServiceImpl implements MessageService {
     private final SecurityUtil securityUtil;
     private final MongoTemplate mongoTemplate;
     private final MessageMapper messageMapper;
+    private final ConversationService conversationService;
 
     @Value("${aws.s3.bucket.name}")
     private String bucketName;
@@ -93,9 +95,19 @@ public class MessageServiceImpl implements MessageService {
     public void sendMessage(MessageSendRequest request) {
         String currentUserId = securityUtil.getCurrentUserId();
 
-        // 1. Tìm phòng chat bằng ObjectId — kiểm tra quyền thành viên
-        Conversation room = conversationRepository.findById(request.conversationId())
-                .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
+        // 1. Tìm phòng chat bằng ObjectId hoặc lazy creation
+        Conversation room;
+
+        if (request.conversationId() != null) {
+            room = conversationRepository.findById(request.conversationId())
+                    .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
+        } else if (request.recipientId() != null) {
+            // Luồng Lazy Creation cho người lạ/chat mới
+            room = conversationService.getOrCreateDirectConversation(currentUserId, request.recipientId());
+        } else {
+            throw new AppException(ErrorCode.VALIDATION_ERROR);
+        }
+
         assertMember(room, currentUserId);
 
         // 2. Enrich sender info
