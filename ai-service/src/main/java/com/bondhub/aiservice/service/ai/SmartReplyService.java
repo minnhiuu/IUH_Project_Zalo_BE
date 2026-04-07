@@ -1,4 +1,4 @@
-package com.bondhub.aiservice.service;
+package com.bondhub.aiservice.service.ai;
 
 import dev.langchain4j.service.SystemMessage;
 import dev.langchain4j.service.UserMessage;
