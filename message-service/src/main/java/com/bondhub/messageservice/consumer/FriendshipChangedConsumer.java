@@ -1,14 +1,20 @@
 package com.bondhub.messageservice.consumer;
 
 import com.bondhub.common.enums.FriendshipAction;
+import com.bondhub.common.enums.MessageStatus;
+import com.bondhub.common.enums.MessageType;
 import com.bondhub.common.event.friend.FriendshipChangedEvent;
 import com.bondhub.common.enums.SocketEventType;
 import com.bondhub.common.dto.client.socketservice.SocketEvent;
 import com.bondhub.messageservice.model.ChatUser;
 import com.bondhub.messageservice.model.Conversation;
 import com.bondhub.messageservice.model.LastMessageInfo;
+import com.bondhub.messageservice.dto.response.ChatNotification;
 import com.bondhub.messageservice.dto.response.ConversationResponse;
+import com.bondhub.messageservice.mapper.MessageMapper;
+import com.bondhub.messageservice.model.Message;
 import com.bondhub.messageservice.repository.ChatUserRepository;
+import com.bondhub.messageservice.repository.MessageRepository;
 import com.bondhub.messageservice.service.conversation.ConversationService;
 import com.bondhub.common.utils.S3Util;
 import lombok.RequiredArgsConstructor;
@@ -28,12 +34,14 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 @Slf4j
-public class FriendshipMirrorConsumer {
+public class FriendshipChangedConsumer {
 
     private final MongoTemplate mongoTemplate;
     private final ConversationService conversationService;
     private final ChatUserRepository chatUserRepository;
     private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final MessageRepository messageRepository;
+    private final MessageMapper messageMapper;
 
     @Value("${kafka.topics.socket-events}")
     private String socketEventsTopic;
@@ -55,6 +63,44 @@ public class FriendshipMirrorConsumer {
             // Lấy hoặc khởi tạo phòng chat chung
             Conversation room = conversationService.getOrCreateDirectConversation(event.userA(), event.userB());
 
+            Message createdCardMsg = null;
+            Message createdBadgeMsg = null;
+
+            // 1. Tạo Card (Giao diện lớn)
+            if (!messageRepository.existsByConversationIdAndType(room.getId(), MessageType.SYSTEM_FRIENDSHIP_CARD)) {
+                Message cardMsg = Message.builder()
+                        .conversationId(room.getId())
+                        .senderId("SYSTEM")
+                        .content(event.userA()) // Lưu requesterId
+                        .type(MessageType.SYSTEM_FRIENDSHIP_CARD)
+                        .status(MessageStatus.NORMAL)
+                        .createdAt(java.time.LocalDateTime.now())
+                        .build();
+                createdCardMsg = messageRepository.save(cardMsg);
+            }
+
+            // 2. Luôn tạo Badge mới (cho phép nhiều badge trong cùng conversation)
+            Message badgeMsg = Message.builder()
+                    .conversationId(room.getId())
+                    .senderId("SYSTEM")
+                    .content(event.userA()) // Lưu requesterId
+                    .type(MessageType.SYSTEM_FRIENDSHIP_BADGE)
+                    .status(MessageStatus.NORMAL)
+                    .createdAt(java.time.LocalDateTime.now().plusNanos(1000)) // Đảm bảo Badge hiển thị dưới Card
+                    .build();
+            createdBadgeMsg = messageRepository.save(badgeMsg);
+
+            // Cập nhật LastMessage cho Conversation theo Badge để sidebar luôn đúng loại
+            room.setLastMessage(LastMessageInfo.builder()
+                    .messageId(badgeMsg.getId())
+                    .senderId("SYSTEM")
+                    .content(event.userA()) // Lưu requesterId làm "gene"
+                    .timestamp(badgeMsg.getCreatedAt())
+                    .type(MessageType.SYSTEM_FRIENDSHIP_BADGE)
+                    .status(badgeMsg.getStatus() != null ? badgeMsg.getStatus() : MessageStatus.NORMAL)
+                    .build());
+            mongoTemplate.save(room);
+
             // Lấy thông tin user để build ConversationResponse cho cả 2 phía
             Map<String, ChatUser> userCache = chatUserRepository
                     .findAllById(Arrays.asList(event.userA(), event.userB()))
@@ -65,6 +111,14 @@ public class FriendshipMirrorConsumer {
 
             ConversationResponse convForA = buildMinimalResponse(room, event.userA(), event.userB(), userCache, baseUrl);
             ConversationResponse convForB = buildMinimalResponse(room, event.userB(), event.userA(), userCache, baseUrl);
+
+            List<String> viewers = Arrays.asList(event.userA(), event.userB());
+            if (createdCardMsg != null) {
+                publishRealtimeSystemMessage(createdCardMsg, room, baseUrl, viewers);
+            }
+            if (createdBadgeMsg != null) {
+                publishRealtimeSystemMessage(createdBadgeMsg, room, baseUrl, viewers);
+            }
 
             // Publish SocketEvents – socket-service will push to connected clients
             kafkaTemplate.send(socketEventsTopic, new SocketEvent(SocketEventType.CONVERSATION, event.userA(), "/queue/conversations", convForA));
@@ -82,7 +136,7 @@ public class FriendshipMirrorConsumer {
                 "type", "FRIENDSHIP_UPDATED",
                 "targetUserId", event.userA(),
                 "payload", Map.of(
-                        "partnerId", event.userB(), 
+                        "partnerId", event.userB(),
                         "status", status,
                         "friendshipId", event.friendshipId() != null ? event.friendshipId() : "",
                         "requestedBy", event.userA(),
@@ -93,7 +147,7 @@ public class FriendshipMirrorConsumer {
                 "type", "FRIENDSHIP_UPDATED",
                 "targetUserId", event.userB(),
                 "payload", Map.of(
-                        "partnerId", event.userA(), 
+                        "partnerId", event.userA(),
                         "status", status,
                         "friendshipId", event.friendshipId() != null ? event.friendshipId() : "",
                         "requestedBy", event.userA(),
@@ -116,16 +170,25 @@ public class FriendshipMirrorConsumer {
         ChatUser partner = userCache.getOrDefault(partnerId,
                 ChatUser.builder().id(partnerId).fullName("Người dùng mới").build());
         LastMessageInfo last = room.getLastMessage();
+        String partnerDisplayName = partner.getFullName() != null && !partner.getFullName().isBlank()
+                ? partner.getFullName()
+                : "Người dùng";
+        String lastMsgDisplay = last != null ? last.getContent() : "";
 
         return ConversationResponse.builder()
                 .id(room.getId())
-                .name(partner.getFullName())
+                .recipientId(partner.getId())
+                .name(partnerDisplayName)
                 .avatar(partner.getAvatar() != null ? baseUrl + partner.getAvatar() : null)
                 .status(partner.getStatus())
                 .isGroup(false)
-                .lastMessage(last != null ? last.getContent() : "")
+                .lastMessage(lastMsgDisplay)
+                .lastMessageId(last != null ? last.getMessageId() : null)
+                .lastMessageType(last != null ? last.getType() : null)
                 .lastMessageTime(last != null ? last.getTimestamp() : null)
+                .lastMessageStatus(last != null ? last.getStatus() : null)
                 .friendshipStatus("ACCEPTED")
+                .isLastMessageFromMe(false)
                 .unreadCount(room.getUnreadCounts() != null
                         ? room.getUnreadCounts().getOrDefault(viewerId, 0) : 0)
                 .members(Collections.emptyList())
@@ -133,6 +196,10 @@ public class FriendshipMirrorConsumer {
     }
 
     private void updateFriendList(String targetUserId, String friendIdToModify, FriendshipAction action) {
+        if (action != FriendshipAction.ADDED && action != FriendshipAction.REMOVED) {
+            return;
+        }
+
         Query query = new Query(Criteria.where("id").is(targetUserId));
         Update update = new Update();
 
@@ -144,5 +211,23 @@ public class FriendshipMirrorConsumer {
 
         mongoTemplate.updateFirst(query, update, ChatUser.class);
         log.debug("Updated friend list for {} (action: {}, friend: {})", targetUserId, action, friendIdToModify);
+    }
+
+    private void publishRealtimeSystemMessage(Message message, Conversation room, String baseUrl, List<String> viewers) {
+        ChatNotification baseNotif = messageMapper.mapToChatNotification(message, baseUrl, 0);
+
+        for (String viewerId : viewers) {
+            Integer unreadCount = room.getUnreadCounts() != null
+                    ? room.getUnreadCounts().getOrDefault(viewerId, 0)
+                    : 0;
+
+            ChatNotification personalNotif = baseNotif.toBuilder()
+                    .isFromMe(false)
+                    .unreadCount(unreadCount)
+                    .build();
+
+            kafkaTemplate.send(socketEventsTopic,
+                    new SocketEvent(SocketEventType.MESSAGE, viewerId, "/queue/messages", personalNotif));
+        }
     }
 }

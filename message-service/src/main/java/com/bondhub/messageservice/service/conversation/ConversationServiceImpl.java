@@ -100,6 +100,13 @@ public class ConversationServiceImpl implements ConversationService {
         Map<String, ChatUser> userCache = chatUserRepository.findAllById(userIds).stream()
                 .collect(Collectors.toMap(ChatUser::getId, u -> u));
 
+        ChatUser cachedPartner = userCache.get(partnerId);
+        if (cachedPartner == null || cachedPartner.getFullName() == null || cachedPartner.getFullName().isBlank()) {
+            if (!partnerId.equals(currentUserId) && !partnerId.equals("ai-assistant-001")) {
+                eventPublisher.publishEvent(new UserSyncEvent(partnerId));
+            }
+        }
+
         ChatUser partner = resolvePartner(partnerId, currentUserId, userCache);
         boolean viewerCanSee = canViewerSeeStatus(currentUserId, userCache);
         String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
@@ -161,8 +168,13 @@ public class ConversationServiceImpl implements ConversationService {
                     .findFirst()
                     .orElse(currentUserId); // trường hợp chat với chính mình (My Documents)
 
+            ChatUser cachedPartner = userCache.get(partnerId);
+            boolean partnerMissingProfile = cachedPartner == null
+                || cachedPartner.getFullName() == null
+                || cachedPartner.getFullName().isBlank();
+
             // Trigger sync nếu partner chưa có trong cache
-            if (!userCache.containsKey(partnerId) && !partnerId.equals(currentUserId)
+            if (partnerMissingProfile && !partnerId.equals(currentUserId)
                     && !partnerId.equals("ai-assistant-001")) {
                 eventPublisher.publishEvent(new UserSyncEvent(partnerId));
             }
@@ -245,12 +257,17 @@ public class ConversationServiceImpl implements ConversationService {
 
         // Với Group: name/avatar lấy từ Conversation entity
         // Với 1-1: name/avatar lấy từ partner ChatUser
-        String displayName = room.isGroup() ? room.getName() : partner.getFullName();
+        String partnerDisplayName = safeDisplayName(partner != null ? partner.getFullName() : null);
+        String displayName = room.isGroup() ? room.getName() : partnerDisplayName;
+        if (displayName == null || displayName.isBlank()) {
+            displayName = "Người dùng";
+        }
         String displayAvatar = room.isGroup()
                 ? (room.getAvatar() != null ? baseUrl + room.getAvatar() : null)
                 : (partner.getAvatar() != null ? baseUrl + partner.getAvatar() : null);
 
         boolean isFriend = "ACCEPTED".equals(friendshipStatus);
+        String lastMsgDisplay = last != null ? last.getContent() : "";
 
         return ConversationResponse.builder()
                 .id(room.getId())
@@ -261,7 +278,7 @@ public class ConversationServiceImpl implements ConversationService {
                 .lastSeenAt(isFriend ? (room.isGroup() ? null : partner.getLastUpdatedAt()) : null)
                 .friendshipStatus(friendshipStatus)
                 .isGroup(room.isGroup())
-                .lastMessage(last != null ? last.getContent() : "")
+                .lastMessage(lastMsgDisplay)
                 .lastMessageId(last != null ? last.getMessageId() : null)
                 .lastMessageTime(last != null ? last.getTimestamp() : null)
                 .isLastMessageFromMe(last != null && last.getSenderId() != null
@@ -272,6 +289,13 @@ public class ConversationServiceImpl implements ConversationService {
                 .lastMessageStatus(last != null ? last.getStatus() : null)
                 .members(members)
                 .build();
+    }
+
+    private String safeDisplayName(String fullName) {
+        if (fullName == null || fullName.isBlank()) {
+            return "Người dùng";
+        }
+        return fullName;
     }
 
     private List<ConversationMemberResponse> buildMembersWithCache(
