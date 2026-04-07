@@ -20,8 +20,9 @@ public class FileController {
 
     @PostMapping("/upload")
     public ResponseEntity<ApiResponse<FileUploadResponse>> upload(
-            @RequestPart("file") MultipartFile file) throws IOException {
-        FileUploadResponse fileUploadResponse = fileService.uploadFile(file);
+            @RequestPart("file") MultipartFile file,
+            @RequestParam(value = "folder", defaultValue = "misc") String folder) throws IOException {
+        FileUploadResponse fileUploadResponse = fileService.uploadFile(file, folder);
         return ResponseEntity.ok(ApiResponse.success(fileUploadResponse));
     }
 
