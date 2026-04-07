@@ -5,6 +5,7 @@ import com.bondhub.common.dto.PageResponse;
 import com.bondhub.messageservice.dto.request.AddMembersRequest;
 import com.bondhub.messageservice.dto.request.GroupConversationCreateRequest;
 import com.bondhub.messageservice.dto.response.ConversationResponse;
+import com.bondhub.messageservice.dto.response.GroupMemberListItemResponse;
 import com.bondhub.messageservice.dto.response.SearchMemberResponse;
 import com.bondhub.messageservice.service.conversation.ConversationService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -118,5 +119,25 @@ public class ConversationController {
             @RequestBody @Valid AddMembersRequest request) {
         return ResponseEntity.ok(ApiResponse.success(
                 conversationService.addMembersToGroup(conversationId, request.memberIds())));
+    }
+
+    @DeleteMapping("/{conversationId}/members/{targetUserId}")
+    @Operation(summary = "Kick a member from group conversation (Owner/Admin with role constraints)")
+    public ResponseEntity<ApiResponse<ConversationResponse>> removeMemberFromGroup(
+            @PathVariable String conversationId,
+            @PathVariable String targetUserId) {
+        return ResponseEntity.ok(ApiResponse.success(
+                conversationService.removeMemberFromGroup(conversationId, targetUserId)));
+    }
+
+    @GetMapping("/{conversationId}/group-members")
+    @Operation(summary = "Get group members with pagination, search and friend-priority sorting")
+    public ResponseEntity<ApiResponse<PageResponse<List<GroupMemberListItemResponse>>>> getGroupMembers(
+            @PathVariable String conversationId,
+            @RequestParam(required = false) String query,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(ApiResponse.success(
+                conversationService.getGroupMembers(conversationId, query, page, size)));
     }
 }

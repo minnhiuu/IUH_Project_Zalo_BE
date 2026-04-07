@@ -87,6 +87,7 @@ public class UserMirrorConsumer {
                     conversationRepository.findAllByMembersUserId(event.userId(), recentChats)
                         .forEach(room ->
                             room.getMembers().stream()
+                                .filter(m -> !Boolean.FALSE.equals(m.getActive()))
                                 .map(m -> m.getUserId())
                                 .filter(uid -> !uid.equals(event.userId()))
                                 .forEach(this::publishSocketRefresh)

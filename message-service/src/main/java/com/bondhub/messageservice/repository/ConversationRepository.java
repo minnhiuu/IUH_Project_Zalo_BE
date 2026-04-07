@@ -16,7 +16,7 @@ public interface ConversationRepository extends MongoRepository<Conversation, St
      * Tìm cuộc trò chuyện 1-1 giữa 2 user bằng $all operator.
      * Không phụ thuộc vào thứ tự userA/userB.
      */
-    @Query("{ 'isGroup': false, 'members': { '$size': 2 }, 'members.userId': { '$all': [?0, ?1] } }")
+    @Query("{ 'isGroup': false, 'members': { '$size': 2, '$all': [ { '$elemMatch': { 'userId': ?0, 'active': { '$ne': false } } }, { '$elemMatch': { 'userId': ?1, 'active': { '$ne': false } } } ] } }")
     Optional<Conversation> findDirectConversation(String userA, String userB);
 
     /**

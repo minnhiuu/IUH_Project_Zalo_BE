@@ -1,5 +1,6 @@
 package com.bondhub.messageservice.repository;
 
+import com.bondhub.common.enums.MessageType;
 import com.bondhub.messageservice.model.Message;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -12,6 +13,14 @@ public interface MessageRepository extends MongoRepository<Message, String> {
 
     @Query("{ 'conversationId': ?0, 'deletedBy': { $ne: ?1 } }")
     Page<Message> findByConversationIdAndNotDeleted(String conversationId, String userId, Pageable pageable);
+
+    @Query("{ 'conversationId': ?0, 'deletedBy': { $ne: ?1 }, 'type': ?2 }")
+    Page<Message> findByConversationIdAndTypeAndNotDeleted(
+            String conversationId,
+            String userId,
+            MessageType type,
+            Pageable pageable
+    );
 
     Page<Message> findByConversationId(String conversationId, Pageable pageable);
 }

@@ -38,17 +38,23 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import com.bondhub.common.dto.PageResponse;
 import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.aggregation.Aggregation;
+import org.springframework.data.mongodb.core.aggregation.AggregationOperation;
+import org.springframework.data.mongodb.core.aggregation.AggregationResults;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
 import com.mongodb.client.result.UpdateResult;
+import org.bson.Document;
 
 import java.text.Normalizer;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.regex.Pattern;
 
 @Service
 @RequiredArgsConstructor
@@ -63,7 +69,6 @@ public class ConversationServiceImpl implements ConversationService {
     private final MongoTemplate mongoTemplate;
     private final MessageService messageService;
     private final FileServiceClient fileServiceClient;
-    private final MessageMapper messageMapper;
 
     @Value("${aws.s3.bucket.name}")
     private String bucketName;
@@ -150,6 +155,7 @@ public class ConversationServiceImpl implements ConversationService {
         return PageResponse.fromPage(roomsPage, room -> {
             // Tìm partner = thành viên đầu tiên khác currentUser
             String partnerId = room.getMembers().stream()
+                    .filter(this::isActiveMember)
                     .map(ConversationMember::getUserId)
                     .filter(uid -> !uid.equals(currentUserId))
                     .findFirst()
@@ -178,7 +184,7 @@ public class ConversationServiceImpl implements ConversationService {
 
         // 2. Kiểm tra quyền: currentUser phải là thành viên
         boolean isMember = room.getMembers().stream()
-                .anyMatch(m -> m.getUserId().equals(currentUserId));
+            .anyMatch(m -> m.getUserId().equals(currentUserId));
         if (!isMember) {
             throw new AppException(ErrorCode.CHAT_MEMBER_NOT_FOUND);
         }
@@ -187,7 +193,7 @@ public class ConversationServiceImpl implements ConversationService {
 
         // 3. Cập nhật unreadCount và lastReadMessageId
         Query query = new Query(Criteria.where("id").is(conversationId)
-                .and("members.userId").is(currentUserId));
+            .and("members.userId").is(currentUserId));
         Update update = new Update().set("unreadCounts." + currentUserId, 0);
         if (finalReadId != null) {
             update.set("members.$.lastReadMessageId", finalReadId);
@@ -256,9 +262,19 @@ public class ConversationServiceImpl implements ConversationService {
 
         ChatUser actor = chatUserRepository.findById(currentUserId).orElse(null);
         String actorName = actor != null ? actor.getFullName() : "Người dùng";
+        Map<String, String> userNameMap = users.stream()
+            .collect(Collectors.toMap(ChatUser::getId, ChatUser::getFullName));
+        List<String> createTargetIds = new ArrayList<>(memberIds);
+        List<String> createTargetNames = createTargetIds.stream()
+            .map(id -> userNameMap.getOrDefault(id, "Người dùng"))
+            .toList();
 
         messageService.sendSystemMessage(saved.getId(), currentUserId, actorName,
-            SystemActionType.CREATE_GROUP, Map.of("targetIds", memberIds));
+            SystemActionType.CREATE_GROUP,
+            Map.of(
+                "targetIds", createTargetIds,
+                "payload", Map.of("targetNames", createTargetNames)
+            ));
 
         log.info("[Conversation] Created group conversation {} by user {} with {} members",
                 saved.getId(), saved.getMembers().size(), currentUserId);
@@ -286,11 +302,15 @@ public class ConversationServiceImpl implements ConversationService {
             return buildConversationResponseForCurrentUser(conversation, currentUserId);
         }
 
-        Set<String> existingMemberIds = conversation.getMembers().stream()
+        Map<String, ConversationMember> existingMembersById = conversation.getMembers().stream()
+                .collect(Collectors.toMap(ConversationMember::getUserId, m -> m, (a, b) -> a));
+
+        Set<String> existingActiveMemberIds = conversation.getMembers().stream()
+                .filter(this::isActiveMember)
                 .map(ConversationMember::getUserId)
                 .collect(Collectors.toSet());
 
-        requestedIds.removeAll(existingMemberIds);
+        requestedIds.removeAll(existingActiveMemberIds);
 
         if (requestedIds.isEmpty()) {
             return buildConversationResponseForCurrentUser(conversation, currentUserId);
@@ -302,13 +322,23 @@ public class ConversationServiceImpl implements ConversationService {
         }
 
         LocalDateTime now = LocalDateTime.now();
-        requestedIds.forEach(id -> conversation.getMembers().add(
-                ConversationMember.builder()
-                        .userId(id)
-                        .role(MemberRole.MEMBER)
-                        .joinedAt(now)
-                        .build()
-        ));
+        requestedIds.forEach(id -> {
+            ConversationMember existingMember = existingMembersById.get(id);
+            if (existingMember != null) {
+                existingMember.setActive(true);
+                existingMember.setRemovedAt(null);
+                existingMember.setRemovedBy(null);
+                existingMember.setRole(MemberRole.MEMBER);
+                return;
+            }
+            conversation.getMembers().add(
+                    ConversationMember.builder()
+                            .userId(id)
+                            .role(MemberRole.MEMBER)
+                            .joinedAt(now)
+                            .build()
+            );
+        });
 
         if (conversation.getUnreadCounts() == null) {
             conversation.setUnreadCounts(new HashMap<>());
@@ -319,9 +349,67 @@ public class ConversationServiceImpl implements ConversationService {
 
         ChatUser actor = chatUserRepository.findById(currentUserId).orElse(null);
         String actorName = actor != null ? actor.getFullName() : "Người dùng";
+        Map<String, String> requestedNameMap = users.stream()
+            .collect(Collectors.toMap(ChatUser::getId, ChatUser::getFullName));
+        List<String> addedTargetIds = new ArrayList<>(requestedIds);
+        List<String> addedTargetNames = addedTargetIds.stream()
+            .map(id -> requestedNameMap.getOrDefault(id, "Người dùng"))
+            .toList();
 
         messageService.sendSystemMessage(conversationId, currentUserId, actorName,
-                SystemActionType.ADD_MEMBERS, Map.of("targetIds", requestedIds));
+            SystemActionType.ADD_MEMBERS,
+            Map.of(
+                "targetIds", addedTargetIds,
+                "payload", Map.of("targetNames", addedTargetNames)
+            ));
+
+        broadcastConversationUpdate(saved.getId());
+        return buildConversationResponseForCurrentUser(saved, currentUserId);
+    }
+
+    @Override
+    public ConversationResponse removeMemberFromGroup(String conversationId, String targetUserId) {
+        String currentUserId = securityUtil.getCurrentUserId();
+
+        Conversation conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
+
+        if (!conversation.isGroup()) {
+            throw new AppException(ErrorCode.CHAT_NOT_A_GROUP);
+        }
+        assertMember(conversation, currentUserId);
+
+        if (targetUserId == null || targetUserId.isBlank() || targetUserId.equals(currentUserId)) {
+            throw new AppException(ErrorCode.CHAT_CANNOT_REMOVE_YOURSELF);
+        }
+
+        ConversationMember actor = getMemberOrThrow(conversation, currentUserId);
+        ConversationMember target = getMemberOrThrow(conversation, targetUserId);
+
+        assertOwnerOrAdmin(actor);
+        assertCanRemoveMember(actor, target);
+
+        target.setActive(false);
+        target.setRemovedAt(LocalDateTime.now());
+        target.setRemovedBy(currentUserId);
+
+        if (conversation.getUnreadCounts() != null) {
+            conversation.getUnreadCounts().remove(targetUserId);
+        }
+
+        Conversation saved = conversationRepository.save(conversation);
+
+        ChatUser actorUser = chatUserRepository.findById(currentUserId).orElse(null);
+        String actorName = actorUser != null ? actorUser.getFullName() : "Người dùng";
+        ChatUser targetUser = chatUserRepository.findById(targetUserId).orElse(null);
+        String targetName = targetUser != null ? targetUser.getFullName() : "Người dùng";
+
+        messageService.sendSystemMessage(conversationId, currentUserId, actorName,
+            SystemActionType.REMOVE_MEMBER,
+            Map.of(
+                "targetIds", List.of(targetUserId),
+                "payload", Map.of("targetName", targetName)
+            ));
 
         broadcastConversationUpdate(saved.getId());
         return buildConversationResponseForCurrentUser(saved, currentUserId);
@@ -416,6 +504,7 @@ public class ConversationServiceImpl implements ConversationService {
     @Override
     public void broadcastConversationUpdate(Conversation room) {
         Set<String> userIds = room.getMembers().stream()
+                .filter(this::isActiveMember)
                 .map(ConversationMember::getUserId)
                 .collect(Collectors.toSet());
 
@@ -429,6 +518,9 @@ public class ConversationServiceImpl implements ConversationService {
         String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
 
         for (ConversationMember member : room.getMembers()) {
+            if (!isActiveMember(member)) {
+                continue;
+            }
             String viewerId = member.getUserId();
             boolean viewerCanSee = canViewerSeeStatus(viewerId, userCache);
 
@@ -436,6 +528,7 @@ public class ConversationServiceImpl implements ConversationService {
             ChatUser partner = null;
             if (!room.isGroup()) {
                 String partnerId = room.getMembers().stream()
+                        .filter(this::isActiveMember)
                         .map(ConversationMember::getUserId)
                         .filter(uid -> !uid.equals(viewerId))
                         .findFirst()
@@ -467,6 +560,7 @@ public class ConversationServiceImpl implements ConversationService {
             String currentUserId
     ) {
         Set<String> allUserIds = room.getMembers().stream()
+                .filter(this::isActiveMember)
                 .map(ConversationMember::getUserId)
                 .collect(Collectors.toSet());
         if (room.getLastMessage() != null && room.getLastMessage().getSenderId() != null) {
@@ -482,6 +576,7 @@ public class ConversationServiceImpl implements ConversationService {
         ChatUser partner = null;
         if (!room.isGroup()) {
             String partnerId = room.getMembers().stream()
+                    .filter(this::isActiveMember)
                     .map(ConversationMember::getUserId)
                     .filter(uid -> !uid.equals(currentUserId))
                     .findFirst()
@@ -505,9 +600,44 @@ public class ConversationServiceImpl implements ConversationService {
 
     private void assertMember(Conversation room, String userId) {
         boolean isMember = room.getMembers().stream()
-                .anyMatch(m -> m.getUserId().equals(userId));
+                .anyMatch(m -> m.getUserId().equals(userId) && isActiveMember(m));
         if (!isMember) {
             throw new AppException(ErrorCode.CHAT_MEMBER_NOT_FOUND);
+        }
+    }
+
+    private ConversationMember getMemberOrThrow(Conversation room, String userId) {
+        return room.getMembers().stream()
+                .filter(m -> m.getUserId().equals(userId) && isActiveMember(m))
+                .findFirst()
+                .orElseThrow(() -> new AppException(ErrorCode.CHAT_MEMBER_NOT_FOUND));
+    }
+
+    private boolean isActiveMember(ConversationMember member) {
+        return !Boolean.FALSE.equals(member.getActive());
+    }
+
+    private MemberRole resolveRole(ConversationMember member) {
+        return member.getRole() != null ? member.getRole() : MemberRole.MEMBER;
+    }
+
+    private void assertOwnerOrAdmin(ConversationMember actor) {
+        MemberRole actorRole = resolveRole(actor);
+        if (actorRole == MemberRole.MEMBER) {
+            throw new AppException(ErrorCode.CHAT_NOT_GROUP_MANAGER);
+        }
+    }
+
+    private void assertCanRemoveMember(ConversationMember actor, ConversationMember target) {
+        MemberRole actorRole = resolveRole(actor);
+        MemberRole targetRole = resolveRole(target);
+
+        if (targetRole == MemberRole.OWNER) {
+            throw new AppException(ErrorCode.CHAT_CANNOT_REMOVE_OWNER);
+        }
+
+        if (actorRole == MemberRole.ADMIN && targetRole != MemberRole.MEMBER) {
+            throw new AppException(ErrorCode.CHAT_ADMIN_CAN_ONLY_REMOVE_MEMBER);
         }
     }
 
@@ -551,6 +681,7 @@ public class ConversationServiceImpl implements ConversationService {
         Status displayStatus = room.isGroup()
                 ? (room.getMembers().stream()
                 .filter(m -> {
+                    if (!isActiveMember(m)) return false;
                     if (m.getUserId().equals(currentUserId)) return false;
                     ChatUser memberInfo = userCache.get(m.getUserId());
                     return memberInfo == null || !currentUserId.equals(memberInfo.getAccountId());
@@ -592,6 +723,7 @@ public class ConversationServiceImpl implements ConversationService {
             String baseUrl, boolean viewerCanSee) {
 
         return room.getMembers().stream()
+                .filter(this::isActiveMember)
                 .filter(m -> room.isGroup() || !m.getUserId().equals(currentUserId))
                 .map(m -> {
                     ChatUser memberInfo = userCache.get(m.getUserId());
@@ -615,6 +747,7 @@ public class ConversationServiceImpl implements ConversationService {
      */
     private void broadcastReadReceipt(Conversation room, String currentUserId, String lastReadMessageId) {
         room.getMembers().stream()
+                .filter(this::isActiveMember)
                 .filter(m -> !m.getUserId().equals(currentUserId))
                 .forEach(m -> {
                     chatUserRepository.findById(m.getUserId()).ifPresent(partnerUser -> {
@@ -643,7 +776,9 @@ public class ConversationServiceImpl implements ConversationService {
         }
 
         boolean isOwner = conversation.getMembers().stream()
-                .anyMatch(m -> m.getUserId().equals(currentUserId) && m.getRole() == MemberRole.OWNER);
+                .anyMatch(m -> m.getUserId().equals(currentUserId)
+                        && isActiveMember(m)
+                        && m.getRole() == MemberRole.OWNER);
 
         if (!isOwner) {
             log.warn("[Conversation] User {} tried to disband group {} but is not the owner", currentUserId, conversationId);
@@ -686,10 +821,11 @@ public class ConversationServiceImpl implements ConversationService {
         final Set<String> memberIds = (conversationId == null || conversationId.isBlank())
                 ? new HashSet<>()
                 : conversationRepository.findById(conversationId)
-                    .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND))
-                    .getMembers().stream()
-                    .map(ConversationMember::getUserId)
-                    .collect(Collectors.toSet());
+                .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND))
+                .getMembers().stream()
+                .filter(this::isActiveMember)
+                .map(ConversationMember::getUserId)
+                .collect(Collectors.toSet());
 
         ChatUser currentUser = chatUserRepository.findById(currentUserId).orElse(null);
         if (currentUser == null || currentUser.getFriendIds().isEmpty()) {
@@ -739,10 +875,11 @@ public class ConversationServiceImpl implements ConversationService {
         final Set<String> memberIds = (conversationId == null || conversationId.isBlank())
                 ? new HashSet<>()
                 : conversationRepository.findById(conversationId)
-                    .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND))
-                    .getMembers().stream()
-                    .map(ConversationMember::getUserId)
-                    .collect(Collectors.toSet());
+                .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND))
+                .getMembers().stream()
+                .filter(this::isActiveMember)
+                .map(ConversationMember::getUserId)
+                .collect(Collectors.toSet());
 
         Page<ChatUser> candidatesPage;
 
@@ -771,6 +908,167 @@ public class ConversationServiceImpl implements ConversationService {
                 .phoneNumber(isPhoneNumber(query) ? u.getPhoneNumber() : null)
                 .isAlreadyMember(memberIds.contains(u.getId()))
                 .build());
+    }
+
+    @Override
+    public PageResponse<List<GroupMemberListItemResponse>> getGroupMembers(String conversationId, String query, int page, int size) {
+        String currentUserId = securityUtil.getCurrentUserId();
+        Conversation conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
+
+        if (!conversation.isGroup()) {
+            throw new AppException(ErrorCode.CHAT_NOT_A_GROUP);
+        }
+        assertMember(conversation, currentUserId);
+
+        Set<String> friendIds = chatUserRepository.findById(currentUserId)
+                .map(ChatUser::getFriendIds)
+                .map(HashSet::new)
+                .orElseGet(HashSet::new);
+        friendIds.remove(currentUserId);
+
+        String normalizedQuery = query == null ? "" : query.trim();
+        boolean hasQuery = !normalizedQuery.isBlank();
+        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+        List<String> friendIdList = new ArrayList<>(friendIds);
+
+        Pageable pageable = PageRequest.of(Math.max(page, 0), Math.max(size, 1));
+
+        List<AggregationOperation> commonStages = new ArrayList<>();
+        commonStages.add(Aggregation.match(Criteria.where("_id").is(conversationId).and("isGroup").is(true)));
+        commonStages.add(Aggregation.unwind("members"));
+        commonStages.add(Aggregation.match(Criteria.where("members.active").ne(false)));
+        commonStages.add(context -> new Document("$lookup", new Document()
+                .append("from", "chat_users")
+                .append("let", new Document("memberUserId", "$members.userId"))
+                .append("pipeline", List.of(
+                        new Document("$match", new Document("$expr", new Document("$or", List.of(
+                                new Document("$eq", List.of("$_id", "$$memberUserId")),
+                                new Document("$eq", List.of(
+                                        "$_id",
+                                        new Document("$convert", new Document("input", "$$memberUserId")
+                                                .append("to", "objectId")
+                                                .append("onError", null)
+                                                .append("onNull", null))
+                                ))
+                        ))))
+                ))
+                .append("as", "user")));
+        commonStages.add(Aggregation.unwind("user", true));
+
+        if (hasQuery) {
+            String escaped = Pattern.quote(normalizedQuery);
+            commonStages.add(Aggregation.match(new Criteria().orOperator(
+                    Criteria.where("user.fullName").regex(escaped, "i"),
+                    Criteria.where("user.phoneNumber").regex(escaped, "i")
+            )));
+        }
+
+        Document sortBucketExpr = new Document("$switch", new Document("branches", List.of(
+                new Document("case", new Document("$eq", List.of("$members.role", "OWNER"))).append("then", 0),
+                new Document("case", new Document("$eq", List.of("$members.role", "ADMIN"))).append("then", 1)
+        )).append("default",
+                new Document("$cond", List.of(
+                        new Document("$in", List.of("$members.userId", friendIdList)),
+                        3,
+                        2
+                ))));
+
+        Document addSortFieldsDoc = new Document("sortBucket", sortBucketExpr)
+                .append("nameSort", new Document("$toLower", new Document("$ifNull", List.of("$user.fullName", ""))));
+
+        Document projectFieldsDoc = new Document()
+                .append("_id", 0)
+                .append("userId", "$members.userId")
+                .append("fullName", new Document("$ifNull", List.of("$user.fullName", "Người dùng")))
+                .append("avatar", "$user.avatar")
+                .append("phoneNumber", "$user.phoneNumber")
+                .append("role", "$members.role")
+                .append("joinedAt", "$members.joinedAt");
+
+        Document facetDoc = new Document("$facet", new Document()
+                .append("metadata", List.of(new Document("$count", "totalItems")))
+                .append("data", List.of(
+                        new Document("$addFields", addSortFieldsDoc),
+                        new Document("$sort", new Document("sortBucket", 1).append("nameSort", 1).append("members.joinedAt", 1)),
+                        new Document("$skip", pageable.getOffset()),
+                        new Document("$limit", pageable.getPageSize()),
+                        new Document("$project", projectFieldsDoc)
+                )));
+
+        List<AggregationOperation> pipeline = new ArrayList<>(commonStages);
+        pipeline.add(context -> facetDoc);
+
+        AggregationResults<Document> aggregated = mongoTemplate.aggregate(
+                Aggregation.newAggregation(pipeline),
+                "conversations",
+                Document.class
+        );
+
+        Document root = aggregated.getUniqueMappedResult();
+        List<Document> metadata = extractDocumentList(root != null ? root.get("metadata") : null);
+        List<Document> dataDocs = extractDocumentList(root != null ? root.get("data") : null);
+        int totalItems = !metadata.isEmpty()
+                ? metadata.get(0).getInteger("totalItems", 0)
+                : 0;
+
+        List<GroupMemberListItemResponse> pageData = dataDocs.stream()
+                .map(doc -> {
+                    String userId = doc.getString("userId");
+                    String fullName = doc.getString("fullName") != null ? doc.getString("fullName") : "Người dùng";
+                    String avatar = doc.getString("avatar");
+                    String phoneNumber = doc.getString("phoneNumber");
+                    String roleRaw = doc.getString("role");
+
+                    MemberRole role = roleRaw != null ? MemberRole.valueOf(roleRaw) : MemberRole.MEMBER;
+                    boolean isCurrentUser = currentUserId.equals(userId);
+                    boolean isFriend = friendIds.contains(userId);
+
+                    return GroupMemberListItemResponse.builder()
+                            .userId(userId)
+                            .fullName(fullName)
+                            .avatar(avatar != null ? baseUrl + avatar : null)
+                            .phoneNumber(phoneNumber)
+                            .role(role)
+                            .joinedAt(toOffsetFromMongo(doc.get("joinedAt")))
+                            .isCurrentUser(isCurrentUser)
+                            .isFriend(isFriend)
+                            .build();
+                })
+                .toList();
+
+        return PageResponse.<List<GroupMemberListItemResponse>>builder()
+                .data(pageData)
+                .page(pageable.getPageNumber())
+                .totalPages(totalItems == 0 ? 0 : (int) Math.ceil((double) totalItems / pageable.getPageSize()))
+                .limit(pageable.getPageSize())
+                .totalItems(totalItems)
+                .build();
+    }
+
+    private List<Document> extractDocumentList(Object value) {
+        if (!(value instanceof List<?> rawList)) {
+            return List.of();
+        }
+        List<Document> documents = new ArrayList<>();
+        for (Object item : rawList) {
+            if (item instanceof Document document) {
+                documents.add(document);
+            }
+        }
+        return documents;
+    }
+
+    private OffsetDateTime toOffsetFromMongo(Object time) {
+        if (time == null) return null;
+        if (time instanceof LocalDateTime localDateTime) {
+            return toOffset(localDateTime);
+        }
+        if (time instanceof Date date) {
+            Instant instant = date.toInstant();
+            return instant.atOffset(ZoneOffset.ofHours(7));
+        }
+        return null;
     }
 
     private boolean isPhoneNumber(String query) {

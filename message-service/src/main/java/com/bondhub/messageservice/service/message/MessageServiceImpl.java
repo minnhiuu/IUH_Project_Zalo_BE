@@ -74,11 +74,19 @@ public class MessageServiceImpl implements MessageService {
         // Kiểm tra quyền: user phải là thành viên của phòng chat
         Conversation room = conversationRepository.findById(conversationId)
                 .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
-        assertMember(room, currentUserId);
+        assertConversationMember(room, currentUserId);
+        boolean isActiveMember = room.getMembers().stream()
+            .anyMatch(m -> m.getUserId().equals(currentUserId) && isActiveMember(m));
 
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
-        Page<Message> messagePage = messageRepository.findByConversationIdAndNotDeleted(
-                conversationId, currentUserId, pageable);
+        Page<Message> messagePage = isActiveMember
+            ? messageRepository.findByConversationIdAndNotDeleted(conversationId, currentUserId, pageable)
+            : messageRepository.findByConversationIdAndTypeAndNotDeleted(
+                conversationId,
+                currentUserId,
+                MessageType.SYSTEM,
+                PageRequest.of(0, 1, Sort.by(Sort.Direction.DESC, "createdAt"))
+            );
 
         String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
         List<MessageResponse> dtos = messagePage.getContent().stream()
@@ -98,7 +106,7 @@ public class MessageServiceImpl implements MessageService {
         // 1. Tìm phòng chat bằng ObjectId — kiểm tra quyền thành viên
         Conversation room = conversationRepository.findById(conversationId)
                 .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
-        assertMember(room, currentUserId);
+        assertActiveMember(room, currentUserId);
 
         // 2. Enrich sender info
         ChatUser sender = chatUserRepository.findById(currentUserId).orElse(null);
@@ -136,6 +144,7 @@ public class MessageServiceImpl implements MessageService {
         Query query = new Query(Criteria.where("id").is(room.getId()));
         Update update = new Update().set("lastMessage", lastInfo);
         room.getMembers().stream()
+            .filter(this::isActiveMember)
                 .filter(m -> !m.getUserId().equals(currentUserId))
                 .forEach(m -> update.inc("unreadCounts." + m.getUserId(), 1));
 
@@ -155,7 +164,9 @@ public class MessageServiceImpl implements MessageService {
         enrichNotifications(notifPrototypes);
         ChatNotification baseNotif = notifPrototypes.get(0);
 
-        finalRoom.getMembers().forEach(member -> {
+        finalRoom.getMembers().stream()
+            .filter(this::isActiveMember)
+            .forEach(member -> {
             boolean isFromMe = member.getUserId().equals(currentUserId);
             Integer unreadCount = finalRoom.getUnreadCounts().getOrDefault(member.getUserId(), 0);
 
@@ -167,7 +178,7 @@ public class MessageServiceImpl implements MessageService {
             kafkaTemplate.send(socketEventsTopic,
                     new SocketEvent(SocketEventType.MESSAGE, member.getUserId(),
                             "/queue/messages", personalNotif));
-        });
+                });
 
         // 7. Ingest vào AI system
         log.info("[Kafka] Sending user message to 'message-created' for AI ingestion.");
@@ -213,12 +224,24 @@ public class MessageServiceImpl implements MessageService {
      * Kiểm tra user có trong members của conversation không.
      * Nếu không → throw UNAUTHORIZED (403).
      */
-    private void assertMember(Conversation room, String userId) {
+    private void assertConversationMember(Conversation room, String userId) {
         boolean isMember = room.getMembers().stream()
                 .anyMatch(m -> m.getUserId().equals(userId));
         if (!isMember) {
             throw new AppException(ErrorCode.CHAT_MEMBER_NOT_FOUND);
         }
+    }
+
+    private void assertActiveMember(Conversation room, String userId) {
+        boolean isMember = room.getMembers().stream()
+                .anyMatch(m -> m.getUserId().equals(userId) && isActiveMember(m));
+        if (!isMember) {
+            throw new AppException(ErrorCode.CHAT_MEMBER_NOT_FOUND);
+        }
+    }
+
+    private boolean isActiveMember(ConversationMember member) {
+        return !Boolean.FALSE.equals(member.getActive());
     }
 
     private void enrichMessages(List<MessageResponse> dtos) {
