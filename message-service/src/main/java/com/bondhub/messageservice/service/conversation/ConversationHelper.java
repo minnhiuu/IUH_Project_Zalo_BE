@@ -129,9 +129,14 @@ public class ConversationHelper {
                 room, currentUserId, userCache, baseUrl, viewerCanSee);
 
         String partnerDisplayName = safeDisplayName(partner != null ? partner.getFullName() : null);
-        String displayName = room.isGroup() ? room.getName() : partnerDisplayName;
-        if (!room.isGroup() && (displayName == null || displayName.isBlank())) {
-            displayName = "Người dùng";
+        String displayName = room.getName();
+        if (room.isGroup() && (displayName == null || displayName.isBlank())) {
+            displayName = getDynamicGroupName(room, currentUserId, userCache);
+        } else if (!room.isGroup()) {
+            displayName = partnerDisplayName;
+            if (displayName == null || displayName.isBlank()) {
+                displayName = "Người dùng";
+            }
         }
         String displayAvatar = room.isGroup()
                 ? (room.getAvatar() != null ? baseUrl + room.getAvatar() : null)
@@ -239,6 +244,33 @@ public class ConversationHelper {
     public boolean canViewerSeeStatus(String currentUserId, Map<String, ChatUser> userCache) {
         ChatUser currentUser = userCache.get(currentUserId);
         return currentUser != null && currentUser.isShowSeenStatus();
+    }
+
+    public String getDynamicGroupName(Conversation room, String currentUserId, Map<String, ChatUser> userCache) {
+        List<String> memberNames = room.getMembers().stream()
+                .filter(this::isActiveMember)
+                .filter(m -> {
+                    if (room.getMembers().size() <= 2) return true;
+                    return !m.getUserId().equals(currentUserId);
+                })
+                .map(m -> {
+                    ChatUser u = userCache.get(m.getUserId());
+                    return u != null ? u.getFullName() : "Người dùng";
+                })
+                .filter(name -> name != null && !name.isBlank())
+                .limit(4) 
+                .toList();
+
+        if (memberNames.isEmpty()) return "Nhóm";
+
+        String joined = String.join(", ", memberNames);
+        int totalMembers = (int) room.getMembers().stream().filter(this::isActiveMember).count();
+        int remaining = totalMembers - memberNames.size();
+
+        if (remaining > 0) {
+            return joined + " và " + remaining + " người khác";
+        }
+        return joined;
     }
 
     public String safeDisplayName(String fullName) {

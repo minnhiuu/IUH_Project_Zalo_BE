@@ -268,19 +268,37 @@ public class GroupConversationServiceImpl implements GroupConversationService {
         Conversation conversation = findGroupConversation(conversationId);
         helper.assertMember(conversation, currentUserId);
 
+        String normalizedName = (name == null || name.strip().isEmpty()) ? null : name.strip();
         String oldName = conversation.getName();
-        if (oldName != null && oldName.equals(name))
-            return helper.buildConversationResponseForCurrentUser(conversation, currentUserId);
-        conversation.setName(name);
 
-        ActorInfo actorInfo = fetchActorInfo(currentUserId);
+        if (Objects.equals(oldName, normalizedName))
+            return helper.buildConversationResponseForCurrentUser(conversation, currentUserId);
+
+        String displayOldName = (oldName == null || oldName.isBlank())
+                ? fetchCurrentDynamicName(conversation, currentUserId) : oldName;
+
+        conversation.setName(normalizedName);
         conversationRepository.save(conversation);
 
+        String displayNewName = (normalizedName == null || normalizedName.isBlank())
+                ? fetchCurrentDynamicName(conversation, currentUserId) : normalizedName;
+
+        ActorInfo actorInfo = fetchActorInfo(currentUserId);
         systemMessageService.sendSystemMessage(conversationId, currentUserId, actorInfo.name(), actorInfo.avatar(),
                 SystemActionType.UPDATE_NAME,
-                Map.of("payload", Map.of("oldName", oldName, "newName", name)));
+                Map.of("payload", Map.of("oldName", displayOldName, "newName", displayNewName)));
 
         return broadcastAndRespond(conversation, currentUserId);
+    }
+
+    private String fetchCurrentDynamicName(Conversation conversation, String currentUserId) {
+        Set<String> memberIds = conversation.getMembers().stream()
+                .filter(helper::isActiveMember)
+                .map(ConversationMember::getUserId)
+                .collect(Collectors.toSet());
+        Map<String, ChatUser> userCache = chatUserRepository.findAllById(memberIds).stream()
+                .collect(Collectors.toMap(ChatUser::getId, u -> u));
+        return helper.getDynamicGroupName(conversation, currentUserId, userCache);
     }
 
     @Override
