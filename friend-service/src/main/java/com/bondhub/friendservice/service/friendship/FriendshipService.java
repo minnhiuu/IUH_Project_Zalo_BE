@@ -33,4 +33,6 @@ public interface FriendshipService {
     Integer getMutualFriendsCount(String userId);
 
     Set<String> getFriendIds(String userId);
+
+    java.util.Map<String, String> batchCheckFriendshipStatus(List<String> targetUserIds);
 }

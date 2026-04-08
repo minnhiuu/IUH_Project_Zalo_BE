@@ -16,8 +16,9 @@ public interface FileServiceClient {
     ApiResponse<FileUploadResponse> uploadFile(
             @RequestHeader("X-Account-Id") String accountId,
             @RequestHeader("X-User-Email") String email,
-            @RequestPart("file") MultipartFile file);
+            @RequestPart("file") MultipartFile file,
+            @RequestParam("folder") String folder);
 
-    @DeleteMapping("/files/{key}")
-    ApiResponse<Void> deleteFile(@PathVariable("key") String key);
+    @DeleteMapping("/files")
+    ApiResponse<Void> deleteFile(@RequestParam("key") String key);
 }
