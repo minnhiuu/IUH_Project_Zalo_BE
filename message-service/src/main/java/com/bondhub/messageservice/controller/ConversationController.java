@@ -92,6 +92,15 @@ public class ConversationController {
         return ResponseEntity.ok(ApiResponse.success(null));
     }
 
+    @DeleteMapping("/{conversationId}/leave")
+    @Operation(summary = "Leave group conversation")
+    public ResponseEntity<ApiResponse<Void>> leaveGroup(
+            @PathVariable String conversationId,
+            @RequestParam(defaultValue = "false") boolean silent) {
+        conversationService.leaveGroup(conversationId, silent);
+        return ResponseEntity.ok(ApiResponse.success(null));
+    }
+
     @GetMapping("/friends-directory")
     @Operation(summary = "Get initial friends list grouped by alphabet (A-Z)")
     public ResponseEntity<ApiResponse<Map<String, List<SearchMemberResponse>>>> getFriendsDirectory(

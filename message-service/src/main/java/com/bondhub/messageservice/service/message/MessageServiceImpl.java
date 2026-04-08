@@ -337,19 +337,45 @@ public class MessageServiceImpl implements MessageService {
         message.setCreatedAt(now);
         Message savedMessage = messageRepository.save(message);
 
-        Query query = new Query(Criteria.where("id").is(conversationId));
-        Update update = new Update().set("lastMessage", LastMessageInfo.builder()
-                .messageId(savedMessage.getId())
-                .senderId(actorId)
-                .content(null)
-                .timestamp(savedMessage.getCreatedAt())
-                .type(MessageType.SYSTEM)
-                .metadata(savedMessage.getMetadata())
-                .build());
+        boolean isNegativeAction = action == SystemActionType.LEAVE_GROUP
+                || action == SystemActionType.REMOVE_MEMBER;
 
-        Conversation room = mongoTemplate.findAndModify(query, update,
-                FindAndModifyOptions.options().returnNew(true),
-                Conversation.class);
+        Conversation room;
+        Query query = new Query(Criteria.where("id").is(conversationId));
+
+        if (isNegativeAction) {
+            Conversation existing = mongoTemplate.findOne(query, Conversation.class);
+            LocalDateTime preservedTimestamp = (existing != null && existing.getLastMessage() != null
+                    && existing.getLastMessage().getTimestamp() != null)
+                    ? existing.getLastMessage().getTimestamp()
+                    : now;
+
+            Update update = new Update().set("lastMessage", LastMessageInfo.builder()
+                    .messageId(savedMessage.getId())
+                    .senderId(actorId)
+                    .content(null)
+                    .timestamp(preservedTimestamp)
+                    .type(MessageType.SYSTEM)
+                    .metadata(savedMessage.getMetadata())
+                    .build());
+
+            room = mongoTemplate.findAndModify(query, update,
+                    FindAndModifyOptions.options().returnNew(true),
+                    Conversation.class);
+        } else {
+            Update update = new Update().set("lastMessage", LastMessageInfo.builder()
+                    .messageId(savedMessage.getId())
+                    .senderId(actorId)
+                    .content(null)
+                    .timestamp(savedMessage.getCreatedAt())
+                    .type(MessageType.SYSTEM)
+                    .metadata(savedMessage.getMetadata())
+                    .build());
+
+            room = mongoTemplate.findAndModify(query, update,
+                    FindAndModifyOptions.options().returnNew(true),
+                    Conversation.class);
+        }
 
         if (room != null) {
             String baseUrl = S3Util.getS3BaseUrl(bucketName, region);

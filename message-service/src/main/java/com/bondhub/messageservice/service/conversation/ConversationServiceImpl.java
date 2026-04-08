@@ -2,6 +2,7 @@ package com.bondhub.messageservice.service.conversation;
 
 import com.bondhub.common.enums.Status;
 import com.bondhub.common.enums.SystemActionType;
+import com.bondhub.common.enums.MessageType;
 import com.bondhub.common.utils.S3Util;
 import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.common.exception.AppException;
@@ -184,7 +185,7 @@ public class ConversationServiceImpl implements ConversationService {
 
         // 2. Kiểm tra quyền: currentUser phải là thành viên
         boolean isMember = room.getMembers().stream()
-            .anyMatch(m -> m.getUserId().equals(currentUserId));
+                .anyMatch(m -> m.getUserId().equals(currentUserId));
         if (!isMember) {
             throw new AppException(ErrorCode.CHAT_MEMBER_NOT_FOUND);
         }
@@ -193,7 +194,7 @@ public class ConversationServiceImpl implements ConversationService {
 
         // 3. Cập nhật unreadCount và lastReadMessageId
         Query query = new Query(Criteria.where("id").is(conversationId)
-            .and("members.userId").is(currentUserId));
+                .and("members.userId").is(currentUserId));
         Update update = new Update().set("unreadCounts." + currentUserId, 0);
         if (finalReadId != null) {
             update.set("members.$.lastReadMessageId", finalReadId);
@@ -214,6 +215,7 @@ public class ConversationServiceImpl implements ConversationService {
     public ConversationResponse createGroupConversation(GroupConversationCreateRequest request) {
         String currentUserId = securityUtil.getCurrentUserId();
 
+        String groupName = (request.name() == null || request.name().isBlank()) ? null : request.name().trim();
         String avatarUrl = request.avatar();
 
         Set<String> memberIds = new LinkedHashSet<>(request.memberIds());
@@ -250,7 +252,7 @@ public class ConversationServiceImpl implements ConversationService {
         members.forEach(m -> unreadCounts.put(m.getUserId(), 0));
 
         Conversation conversation = Conversation.builder()
-                .name(request.name().trim())
+                .name(groupName)
                 .avatar(avatarUrl)
                 .isGroup(true)
                 .members(members)
@@ -262,19 +264,20 @@ public class ConversationServiceImpl implements ConversationService {
 
         ChatUser actor = chatUserRepository.findById(currentUserId).orElse(null);
         String actorName = actor != null ? actor.getFullName() : "Người dùng";
+        String actorAvatar = actor != null ? actor.getAvatar() : null;
         Map<String, String> userNameMap = users.stream()
-            .collect(Collectors.toMap(ChatUser::getId, ChatUser::getFullName));
+                .collect(Collectors.toMap(ChatUser::getId, ChatUser::getFullName));
         List<String> createTargetIds = new ArrayList<>(memberIds);
         List<String> createTargetNames = createTargetIds.stream()
-            .map(id -> userNameMap.getOrDefault(id, "Người dùng"))
-            .toList();
+                .map(id -> userNameMap.getOrDefault(id, "Người dùng"))
+                .toList();
 
         messageService.sendSystemMessage(saved.getId(), currentUserId, actorName,
-            SystemActionType.CREATE_GROUP,
-            Map.of(
-                "targetIds", createTargetIds,
-                "payload", Map.of("targetNames", createTargetNames)
-            ));
+                SystemActionType.CREATE_GROUP,
+                Map.of(
+                        "targetIds", createTargetIds,
+                        "payload", Map.of("targetNames", createTargetNames)
+                ));
 
         log.info("[Conversation] Created group conversation {} by user {} with {} members",
                 saved.getId(), saved.getMembers().size(), currentUserId);
@@ -350,18 +353,18 @@ public class ConversationServiceImpl implements ConversationService {
         ChatUser actor = chatUserRepository.findById(currentUserId).orElse(null);
         String actorName = actor != null ? actor.getFullName() : "Người dùng";
         Map<String, String> requestedNameMap = users.stream()
-            .collect(Collectors.toMap(ChatUser::getId, ChatUser::getFullName));
+                .collect(Collectors.toMap(ChatUser::getId, ChatUser::getFullName));
         List<String> addedTargetIds = new ArrayList<>(requestedIds);
         List<String> addedTargetNames = addedTargetIds.stream()
-            .map(id -> requestedNameMap.getOrDefault(id, "Người dùng"))
-            .toList();
+                .map(id -> requestedNameMap.getOrDefault(id, "Người dùng"))
+                .toList();
 
         messageService.sendSystemMessage(conversationId, currentUserId, actorName,
-            SystemActionType.ADD_MEMBERS,
-            Map.of(
-                "targetIds", addedTargetIds,
-                "payload", Map.of("targetNames", addedTargetNames)
-            ));
+                SystemActionType.ADD_MEMBERS,
+                Map.of(
+                        "targetIds", addedTargetIds,
+                        "payload", Map.of("targetNames", addedTargetNames)
+                ));
 
         broadcastConversationUpdate(saved.getId());
         return buildConversationResponseForCurrentUser(saved, currentUserId);
@@ -405,11 +408,11 @@ public class ConversationServiceImpl implements ConversationService {
         String targetName = targetUser != null ? targetUser.getFullName() : "Người dùng";
 
         messageService.sendSystemMessage(conversationId, currentUserId, actorName,
-            SystemActionType.REMOVE_MEMBER,
-            Map.of(
-                "targetIds", List.of(targetUserId),
-                "payload", Map.of("targetName", targetName)
-            ));
+                SystemActionType.REMOVE_MEMBER,
+                Map.of(
+                        "targetIds", List.of(targetUserId),
+                        "payload", Map.of("targetName", targetName)
+                ));
 
         broadcastConversationUpdate(saved.getId());
         return buildConversationResponseForCurrentUser(saved, currentUserId);
@@ -797,6 +800,86 @@ public class ConversationServiceImpl implements ConversationService {
         broadcastConversationUpdate(conversationId);
 
         log.info("[Conversation] Group {} has been disbanded by owner {}", conversationId, currentUserId);
+    }
+
+    @Override
+    public void leaveGroup(String conversationId, boolean silent) {
+        String currentUserId = securityUtil.getCurrentUserId();
+
+        Conversation conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
+
+        if (!conversation.isGroup()) {
+            throw new AppException(ErrorCode.CHAT_NOT_A_GROUP);
+        }
+        assertMember(conversation, currentUserId);
+
+        ConversationMember currentMember = getMemberOrThrow(conversation, currentUserId);
+        if (resolveRole(currentMember) == MemberRole.OWNER) {
+            throw new AppException(ErrorCode.CHAT_CANNOT_REMOVE_OWNER);
+        }
+
+        ChatUser actor = chatUserRepository.findById(currentUserId).orElse(null);
+        String actorName = actor != null ? actor.getFullName() : "Người dùng";
+        String actorAvatar = actor != null ? actor.getAvatar() : null;
+
+        if (!silent) {
+            messageService.sendSystemMessage(conversationId, currentUserId, actorName,
+                    SystemActionType.LEAVE_GROUP, Map.of());
+        }
+
+        Query query = new Query(Criteria.where("id").is(conversationId));
+        Update update = new Update().pull("members", Query.query(Criteria.where("userId").is(currentUserId)));
+        update.unset("unreadCounts." + currentUserId);
+        mongoTemplate.updateFirst(query, update, Conversation.class);
+
+        Conversation updatedConversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
+
+        if (silent) {
+            sendLeaveSystemMessageToOwnerAdmin(updatedConversation, currentUserId, actorName, actorAvatar);
+        }
+
+        broadcastConversationUpdate(updatedConversation);
+
+        log.info("[Conversation] User {} left group {} (silent={})", currentUserId, conversationId, silent);
+    }
+
+    private void sendLeaveSystemMessageToOwnerAdmin(Conversation conversation,
+                                                    String actorId,
+                                                    String actorName,
+                                                    String actorAvatar) {
+        if (conversation == null || conversation.getMembers() == null) {
+            return;
+        }
+
+        Map<String, Object> metadata = Map.of("action", SystemActionType.LEAVE_GROUP.name(), "silent", true);
+        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+        String avatarUrl = actorAvatar != null ? baseUrl + actorAvatar : null;
+
+        conversation.getMembers().stream()
+                .filter(this::isActiveMember)
+                .filter(member -> {
+                    MemberRole role = resolveRole(member);
+                    return role == MemberRole.OWNER || role == MemberRole.ADMIN;
+                })
+                .forEach(member -> {
+                    ChatNotification notification = ChatNotification.builder()
+                            .id("silent-leave-" + UUID.randomUUID())
+                            .conversationId(conversation.getId())
+                            .senderId(actorId)
+                            .senderName(actorName)
+                            .senderAvatar(avatarUrl)
+                            .content(null)
+                            .type(MessageType.SYSTEM)
+                            .timestamp(OffsetDateTime.now(ZoneOffset.ofHours(7)))
+                            .metadata(metadata)
+                            .build();
+
+                    kafkaTemplate.send(socketEventsTopic,
+                            new SocketEvent(SocketEventType.MESSAGE, member.getUserId(),
+                                    "/queue/messages", notification));
+                });
     }
 
     @Override

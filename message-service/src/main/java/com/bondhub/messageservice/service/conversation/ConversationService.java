@@ -36,6 +36,8 @@ public interface ConversationService {
     void broadcastConversationUpdate(Conversation room);
 
     void disbandGroup(String conversationId);
+
+    void leaveGroup(String conversationId, boolean silent);
     
     void deleteConversationForMe(String conversationId);
 
