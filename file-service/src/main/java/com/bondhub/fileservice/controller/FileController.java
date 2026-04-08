@@ -6,10 +6,15 @@ import com.bondhub.fileservice.service.file.FileService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import jakarta.servlet.http.HttpServletRequest;
+
 import java.io.IOException;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 
 @RestController
 @RequestMapping("/files")
@@ -34,8 +39,25 @@ public class FileController {
                 .body(data);
     }
 
-    @DeleteMapping("/{key}")
-    public ResponseEntity<ApiResponse<Void>> delete(@PathVariable String key) {
+    @DeleteMapping
+    public ResponseEntity<ApiResponse<Void>> deleteByQuery(@RequestParam("key") String key) {
+        fileService.deleteFile(key);
+        return ResponseEntity.ok(ApiResponse.successWithoutData());
+    }
+
+    @DeleteMapping("/**")
+    public ResponseEntity<ApiResponse<Void>> deleteLegacy(HttpServletRequest request) {
+        String rawPath = request.getRequestURI();
+        String marker = "/files/";
+        int index = rawPath.indexOf(marker);
+
+        String encodedKey = index >= 0 ? rawPath.substring(index + marker.length()) : "";
+        String key = URLDecoder.decode(encodedKey, StandardCharsets.UTF_8);
+
+        if (!StringUtils.hasText(key)) {
+            throw new IllegalArgumentException("File key must not be blank");
+        }
+
         fileService.deleteFile(key);
         return ResponseEntity.ok(ApiResponse.successWithoutData());
     }

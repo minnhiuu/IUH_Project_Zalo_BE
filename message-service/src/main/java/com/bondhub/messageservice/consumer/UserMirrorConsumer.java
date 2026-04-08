@@ -17,6 +17,7 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
@@ -41,8 +42,12 @@ public class UserMirrorConsumer {
             chatUserRepository.findById(event.userId()).ifPresentOrElse(user -> {
                 LocalDateTime eventTime = new Timestamp(event.timestamp()).toLocalDateTime();
                 if (user.getLastUpdatedAt() == null || user.getLastUpdatedAt().isBefore(eventTime)) {
-                    user.setFullName(event.fullName());
-                    user.setAvatar(event.avatar());
+                    if (StringUtils.hasText(event.fullName())) {
+                        user.setFullName(event.fullName());
+                    }
+                    if (StringUtils.hasText(event.avatar())) {
+                        user.setAvatar(event.avatar());
+                    }
                     user.setLastUpdatedAt(eventTime);
                     chatUserRepository.save(user);
                     log.info("✅ Updated ChatUser mirror for userId: {}", event.userId());
@@ -52,8 +57,8 @@ public class UserMirrorConsumer {
             }, () -> {
                 ChatUser newUser = ChatUser.builder()
                         .id(event.userId())
-                        .fullName(event.fullName())
-                        .avatar(event.avatar())
+                        .fullName(StringUtils.hasText(event.fullName()) ? event.fullName() : "Người dùng mới")
+                        .avatar(StringUtils.hasText(event.avatar()) ? event.avatar() : null)
                         .lastUpdatedAt(new Timestamp(event.timestamp()).toLocalDateTime())
                         .build();
                 chatUserRepository.save(newUser);

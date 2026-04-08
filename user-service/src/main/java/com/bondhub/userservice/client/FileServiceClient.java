@@ -19,6 +19,6 @@ public interface FileServiceClient {
             @RequestPart("file") MultipartFile file,
             @RequestParam("folder") String folder);
 
-    @DeleteMapping("/files/{key}")
-    ApiResponse<Void> deleteFile(@PathVariable("key") String key);
+    @DeleteMapping("/files")
+    ApiResponse<Void> deleteFile(@RequestParam("key") String key);
 }

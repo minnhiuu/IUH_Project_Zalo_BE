@@ -133,6 +133,11 @@ public class FriendshipMirrorConsumer {
     }
 
     private void updateFriendList(String targetUserId, String friendIdToModify, FriendshipAction action) {
+                if (action != FriendshipAction.ADDED && action != FriendshipAction.REMOVED) {
+                        log.debug("Skip friend list update for {} (action: {})", targetUserId, action);
+                        return;
+                }
+
         Query query = new Query(Criteria.where("id").is(targetUserId));
         Update update = new Update();
 
