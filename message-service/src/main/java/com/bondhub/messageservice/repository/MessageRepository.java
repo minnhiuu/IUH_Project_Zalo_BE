@@ -11,10 +11,10 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface MessageRepository extends MongoRepository<Message, String> {
 
-    @Query("{ 'conversationId': ?0, 'deletedBy': { $ne: ?1 } }")
+    @Query("{ 'conversationId': ?0, 'deletedBy': { $ne: ?1 }, $or: [ { 'visibleTo': { $exists: false } }, { 'visibleTo': null }, { 'visibleTo': { $size: 0 } }, { 'visibleTo': ?1 } ] }")
     Page<Message> findByConversationIdAndNotDeleted(String conversationId, String userId, Pageable pageable);
 
-    @Query("{ 'conversationId': ?0, 'deletedBy': { $ne: ?1 }, 'type': ?2 }")
+    @Query("{ 'conversationId': ?0, 'deletedBy': { $ne: ?1 }, 'type': ?2, $or: [ { 'visibleTo': { $exists: false } }, { 'visibleTo': null }, { 'visibleTo': { $size: 0 } }, { 'visibleTo': ?1 } ] }")
     Page<Message> findByConversationIdAndTypeAndNotDeleted(
             String conversationId,
             String userId,

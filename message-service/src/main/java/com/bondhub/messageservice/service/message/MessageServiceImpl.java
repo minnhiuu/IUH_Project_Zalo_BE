@@ -319,6 +319,13 @@ public class MessageServiceImpl implements MessageService {
     @Override
     public void sendSystemMessage(String conversationId, String actorId, String actorName,
                                   SystemActionType action, Map<String, Object> extraMetadata) {
+        sendSystemMessage(conversationId, actorId, actorName, action, extraMetadata, null);
+    }
+
+    @Override
+    public void sendSystemMessage(String conversationId, String actorId, String actorName,
+                                  SystemActionType action, Map<String, Object> extraMetadata,
+                                  Set<String> recipientUserIds) {
         LocalDateTime now = LocalDateTime.now();
 
         Map<String, Object> metadata = new HashMap<>();
@@ -333,9 +340,13 @@ public class MessageServiceImpl implements MessageService {
                 .senderName(actorName)
                 .type(MessageType.SYSTEM)
                 .metadata(metadata)
+                .visibleTo(recipientUserIds != null && !recipientUserIds.isEmpty()
+                        ? new HashSet<>(recipientUserIds) : null)
                 .build();
         message.setCreatedAt(now);
         Message savedMessage = messageRepository.save(message);
+
+        boolean isRestricted = recipientUserIds != null && !recipientUserIds.isEmpty();
 
         boolean isNegativeAction = action == SystemActionType.LEAVE_GROUP
                 || action == SystemActionType.REMOVE_MEMBER;
@@ -343,7 +354,11 @@ public class MessageServiceImpl implements MessageService {
         Conversation room;
         Query query = new Query(Criteria.where("id").is(conversationId));
 
-        if (isNegativeAction) {
+        if (isRestricted) {
+            // Just fetch the current conversation state to have member list for notifications;
+            // do NOT modify lastMessage.
+            room = mongoTemplate.findOne(query, Conversation.class);
+        } else if (isNegativeAction) {
             Conversation existing = mongoTemplate.findOne(query, Conversation.class);
             LocalDateTime preservedTimestamp = (existing != null && existing.getLastMessage() != null
                     && existing.getLastMessage().getTimestamp() != null)
@@ -381,7 +396,12 @@ public class MessageServiceImpl implements MessageService {
             String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
 
             room.getMembers().forEach(member -> {
-                Integer currentUnread = room.getUnreadCounts().getOrDefault(member.getUserId(), 0);
+                if (recipientUserIds != null && !recipientUserIds.contains(member.getUserId())) {
+                    return;
+                }
+
+                Integer currentUnread = room.getUnreadCounts() != null
+                        ? room.getUnreadCounts().getOrDefault(member.getUserId(), 0) : 0;
                 boolean isFromMe = member.getUserId().equals(actorId);
 
                 ChatNotification notification = messageMapper.mapToChatNotification(savedMessage, baseUrl, currentUnread);

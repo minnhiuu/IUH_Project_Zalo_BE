@@ -7,6 +7,7 @@ import com.bondhub.messageservice.dto.response.MessageResponse;
 import com.bondhub.messageservice.model.Message;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public interface MessageService {
 
@@ -34,6 +35,10 @@ public interface MessageService {
 
     void sendSystemMessage(String conversationId, String actorId, String actorName,
                                    SystemActionType action, Map<String, Object> extraMetadata);
+
+    void sendSystemMessage(String conversationId, String actorId, String actorName,
+                                   SystemActionType action, Map<String, Object> extraMetadata,
+                                   Set<String> recipientUserIds);
 
     void deleteAllMessagesByConversationId(String conversationId);
     

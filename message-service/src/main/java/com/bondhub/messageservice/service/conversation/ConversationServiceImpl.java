@@ -728,6 +728,14 @@ public class ConversationServiceImpl implements ConversationService {
         return room.getMembers().stream()
                 .filter(this::isActiveMember)
                 .filter(m -> room.isGroup() || !m.getUserId().equals(currentUserId))
+                .sorted(Comparator
+                        .comparing((ConversationMember m) ->
+                                        m.getJoinedAt() != null ? m.getJoinedAt() : LocalDateTime.MIN,
+                                Comparator.reverseOrder())   
+                        .thenComparingInt(m -> {             
+                            MemberRole r = m.getRole() != null ? m.getRole() : MemberRole.MEMBER;
+                            return r == MemberRole.OWNER ? 0 : (r == MemberRole.ADMIN ? 1 : 2);
+                        }))
                 .map(m -> {
                     ChatUser memberInfo = userCache.get(m.getUserId());
                     boolean canSeeStatus = viewerCanSee && memberInfo != null
@@ -821,7 +829,6 @@ public class ConversationServiceImpl implements ConversationService {
 
         ChatUser actor = chatUserRepository.findById(currentUserId).orElse(null);
         String actorName = actor != null ? actor.getFullName() : "Người dùng";
-        String actorAvatar = actor != null ? actor.getAvatar() : null;
 
         if (!silent) {
             messageService.sendSystemMessage(conversationId, currentUserId, actorName,
@@ -833,53 +840,26 @@ public class ConversationServiceImpl implements ConversationService {
         update.unset("unreadCounts." + currentUserId);
         mongoTemplate.updateFirst(query, update, Conversation.class);
 
-        Conversation updatedConversation = conversationRepository.findById(conversationId)
-                .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
-
         if (silent) {
-            sendLeaveSystemMessageToOwnerAdmin(updatedConversation, currentUserId, actorName, actorAvatar);
+            Conversation updatedConversation = conversationRepository.findById(conversationId)
+                    .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
+
+            Set<String> adminOwnerIds = updatedConversation.getMembers().stream()
+                    .filter(this::isActiveMember)
+                    .filter(m -> {
+                        MemberRole role = resolveRole(m);
+                        return role == MemberRole.OWNER || role == MemberRole.ADMIN;
+                    })
+                    .map(ConversationMember::getUserId)
+                    .collect(Collectors.toSet());
+
+            messageService.sendSystemMessage(conversationId, currentUserId, actorName,
+                    SystemActionType.LEAVE_GROUP, Map.of(), adminOwnerIds);
         }
 
-        broadcastConversationUpdate(updatedConversation);
+        broadcastConversationUpdate(conversationId);
 
         log.info("[Conversation] User {} left group {} (silent={})", currentUserId, conversationId, silent);
-    }
-
-    private void sendLeaveSystemMessageToOwnerAdmin(Conversation conversation,
-                                                    String actorId,
-                                                    String actorName,
-                                                    String actorAvatar) {
-        if (conversation == null || conversation.getMembers() == null) {
-            return;
-        }
-
-        Map<String, Object> metadata = Map.of("action", SystemActionType.LEAVE_GROUP.name(), "silent", true);
-        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
-        String avatarUrl = actorAvatar != null ? baseUrl + actorAvatar : null;
-
-        conversation.getMembers().stream()
-                .filter(this::isActiveMember)
-                .filter(member -> {
-                    MemberRole role = resolveRole(member);
-                    return role == MemberRole.OWNER || role == MemberRole.ADMIN;
-                })
-                .forEach(member -> {
-                    ChatNotification notification = ChatNotification.builder()
-                            .id("silent-leave-" + UUID.randomUUID())
-                            .conversationId(conversation.getId())
-                            .senderId(actorId)
-                            .senderName(actorName)
-                            .senderAvatar(avatarUrl)
-                            .content(null)
-                            .type(MessageType.SYSTEM)
-                            .timestamp(OffsetDateTime.now(ZoneOffset.ofHours(7)))
-                            .metadata(metadata)
-                            .build();
-
-                    kafkaTemplate.send(socketEventsTopic,
-                            new SocketEvent(SocketEventType.MESSAGE, member.getUserId(),
-                                    "/queue/messages", notification));
-                });
     }
 
     @Override
@@ -1127,6 +1107,12 @@ public class ConversationServiceImpl implements ConversationService {
                 .limit(pageable.getPageSize())
                 .totalItems(totalItems)
                 .build();
+    }
+
+    private void assertOwner(ConversationMember actor) {
+        if (resolveRole(actor) != MemberRole.OWNER) {
+            throw new AppException(ErrorCode.CHAT_NOT_OWNER);
+        }
     }
 
     private List<Document> extractDocumentList(Object value) {

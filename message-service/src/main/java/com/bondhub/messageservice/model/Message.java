@@ -44,4 +44,6 @@ public class Message extends BaseModel {
 
     @Builder.Default
     Set<String> deletedBy = new HashSet<>();
+
+    Set<String> visibleTo;
 }

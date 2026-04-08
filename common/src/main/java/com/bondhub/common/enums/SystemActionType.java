@@ -7,5 +7,7 @@ public enum SystemActionType {
     LEAVE_GROUP,
     UPDATE_NAME,
     UPDATE_AVATAR,
-    DISBAND_GROUP
+    DISBAND_GROUP,
+    PROMOTE_ADMIN,
+    DEMOTE_ADMIN
 }
