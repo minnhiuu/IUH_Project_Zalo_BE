@@ -110,9 +110,6 @@ public class ConversationServiceImpl implements ConversationService {
         userIds.add(currentUserId);
         userIds.add(partnerId);
         room.getMembers().forEach(m -> userIds.add(m.getUserId()));
-        if (room.getLastMessage() != null && room.getLastMessage().getSenderId() != null) {
-            userIds.add(room.getLastMessage().getSenderId());
-        }
 
         Map<String, ChatUser> userCache = chatUserRepository.findAllById(userIds).stream()
                 .collect(Collectors.toMap(ChatUser::getId, u -> u));
@@ -142,9 +139,6 @@ public class ConversationServiceImpl implements ConversationService {
         allUserIds.add(currentUserId);
         roomsPage.getContent().forEach(room -> {
             room.getMembers().forEach(m -> allUserIds.add(m.getUserId()));
-            if (room.getLastMessage() != null && room.getLastMessage().getSenderId() != null) {
-                allUserIds.add(room.getLastMessage().getSenderId());
-            }
         });
 
         Map<String, ChatUser> userCache = chatUserRepository.findAllById(allUserIds).stream()
@@ -582,10 +576,6 @@ public class ConversationServiceImpl implements ConversationService {
                 .map(ConversationMember::getUserId)
                 .collect(Collectors.toSet());
 
-        if (room.getLastMessage() != null && room.getLastMessage().getSenderId() != null) {
-            userIds.add(room.getLastMessage().getSenderId());
-        }
-
         Map<String, ChatUser> userCache = chatUserRepository.findAllById(userIds).stream()
                 .collect(Collectors.toMap(ChatUser::getId, u -> u));
 
@@ -637,9 +627,6 @@ public class ConversationServiceImpl implements ConversationService {
                 .filter(this::isActiveMember)
                 .map(ConversationMember::getUserId)
                 .collect(Collectors.toSet());
-        if (room.getLastMessage() != null && room.getLastMessage().getSenderId() != null) {
-            allUserIds.add(room.getLastMessage().getSenderId());
-        }
 
         Map<String, ChatUser> userCache = chatUserRepository.findAllById(allUserIds).stream()
                 .collect(Collectors.toMap(ChatUser::getId, u -> u));

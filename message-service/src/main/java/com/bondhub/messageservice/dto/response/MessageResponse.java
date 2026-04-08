@@ -21,8 +21,10 @@ public record MessageResponse(
                 String content,
                 String clientMessageId,
                 MessageType type,
-                @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss.SSSXXX", timezone = "GMT+7") OffsetDateTime createdAt,
-                @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss.SSSXXX", timezone = "GMT+7") OffsetDateTime lastModifiedAt,
+                @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss.SSSXXX", timezone = "GMT+7")
+                OffsetDateTime createdAt,
+                @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss.SSSXXX", timezone = "GMT+7")
+                OffsetDateTime lastModifiedAt,
                 ReplyMetadataResponse replyTo,
                 boolean isForwarded,
                 MessageStatus status,
