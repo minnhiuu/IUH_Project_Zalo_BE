@@ -8,6 +8,7 @@ import com.bondhub.messageservice.dto.response.ConversationResponse;
 import com.bondhub.messageservice.dto.response.GroupMemberListItemResponse;
 import com.bondhub.messageservice.dto.response.SearchMemberResponse;
 import com.bondhub.messageservice.service.conversation.ConversationService;
+import com.bondhub.messageservice.service.conversation.GroupConversationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -27,6 +28,7 @@ import java.util.Map;
 public class ConversationController {
 
     private final ConversationService conversationService;
+        private final GroupConversationService groupConversationService;
 
     @GetMapping
     @Operation(summary = "Get conversations of current user (paginated)")
@@ -57,7 +59,7 @@ public class ConversationController {
     public ResponseEntity<ApiResponse<ConversationResponse>> createGroupConversation(
             @RequestBody @Valid GroupConversationCreateRequest request) {
         return ResponseEntity.ok(ApiResponse.success(
-                conversationService.createGroupConversation(request)));
+                groupConversationService.createGroupConversation(request)));
     }
 
     @PatchMapping("/{conversationId}/name")
@@ -66,7 +68,7 @@ public class ConversationController {
             @PathVariable String conversationId,
             @RequestParam String name) {
         return ResponseEntity.ok(ApiResponse.success(
-                conversationService.updateGroupName(conversationId, name)));
+                groupConversationService.updateGroupName(conversationId, name)));
     }
 
     @PatchMapping(value = "/{conversationId}/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -75,7 +77,7 @@ public class ConversationController {
             @PathVariable String conversationId,
             @RequestPart("file") MultipartFile file) {
         return ResponseEntity.ok(ApiResponse.success(
-                conversationService.updateGroupAvatar(conversationId, file)));
+                groupConversationService.updateGroupAvatar(conversationId, file)));
     }
 
     @DeleteMapping("/{conversationId}")
@@ -88,7 +90,7 @@ public class ConversationController {
     @DeleteMapping("/{conversationId}/groups")
     @Operation(summary = "Disband group conversation (Owner only)")
     public ResponseEntity<ApiResponse<Void>> disbandGroup(@PathVariable String conversationId) {
-        conversationService.disbandGroup(conversationId);
+                groupConversationService.disbandGroup(conversationId);
         return ResponseEntity.ok(ApiResponse.success(null));
     }
 
@@ -97,7 +99,7 @@ public class ConversationController {
     public ResponseEntity<ApiResponse<Void>> leaveGroup(
             @PathVariable String conversationId,
             @RequestParam(defaultValue = "false") boolean silent) {
-        conversationService.leaveGroup(conversationId, silent);
+                groupConversationService.leaveGroup(conversationId, silent);
         return ResponseEntity.ok(ApiResponse.success(null));
     }
 
@@ -106,7 +108,7 @@ public class ConversationController {
     public ResponseEntity<ApiResponse<Map<String, List<SearchMemberResponse>>>> getFriendsDirectory(
             @RequestParam(required = false) String conversationId) {
         return ResponseEntity.ok(ApiResponse.success(
-                conversationService.getFriendsDirectory(conversationId)));
+                groupConversationService.getFriendsDirectory(conversationId)));
     }
 
 
@@ -118,7 +120,7 @@ public class ConversationController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         return ResponseEntity.ok(ApiResponse.success(
-                conversationService.searchMembersToAdd(conversationId, query, page, size)));
+                groupConversationService.searchMembersToAdd(conversationId, query, page, size)));
     }
 
     @PostMapping("/{conversationId}/members")
@@ -127,7 +129,7 @@ public class ConversationController {
             @PathVariable String conversationId,
             @RequestBody @Valid AddMembersRequest request) {
         return ResponseEntity.ok(ApiResponse.success(
-                conversationService.addMembersToGroup(conversationId, request.memberIds())));
+                groupConversationService.addMembersToGroup(conversationId, request.memberIds())));
     }
 
     @DeleteMapping("/{conversationId}/members/{targetUserId}")
@@ -136,7 +138,7 @@ public class ConversationController {
             @PathVariable String conversationId,
             @PathVariable String targetUserId) {
         return ResponseEntity.ok(ApiResponse.success(
-                conversationService.removeMemberFromGroup(conversationId, targetUserId)));
+                groupConversationService.removeMemberFromGroup(conversationId, targetUserId)));
     }
 
     @PatchMapping("/{conversationId}/members/{targetUserId}/promote")
@@ -145,7 +147,7 @@ public class ConversationController {
             @PathVariable String conversationId,
             @PathVariable String targetUserId) {
         return ResponseEntity.ok(ApiResponse.success(
-                conversationService.promoteToAdmin(conversationId, targetUserId)));
+                groupConversationService.promoteToAdmin(conversationId, targetUserId)));
     }
 
     @PatchMapping("/{conversationId}/members/{targetUserId}/demote")
@@ -154,7 +156,7 @@ public class ConversationController {
             @PathVariable String conversationId,
             @PathVariable String targetUserId) {
         return ResponseEntity.ok(ApiResponse.success(
-                conversationService.demoteFromAdmin(conversationId, targetUserId)));
+                groupConversationService.demoteFromAdmin(conversationId, targetUserId)));
     }
 
     @GetMapping("/{conversationId}/group-members")
@@ -165,6 +167,6 @@ public class ConversationController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         return ResponseEntity.ok(ApiResponse.success(
-                conversationService.getGroupMembers(conversationId, query, page, size)));
+                                groupConversationService.getGroupMembers(conversationId, query, page, size)));
     }
 }

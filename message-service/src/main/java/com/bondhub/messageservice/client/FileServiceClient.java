@@ -14,7 +14,9 @@ import org.springframework.web.multipart.MultipartFile;
 public interface FileServiceClient {
 
     @PostMapping(value = "/files/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    ApiResponse<FileUploadResponse> upload(@RequestPart("file") MultipartFile file);
+    ApiResponse<FileUploadResponse> upload(
+            @RequestPart("file") MultipartFile file,
+            @RequestParam(value = "folder", defaultValue = "misc") String folder);
 
     @DeleteMapping("/files")
     ApiResponse<Void> delete(@RequestParam("key") String key);
