@@ -58,6 +58,14 @@
             <version>${langchain4j.version}</version>
         </dependency>
 
+        <!-- Source: https://mvnrepository.com/artifact/org.bsc.langgraph4j/langgraph4j-core -->
+        <dependency>
+            <groupId>org.bsc.langgraph4j</groupId>
+            <artifactId>langgraph4j-core</artifactId>
+            <version>1.8.10</version>
+            <scope>compile</scope>
+        </dependency>
+
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
