@@ -11,6 +11,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -28,13 +30,31 @@ public class UserPresenceServiceImpl implements UserPresenceService {
         ChatUser savedUser = repository.findById(user.getId())
                 .map(stored -> {
                     stored.setStatus(Status.ONLINE);
-                    stored.setFullName(user.getFullName());
-                    stored.setEmail(user.getEmail());
+                    if (user.getFullName() != null && !user.getFullName().isBlank()) {
+                        stored.setFullName(user.getFullName());
+                    }
+                    if (user.getEmail() != null && !user.getEmail().isBlank()) {
+                        stored.setEmail(user.getEmail());
+                    }
+                    if (user.getAvatar() != null && !user.getAvatar().isBlank()) {
+                        stored.setAvatar(user.getAvatar());
+                    }
+                    if (user.getAccountId() != null && !user.getAccountId().isBlank()) {
+                        stored.setAccountId(user.getAccountId());
+                    }
+                    stored.setLastUpdatedAt(LocalDateTime.now());
                     log.info("[Presence] User ONLINE: {}", stored.getEmail());
                     return repository.save(stored);
                 })
                 .orElseGet(() -> {
                     user.setStatus(Status.ONLINE);
+                    user.setLastUpdatedAt(LocalDateTime.now());
+                    user.setFullName(user.getFullName() != null && !user.getFullName().isBlank()
+                            ? user.getFullName()
+                            : "Người dùng");
+                    if (user.getFriendIds() == null) {
+                        user.setFriendIds(new HashSet<>());
+                    }
                     log.info("[Presence] New user ONLINE: {}", user.getEmail());
                     return repository.save(user);
                 });

@@ -28,7 +28,7 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 @Slf4j
-public class FriendshipMirrorConsumer {
+public class FriendshipChangedConsumer {
 
     private final MongoTemplate mongoTemplate;
     private final ConversationService conversationService;

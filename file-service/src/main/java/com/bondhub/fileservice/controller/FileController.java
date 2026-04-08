@@ -6,11 +6,8 @@ import com.bondhub.fileservice.service.file.FileService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
-import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
-
-import jakarta.servlet.http.HttpServletRequest;
 
 import java.io.IOException;
 import java.net.URLDecoder;
@@ -39,25 +36,17 @@ public class FileController {
                 .body(data);
     }
 
-    @DeleteMapping
-    public ResponseEntity<ApiResponse<Void>> deleteByQuery(@RequestParam("key") String key) {
-        fileService.deleteFile(key);
+    @DeleteMapping("/{folder}/{fileName:.+}")
+    public ResponseEntity<ApiResponse<Void>> deleteLegacyByFolder(
+            @PathVariable String folder,
+            @PathVariable String fileName) {
+        fileService.deleteFile(folder + "/" + fileName);
         return ResponseEntity.ok(ApiResponse.successWithoutData());
     }
 
-    @DeleteMapping("/**")
-    public ResponseEntity<ApiResponse<Void>> deleteLegacy(HttpServletRequest request) {
-        String rawPath = request.getRequestURI();
-        String marker = "/files/";
-        int index = rawPath.indexOf(marker);
-
-        String encodedKey = index >= 0 ? rawPath.substring(index + marker.length()) : "";
+    @DeleteMapping("/{encodedKey:.+}")
+    public ResponseEntity<ApiResponse<Void>> deleteLegacyEncoded(@PathVariable String encodedKey) {
         String key = URLDecoder.decode(encodedKey, StandardCharsets.UTF_8);
-
-        if (!StringUtils.hasText(key)) {
-            throw new IllegalArgumentException("File key must not be blank");
-        }
-
         fileService.deleteFile(key);
         return ResponseEntity.ok(ApiResponse.successWithoutData());
     }
