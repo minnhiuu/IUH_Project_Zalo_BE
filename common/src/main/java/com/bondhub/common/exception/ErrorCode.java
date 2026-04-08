@@ -100,6 +100,9 @@ public enum ErrorCode {
         CHAT_CANNOT_REMOVE_OWNER(HttpStatus.FORBIDDEN, 4011, "error.chat.cannot.remove.owner"),
         CHAT_ADMIN_CAN_ONLY_REMOVE_MEMBER(HttpStatus.FORBIDDEN, 4012, "error.chat.admin.only.remove.member"),
         CHAT_CANNOT_REMOVE_YOURSELF(HttpStatus.BAD_REQUEST, 4013, "error.chat.cannot.remove.yourself"),
+        CHAT_CANNOT_PROMOTE_OWNER(HttpStatus.BAD_REQUEST, 4014, "error.chat.cannot.promote.owner"),
+        CHAT_TARGET_ALREADY_ADMIN(HttpStatus.BAD_REQUEST, 4015, "error.chat.target.already.admin"),
+        CHAT_TARGET_NOT_ADMIN(HttpStatus.BAD_REQUEST, 4016, "error.chat.target.not.admin"),
 
         //  NOTIFICATION_TEMPLATE (23xx)
         NOTIFICATION_TEMPLATE_NOT_FOUND(HttpStatus.NOT_FOUND, 2300, "error.notification.template.not.found"),

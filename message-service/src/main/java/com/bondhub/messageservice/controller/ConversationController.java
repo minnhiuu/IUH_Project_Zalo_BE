@@ -139,6 +139,24 @@ public class ConversationController {
                 conversationService.removeMemberFromGroup(conversationId, targetUserId)));
     }
 
+    @PatchMapping("/{conversationId}/members/{targetUserId}/promote")
+    @Operation(summary = "Promote a member to Admin (Owner only)")
+    public ResponseEntity<ApiResponse<ConversationResponse>> promoteToAdmin(
+            @PathVariable String conversationId,
+            @PathVariable String targetUserId) {
+        return ResponseEntity.ok(ApiResponse.success(
+                conversationService.promoteToAdmin(conversationId, targetUserId)));
+    }
+
+    @PatchMapping("/{conversationId}/members/{targetUserId}/demote")
+    @Operation(summary = "Demote an Admin back to Member (Owner only)")
+    public ResponseEntity<ApiResponse<ConversationResponse>> demoteFromAdmin(
+            @PathVariable String conversationId,
+            @PathVariable String targetUserId) {
+        return ResponseEntity.ok(ApiResponse.success(
+                conversationService.demoteFromAdmin(conversationId, targetUserId)));
+    }
+
     @GetMapping("/{conversationId}/group-members")
     @Operation(summary = "Get group members with pagination, search and friend-priority sorting")
     public ResponseEntity<ApiResponse<PageResponse<List<GroupMemberListItemResponse>>>> getGroupMembers(

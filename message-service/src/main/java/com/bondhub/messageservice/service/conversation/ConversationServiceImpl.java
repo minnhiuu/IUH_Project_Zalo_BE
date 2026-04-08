@@ -420,6 +420,76 @@ public class ConversationServiceImpl implements ConversationService {
     }
 
     @Override
+    public ConversationResponse promoteToAdmin(String conversationId, String targetUserId) {
+        String currentUserId = securityUtil.getCurrentUserId();
+
+        Conversation conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
+
+        if (!conversation.isGroup()) throw new AppException(ErrorCode.CHAT_NOT_A_GROUP);
+
+        ConversationMember actor = getMemberOrThrow(conversation, currentUserId);
+        if (resolveRole(actor) != MemberRole.OWNER) throw new AppException(ErrorCode.CHAT_NOT_OWNER);
+
+        ConversationMember target = getMemberOrThrow(conversation, targetUserId);
+        MemberRole targetRole = resolveRole(target);
+        if (targetRole == MemberRole.OWNER) throw new AppException(ErrorCode.CHAT_CANNOT_PROMOTE_OWNER);
+        if (targetRole == MemberRole.ADMIN) throw new AppException(ErrorCode.CHAT_TARGET_ALREADY_ADMIN);
+
+        target.setRole(MemberRole.ADMIN);
+        Conversation saved = conversationRepository.save(conversation);
+
+        ChatUser actorUser = chatUserRepository.findById(currentUserId).orElse(null);
+        String actorName = actorUser != null ? actorUser.getFullName() : "Người dùng";
+        ChatUser targetUser = chatUserRepository.findById(targetUserId).orElse(null);
+        String targetName = targetUser != null ? targetUser.getFullName() : "Người dùng";
+
+        messageService.sendSystemMessage(conversationId, currentUserId, actorName,
+                SystemActionType.PROMOTE_ADMIN,
+                Map.of(
+                        "targetIds", List.of(targetUserId),
+                        "payload", Map.of("targetName", targetName)
+                ));
+
+        broadcastConversationUpdate(saved.getId());
+        return buildConversationResponseForCurrentUser(saved, currentUserId);
+    }
+
+    @Override
+    public ConversationResponse demoteFromAdmin(String conversationId, String targetUserId) {
+        String currentUserId = securityUtil.getCurrentUserId();
+
+        Conversation conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
+
+        if (!conversation.isGroup()) throw new AppException(ErrorCode.CHAT_NOT_A_GROUP);
+
+        ConversationMember actor = getMemberOrThrow(conversation, currentUserId);
+        if (resolveRole(actor) != MemberRole.OWNER) throw new AppException(ErrorCode.CHAT_NOT_OWNER);
+
+        ConversationMember target = getMemberOrThrow(conversation, targetUserId);
+        if (resolveRole(target) != MemberRole.ADMIN) throw new AppException(ErrorCode.CHAT_TARGET_NOT_ADMIN);
+
+        target.setRole(MemberRole.MEMBER);
+        Conversation saved = conversationRepository.save(conversation);
+
+        ChatUser actorUser = chatUserRepository.findById(currentUserId).orElse(null);
+        String actorName = actorUser != null ? actorUser.getFullName() : "Người dùng";
+        ChatUser targetUser = chatUserRepository.findById(targetUserId).orElse(null);
+        String targetName = targetUser != null ? targetUser.getFullName() : "Người dùng";
+
+        messageService.sendSystemMessage(conversationId, currentUserId, actorName,
+                SystemActionType.DEMOTE_ADMIN,
+                Map.of(
+                        "targetIds", List.of(targetUserId),
+                        "payload", Map.of("targetName", targetName)
+                ));
+
+        broadcastConversationUpdate(saved.getId());
+        return buildConversationResponseForCurrentUser(saved, currentUserId);
+    }
+
+    @Override
     public ConversationResponse updateGroupName(String conversationId, String name) {
         String currentUserId = securityUtil.getCurrentUserId();
         Conversation conversation = conversationRepository.findById(conversationId)

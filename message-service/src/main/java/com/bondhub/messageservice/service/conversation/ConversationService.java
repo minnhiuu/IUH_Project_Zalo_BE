@@ -26,6 +26,10 @@ public interface ConversationService {
     ConversationResponse addMembersToGroup(String conversationId, List<String> memberIds);
 
     ConversationResponse removeMemberFromGroup(String conversationId, String targetUserId);
+
+    ConversationResponse promoteToAdmin(String conversationId, String targetUserId);
+
+    ConversationResponse demoteFromAdmin(String conversationId, String targetUserId);
     
     ConversationResponse updateGroupName(String conversationId, String name);
     
