@@ -200,10 +200,6 @@ public class MessageServiceImpl implements MessageService {
             throw new AppException(ErrorCode.UNAUTHORIZED);
         }
 
-        if (message.getType() == MessageType.SYSTEM_FRIENDSHIP_CARD || message.getType() == MessageType.SYSTEM_FRIENDSHIP_BADGE) {
-            throw new AppException(ErrorCode.CANNOT_REVOKE_SYSTEM_MESSAGE);
-        }
-
         message.setStatus(MessageStatus.REVOKED);
         message.setContent(null);
         message.setReplyTo(null);

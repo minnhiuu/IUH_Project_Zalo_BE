@@ -105,7 +105,6 @@ public enum ErrorCode {
         STORY_BLOCKED(HttpStatus.FORBIDDEN, 2306, "error.block.story.blocked"),
         COMMUNICATION_BLOCKED(HttpStatus.FORBIDDEN, 2307, "error.block.communication.blocked"),
 
-        CANNOT_REVOKE_SYSTEM_MESSAGE(HttpStatus.BAD_REQUEST, 2401, "error.message.cannot.revoke.system")
         ;
 
         private final HttpStatus httpStatus;
