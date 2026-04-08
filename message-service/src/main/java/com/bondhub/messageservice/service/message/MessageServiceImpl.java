@@ -75,12 +75,18 @@ public class MessageServiceImpl implements MessageService {
         Conversation room = conversationRepository.findById(conversationId)
                 .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
         assertConversationMember(room, currentUserId);
-        boolean isActiveMember = room.getMembers().stream()
-            .anyMatch(m -> m.getUserId().equals(currentUserId) && isActiveMember(m));
+        ConversationMember currentMember = room.getMembers().stream()
+            .filter(m -> m.getUserId().equals(currentUserId))
+            .findFirst().orElse(null);
+        boolean isActive = currentMember != null && isActiveMember(currentMember);
 
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
-        Page<Message> messagePage = isActiveMember
-            ? messageRepository.findByConversationIdAndNotDeleted(conversationId, currentUserId, pageable)
+
+        LocalDateTime memberJoinedAt = (currentMember != null && currentMember.getJoinedAt() != null)
+            ? currentMember.getJoinedAt()
+            : LocalDateTime.MIN;
+        Page<Message> messagePage = isActive
+            ? messageRepository.findByConversationIdAndNotDeleted(conversationId, currentUserId, memberJoinedAt, pageable)
             : messageRepository.findByConversationIdAndTypeAndNotDeleted(
                 conversationId,
                 currentUserId,

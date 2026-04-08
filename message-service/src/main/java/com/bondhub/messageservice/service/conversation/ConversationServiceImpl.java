@@ -329,6 +329,7 @@ public class ConversationServiceImpl implements ConversationService {
             ConversationMember existingMember = existingMembersById.get(id);
             if (existingMember != null) {
                 existingMember.setActive(true);
+                existingMember.setJoinedAt(now);
                 existingMember.setRemovedAt(null);
                 existingMember.setRemovedBy(null);
                 existingMember.setRole(MemberRole.MEMBER);
