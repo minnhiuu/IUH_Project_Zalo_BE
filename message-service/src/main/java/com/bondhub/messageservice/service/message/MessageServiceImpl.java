@@ -1,6 +1,5 @@
 package com.bondhub.messageservice.service.message;
 
-import com.bondhub.common.enums.SystemActionType;
 import com.bondhub.common.utils.S3Util;
 import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.common.exception.AppException;
@@ -17,6 +16,7 @@ import com.bondhub.common.enums.MessageType;
 import com.bondhub.messageservice.repository.ConversationRepository;
 import com.bondhub.messageservice.repository.MessageRepository;
 import com.bondhub.messageservice.repository.ChatUserRepository;
+import com.bondhub.messageservice.service.conversation.ConversationService;
 import com.bondhub.common.dto.client.messageservice.MessageSendRequest;
 import com.bondhub.common.event.ai.AiMessageSaveEvent;
 import com.bondhub.common.dto.client.socketservice.SocketEvent;
@@ -55,6 +55,7 @@ public class MessageServiceImpl implements MessageService {
     private final SecurityUtil securityUtil;
     private final MongoTemplate mongoTemplate;
     private final MessageMapper messageMapper;
+    private final ConversationService conversationService;
 
     @Value("${aws.s3.bucket.name}")
     private String bucketName;
@@ -84,13 +85,17 @@ public class MessageServiceImpl implements MessageService {
 
         LocalDateTime memberJoinedAt = (currentMember != null && currentMember.getJoinedAt() != null)
             ? currentMember.getJoinedAt()
-            : LocalDateTime.MIN;
+            : LocalDateTime.of(1970, 1, 1, 0, 0);
+        LocalDateTime deletedBefore = (room.getDeletedBefore() != null)
+            ? room.getDeletedBefore().getOrDefault(currentUserId, LocalDateTime.of(1970, 1, 1, 0, 0))
+            : LocalDateTime.of(1970, 1, 1, 0, 0);
         Page<Message> messagePage = isActive
-            ? messageRepository.findByConversationIdAndNotDeleted(conversationId, currentUserId, memberJoinedAt, pageable)
+            ? messageRepository.findByConversationIdAndNotDeleted(conversationId, currentUserId, memberJoinedAt, deletedBefore, pageable)
             : messageRepository.findByConversationIdAndTypeAndNotDeleted(
                 conversationId,
                 currentUserId,
                 MessageType.SYSTEM,
+                deletedBefore,
                 PageRequest.of(0, 1, Sort.by(Sort.Direction.DESC, "createdAt"))
             );
 
@@ -109,9 +114,19 @@ public class MessageServiceImpl implements MessageService {
     public void sendMessage(String conversationId, MessageSendRequest request) {
         String currentUserId = securityUtil.getCurrentUserId();
 
-        // 1. Tìm phòng chat bằng ObjectId — kiểm tra quyền thành viên
-        Conversation room = conversationRepository.findById(conversationId)
-                .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
+        // 1. Tìm phòng chat bằng ObjectId hoặc lazy creation
+        Conversation room;
+
+        if (conversationId != null) {
+            room = conversationRepository.findById(conversationId)
+                    .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
+        } else if (request.recipientId() != null) {
+            // Luồng Lazy Creation cho người lạ/chat mới
+            room = conversationService.getOrCreateDirectConversation(currentUserId, request.recipientId());
+        } else {
+            throw new AppException(ErrorCode.VALIDATION_ERROR);
+        }
+
         assertActiveMember(room, currentUserId);
 
         // 2. Enrich sender info
@@ -322,104 +337,6 @@ public class MessageServiceImpl implements MessageService {
         mongoTemplate.updateFirst(query, update, Conversation.class);
     }
 
-    @Override
-    public void sendSystemMessage(String conversationId, String actorId, String actorName,
-                                  SystemActionType action, Map<String, Object> extraMetadata) {
-        sendSystemMessage(conversationId, actorId, actorName, action, extraMetadata, null);
-    }
-
-    @Override
-    public void sendSystemMessage(String conversationId, String actorId, String actorName,
-                                  SystemActionType action, Map<String, Object> extraMetadata,
-                                  Set<String> recipientUserIds) {
-        LocalDateTime now = LocalDateTime.now();
-
-        Map<String, Object> metadata = new HashMap<>();
-        metadata.put("action", action.name());
-        if (extraMetadata != null) {
-            metadata.putAll(extraMetadata);
-        }
-
-        Message message = Message.builder()
-                .conversationId(conversationId)
-                .senderId(actorId)
-                .senderName(actorName)
-                .type(MessageType.SYSTEM)
-                .metadata(metadata)
-                .visibleTo(recipientUserIds != null && !recipientUserIds.isEmpty()
-                        ? new HashSet<>(recipientUserIds) : null)
-                .build();
-        message.setCreatedAt(now);
-        Message savedMessage = messageRepository.save(message);
-
-        boolean isRestricted = recipientUserIds != null && !recipientUserIds.isEmpty();
-
-        boolean isNegativeAction = action == SystemActionType.LEAVE_GROUP
-                || action == SystemActionType.REMOVE_MEMBER;
-
-        Conversation room;
-        Query query = new Query(Criteria.where("id").is(conversationId));
-
-        if (isRestricted) {
-            // Just fetch the current conversation state to have member list for notifications;
-            // do NOT modify lastMessage.
-            room = mongoTemplate.findOne(query, Conversation.class);
-        } else if (isNegativeAction) {
-            Conversation existing = mongoTemplate.findOne(query, Conversation.class);
-            LocalDateTime preservedTimestamp = (existing != null && existing.getLastMessage() != null
-                    && existing.getLastMessage().getTimestamp() != null)
-                    ? existing.getLastMessage().getTimestamp()
-                    : now;
-
-            Update update = new Update().set("lastMessage", LastMessageInfo.builder()
-                    .messageId(savedMessage.getId())
-                    .senderId(actorId)
-                    .content(null)
-                    .timestamp(preservedTimestamp)
-                    .type(MessageType.SYSTEM)
-                    .metadata(savedMessage.getMetadata())
-                    .build());
-
-            room = mongoTemplate.findAndModify(query, update,
-                    FindAndModifyOptions.options().returnNew(true),
-                    Conversation.class);
-        } else {
-            Update update = new Update().set("lastMessage", LastMessageInfo.builder()
-                    .messageId(savedMessage.getId())
-                    .senderId(actorId)
-                    .content(null)
-                    .timestamp(savedMessage.getCreatedAt())
-                    .type(MessageType.SYSTEM)
-                    .metadata(savedMessage.getMetadata())
-                    .build());
-
-            room = mongoTemplate.findAndModify(query, update,
-                    FindAndModifyOptions.options().returnNew(true),
-                    Conversation.class);
-        }
-
-        if (room != null) {
-            String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
-
-            room.getMembers().forEach(member -> {
-                if (recipientUserIds != null && !recipientUserIds.contains(member.getUserId())) {
-                    return;
-                }
-
-                Integer currentUnread = room.getUnreadCounts() != null
-                        ? room.getUnreadCounts().getOrDefault(member.getUserId(), 0) : 0;
-                boolean isFromMe = member.getUserId().equals(actorId);
-
-                ChatNotification notification = messageMapper.mapToChatNotification(savedMessage, baseUrl, currentUnread);
-                notification = notification.toBuilder().isFromMe(isFromMe).build();
-
-                kafkaTemplate.send(socketEventsTopic,
-                        new SocketEvent(SocketEventType.MESSAGE, member.getUserId(),
-                                "/queue/messages", notification));
-            });
-        }
-    }
-
     private void broadcastStatusChange(String conversationId, String messageId, MessageStatus newStatus) {
         Conversation conversation = conversationRepository.findById(conversationId).orElse(null);
         if (conversation == null) return;
@@ -435,21 +352,5 @@ public class MessageServiceImpl implements MessageService {
                     new SocketEvent(SocketEventType.MESSAGE, member.getUserId(),
                             "/queue/status-updates", payload));
         }
-    }
-
-    @Override
-    public void deleteAllMessagesByConversationId(String conversationId) {
-        log.info("[Chat] Deleting all messages for conversation: {}", conversationId);
-        Query query = new Query(Criteria.where("conversationId").is(conversationId));
-        mongoTemplate.remove(query, Message.class);
-    }
-
-    @Override
-    public void deleteAllMessagesByConversationIdForMe(String conversationId) {
-        String currentUserId = securityUtil.getCurrentUserId();
-        log.info("[Chat] User {} deleting all messages for conversation: {}", currentUserId, conversationId);
-        Query query = new Query(Criteria.where("conversationId").is(conversationId));
-        Update update = new Update().addToSet("deletedBy", currentUserId);
-        mongoTemplate.updateMulti(query, update, Message.class);
     }
 }

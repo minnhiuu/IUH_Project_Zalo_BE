@@ -115,7 +115,7 @@ public enum ErrorCode {
         MESSAGE_BLOCKED(HttpStatus.FORBIDDEN, 2304, "error.block.message.blocked"),
         CALL_BLOCKED(HttpStatus.FORBIDDEN, 2305, "error.block.call.blocked"),
         STORY_BLOCKED(HttpStatus.FORBIDDEN, 2306, "error.block.story.blocked"),
-        COMMUNICATION_BLOCKED(HttpStatus.FORBIDDEN, 2307, "error.block.communication.blocked")
+        COMMUNICATION_BLOCKED(HttpStatus.FORBIDDEN, 2307, "error.block.communication.blocked"),
 
         ;
 

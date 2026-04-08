@@ -23,6 +23,6 @@ public interface ConversationRepository extends MongoRepository<Conversation, St
      * Lấy tất cả các phòng chat mà user là thành viên,
      * sắp xếp theo lastMessage.timestamp DESC (xử lý bởi Pageable).
      */
-    @Query("{ 'members.userId': ?0 }")
+    @Query("{ 'members': { '$elemMatch': { 'userId': ?0, 'active': { '$ne': false } } } }")
     Page<Conversation> findAllByMembersUserId(String userId, Pageable pageable);
 }

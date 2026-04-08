@@ -7,7 +7,6 @@ import com.bondhub.common.dto.client.socketservice.SocketEvent;
 import com.bondhub.messageservice.model.ChatUser;
 import com.bondhub.messageservice.model.Conversation;
 import com.bondhub.messageservice.model.LastMessageInfo;
-import com.bondhub.common.enums.MessageType;
 import com.bondhub.messageservice.dto.response.ConversationResponse;
 import com.bondhub.messageservice.dto.response.LastMessageResponse;
 import com.bondhub.messageservice.repository.ChatUserRepository;
@@ -24,7 +23,6 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 
-import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -32,7 +30,7 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 @Slf4j
-public class FriendshipMirrorConsumer {
+public class FriendshipChangedConsumer {
 
     private final MongoTemplate mongoTemplate;
     private final ConversationService conversationService;
@@ -56,7 +54,7 @@ public class FriendshipMirrorConsumer {
         updateFriendList(event.userB(), event.userA(), event.action());
 
         if (event.action() == FriendshipAction.ADDED) {
-            // Tạo hoặc lấy lại phòng chat 1-1
+            // Lấy hoặc khởi tạo phòng chat chung
             Conversation room = conversationService.getOrCreateDirectConversation(event.userA(), event.userB());
 
             // Lấy thông tin user để build ConversationResponse cho cả 2 phía
@@ -73,9 +71,40 @@ public class FriendshipMirrorConsumer {
             // Publish SocketEvents – socket-service will push to connected clients
             kafkaTemplate.send(socketEventsTopic, new SocketEvent(SocketEventType.CONVERSATION, event.userA(), "/queue/conversations", convForA));
             kafkaTemplate.send(socketEventsTopic, new SocketEvent(SocketEventType.CONVERSATION, event.userB(), "/queue/conversations", convForB));
-
             log.info("Published CONVERSATION socket events for users {} and {}", event.userA(), event.userB());
         }
+
+        // --- BROADCAST FRIENDSHIP_UPDATED CHO TẤT CẢ ACTIONS ĐỂ FE CẬP NHẬT GIAO DIỆN ---
+        String status = event.action().name();
+        if (event.action() == FriendshipAction.REQUESTED) status = "PENDING";
+        if (event.action() == FriendshipAction.ADDED) status = "ACCEPTED";
+        if (event.action() == FriendshipAction.REMOVED) status = "CANCELLED";
+
+        Map<String, Object> payloadForA = Map.of(
+                "type", "FRIENDSHIP_UPDATED",
+                "targetUserId", event.userA(),
+                "payload", Map.of(
+                        "partnerId", event.userB(),
+                        "status", status,
+                        "friendshipId", event.friendshipId() != null ? event.friendshipId() : "",
+                        "requestedBy", event.userA(),
+                        "receivedBy", event.userB()
+                )
+        );
+        Map<String, Object> payloadForB = Map.of(
+                "type", "FRIENDSHIP_UPDATED",
+                "targetUserId", event.userB(),
+                "payload", Map.of(
+                        "partnerId", event.userA(),
+                        "status", status,
+                        "friendshipId", event.friendshipId() != null ? event.friendshipId() : "",
+                        "requestedBy", event.userA(),
+                        "receivedBy", event.userB()
+                )
+        );
+        kafkaTemplate.send(socketEventsTopic, new SocketEvent(SocketEventType.CONVERSATION, event.userA(), "/queue/friendship-updates", payloadForA));
+        kafkaTemplate.send(socketEventsTopic, new SocketEvent(SocketEventType.CONVERSATION, event.userB(), "/queue/friendship-updates", payloadForB));
+        log.info("Published FRIENDSHIP_UPDATED {} for users {} and {}", status, event.userA(), event.userB());
     }
 
     /**
@@ -96,6 +125,7 @@ public class FriendshipMirrorConsumer {
                 .avatar(partner.getAvatar() != null ? baseUrl + partner.getAvatar() : null)
                 .status(partner.getStatus())
                 .isGroup(false)
+                .friendshipStatus("ACCEPTED")
                 .unreadCount(room.getUnreadCounts() != null
                         ? room.getUnreadCounts().getOrDefault(viewerId, 0) : 0)
                 .lastMessage(last != null ? LastMessageResponse.builder()
@@ -115,6 +145,11 @@ public class FriendshipMirrorConsumer {
     }
 
     private void updateFriendList(String targetUserId, String friendIdToModify, FriendshipAction action) {
+                if (action != FriendshipAction.ADDED && action != FriendshipAction.REMOVED) {
+                        log.debug("Skip friend list update for {} (action: {})", targetUserId, action);
+                        return;
+                }
+
         Query query = new Query(Criteria.where("id").is(targetUserId));
         Update update = new Update();
 

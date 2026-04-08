@@ -272,7 +272,7 @@ public class UserServiceImpl implements UserService {
         String email = securityUtil.getCurrentEmail();
 
         ApiResponse<FileUploadResponse> response = fileServiceClient
-                .uploadFile(accountId, email, request.file());
+                .uploadFile(accountId, email, request.file(), "avatars");
         if (response != null && response.data() != null) {
             String key = response.data().key();
             user.setAvatar(key);
@@ -322,7 +322,7 @@ public class UserServiceImpl implements UserService {
         String email = securityUtil.getCurrentEmail();
 
         ApiResponse<FileUploadResponse> response = fileServiceClient
-                .uploadFile(accountId, email, request.file());
+                .uploadFile(accountId, email, request.file(), "backgrounds");
         if (response != null && response.data() != null) {
             String key = response.data().key();
             user.setBackground(key);

@@ -10,6 +10,8 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 
 @RestController
 @RequestMapping("/files")
@@ -20,8 +22,9 @@ public class FileController {
 
     @PostMapping("/upload")
     public ResponseEntity<ApiResponse<FileUploadResponse>> upload(
-            @RequestPart("file") MultipartFile file) throws IOException {
-        FileUploadResponse fileUploadResponse = fileService.uploadFile(file);
+            @RequestPart("file") MultipartFile file,
+            @RequestParam(value = "folder", defaultValue = "misc") String folder) throws IOException {
+        FileUploadResponse fileUploadResponse = fileService.uploadFile(file, folder);
         return ResponseEntity.ok(ApiResponse.success(fileUploadResponse));
     }
 
@@ -33,14 +36,17 @@ public class FileController {
                 .body(data);
     }
 
-    @DeleteMapping(params = "key")
-    public ResponseEntity<ApiResponse<Void>> deleteByQuery(@RequestParam("key") String key) {
-        fileService.deleteFile(key);
+    @DeleteMapping("/{folder}/{fileName:.+}")
+    public ResponseEntity<ApiResponse<Void>> deleteLegacyByFolder(
+            @PathVariable String folder,
+            @PathVariable String fileName) {
+        fileService.deleteFile(folder + "/" + fileName);
         return ResponseEntity.ok(ApiResponse.successWithoutData());
     }
 
-    @DeleteMapping("/{key}")
-    public ResponseEntity<ApiResponse<Void>> deleteByPath(@PathVariable String key) {
+    @DeleteMapping("/{encodedKey:.+}")
+    public ResponseEntity<ApiResponse<Void>> deleteLegacyEncoded(@PathVariable String encodedKey) {
+        String key = URLDecoder.decode(encodedKey, StandardCharsets.UTF_8);
         fileService.deleteFile(key);
         return ResponseEntity.ok(ApiResponse.successWithoutData());
     }

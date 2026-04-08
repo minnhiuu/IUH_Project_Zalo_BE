@@ -56,4 +56,10 @@ public interface FriendShipRepository extends MongoRepository<FriendShip, String
     
     @Query("{ $or: [ { 'requested': ?0 }, { 'received': ?0 } ] }")
     List<FriendShip> findAllFriendshipsByUserId(String userId);
+
+    @Query("{ '$or': [ " +
+           "  { 'requested': ?0, 'received': { '$in': ?1 } }, " +
+           "  { 'received': ?0, 'requested': { '$in': ?1 } } " +
+           "] }")
+    List<FriendShip> findFriendshipsBetweenUserAndTargets(String currentUserId, List<String> targetIds);
 }
