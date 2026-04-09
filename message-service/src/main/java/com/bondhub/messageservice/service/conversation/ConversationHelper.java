@@ -196,6 +196,7 @@ public class ConversationHelper {
                         .build() : null)
                 .members(members)
                 .settings(room.isGroup() ? room.getSettings() : null)
+                .joinLinkToken(room.isGroup() ? room.getJoinLinkToken() : null)
                 .build();
     }
 

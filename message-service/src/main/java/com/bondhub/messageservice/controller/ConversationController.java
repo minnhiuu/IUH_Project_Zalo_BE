@@ -180,4 +180,25 @@ public class ConversationController {
         return ResponseEntity.ok(ApiResponse.success(
                                 groupConversationService.getGroupMembers(conversationId, query, page, size)));
     }
+
+    @PostMapping("/{conversationId}/join-link")
+    @Operation(summary = "Generate group join link for the first time (Owner/Admin only)")
+    public ResponseEntity<ApiResponse<String>> generateJoinLink(@PathVariable String conversationId) {
+        return ResponseEntity.ok(ApiResponse.success(
+                groupConversationService.generateJoinLink(conversationId)));
+    }
+
+    @PostMapping("/{conversationId}/join-link/refresh")
+    @Operation(summary = "Refresh group join link — invalidates old link (Owner/Admin only)")
+    public ResponseEntity<ApiResponse<String>> refreshJoinLink(@PathVariable String conversationId) {
+        return ResponseEntity.ok(ApiResponse.success(
+                groupConversationService.refreshJoinLink(conversationId)));
+    }
+
+    @PostMapping("/join/{token}")
+    @Operation(summary = "Join a group conversation using an invite link token")
+    public ResponseEntity<ApiResponse<ConversationResponse>> joinByLink(@PathVariable String token) {
+        return ResponseEntity.ok(ApiResponse.success(
+                groupConversationService.joinByLink(token)));
+    }
 }

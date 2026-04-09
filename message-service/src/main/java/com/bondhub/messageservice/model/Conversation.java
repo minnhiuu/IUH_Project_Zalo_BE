@@ -60,4 +60,7 @@ public class Conversation extends BaseModel {
     boolean isDisbanded = false;
 
     GroupSettings settings;
+
+    @Indexed(unique = true, sparse = true)
+    String joinLinkToken;
 }

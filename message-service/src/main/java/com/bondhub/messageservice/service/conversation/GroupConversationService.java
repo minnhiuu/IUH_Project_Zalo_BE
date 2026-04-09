@@ -38,4 +38,10 @@ public interface GroupConversationService {
     Map<String, List<SearchMemberResponse>> getFriendsDirectory(String conversationId);
 
     PageResponse<List<GroupMemberListItemResponse>> getGroupMembers(String conversationId, String query, int page, int size);
+
+    String generateJoinLink(String conversationId);
+
+    String refreshJoinLink(String conversationId);
+
+    ConversationResponse joinByLink(String token);
 }

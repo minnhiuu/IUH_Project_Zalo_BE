@@ -23,5 +23,6 @@ public record ConversationResponse(
         Integer unreadCount,
         LastMessageResponse lastMessage,
         List<ConversationMemberResponse> members,
-        GroupSettings settings) {
+        GroupSettings settings,
+        String joinLinkToken) {
 }

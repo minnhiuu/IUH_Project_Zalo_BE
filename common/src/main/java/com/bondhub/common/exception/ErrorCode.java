@@ -106,6 +106,9 @@ public enum ErrorCode {
         CHAT_TARGET_NOT_MEMBER(HttpStatus.BAD_REQUEST, 4017, "error.chat.target.not.member"),
         CHAT_CANNOT_TRANSFER_TO_SELF(HttpStatus.BAD_REQUEST, 4018, "error.chat.cannot.transfer.to.self"),
         CHAT_SETTING_RESTRICTED(HttpStatus.FORBIDDEN, 4019, "error.chat.setting.restricted"),
+        CHAT_JOIN_LINK_DISABLED(HttpStatus.BAD_REQUEST, 4020, "error.chat.join.link.disabled"),
+        CHAT_JOIN_LINK_INVALID(HttpStatus.NOT_FOUND, 4021, "error.chat.join.link.invalid"),
+        CHAT_ALREADY_MEMBER(HttpStatus.BAD_REQUEST, 4022, "error.chat.already.member"),
 
         //  NOTIFICATION_TEMPLATE (23xx)
         NOTIFICATION_TEMPLATE_NOT_FOUND(HttpStatus.NOT_FOUND, 2300, "error.notification.template.not.found"),
