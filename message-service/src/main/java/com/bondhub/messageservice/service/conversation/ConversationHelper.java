@@ -1,6 +1,5 @@
 package com.bondhub.messageservice.service.conversation;
 
-import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.common.enums.Status;
 import com.bondhub.common.utils.S3Util;
 import com.bondhub.common.utils.SecurityUtil;

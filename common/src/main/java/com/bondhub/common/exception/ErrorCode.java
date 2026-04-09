@@ -103,6 +103,8 @@ public enum ErrorCode {
         CHAT_CANNOT_PROMOTE_OWNER(HttpStatus.BAD_REQUEST, 4014, "error.chat.cannot.promote.owner"),
         CHAT_TARGET_ALREADY_ADMIN(HttpStatus.BAD_REQUEST, 4015, "error.chat.target.already.admin"),
         CHAT_TARGET_NOT_ADMIN(HttpStatus.BAD_REQUEST, 4016, "error.chat.target.not.admin"),
+        CHAT_TARGET_NOT_MEMBER(HttpStatus.BAD_REQUEST, 4017, "error.chat.target.not.member"),
+        CHAT_CANNOT_TRANSFER_TO_SELF(HttpStatus.BAD_REQUEST, 4018, "error.chat.cannot.transfer.to.self"),
 
         //  NOTIFICATION_TEMPLATE (23xx)
         NOTIFICATION_TEMPLATE_NOT_FOUND(HttpStatus.NOT_FOUND, 2300, "error.notification.template.not.found"),

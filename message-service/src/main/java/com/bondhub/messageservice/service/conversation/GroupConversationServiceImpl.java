@@ -363,14 +363,28 @@ public class GroupConversationServiceImpl implements GroupConversationService {
     }
 
     @Override
-    public void leaveGroup(String conversationId, boolean silent) {
+    public void leaveGroup(String conversationId, boolean silent, String transferTo) {
         String currentUserId = helper.getSecurityUtil().getCurrentUserId();
         Conversation conversation = findGroupConversation(conversationId);
         helper.assertMember(conversation, currentUserId);
 
         ConversationMember currentMember = helper.getMemberOrThrow(conversation, currentUserId);
+
+        ActorInfo transferActorInfo = null;
+        ActorInfo transferTargetInfo = null;
+
         if (helper.resolveRole(currentMember) == MemberRole.OWNER) {
-            throw new AppException(ErrorCode.CHAT_CANNOT_REMOVE_OWNER);
+            if (transferTo == null || transferTo.isBlank()) {
+                throw new AppException(ErrorCode.CHAT_CANNOT_REMOVE_OWNER);
+            }
+            ConversationMember target = helper.getMemberOrThrow(conversation, transferTo);
+            if (!helper.isActiveMember(target)) throw new AppException(ErrorCode.CHAT_TARGET_NOT_MEMBER);
+            if (target.getUserId().equals(currentUserId)) throw new AppException(ErrorCode.CHAT_CANNOT_TRANSFER_TO_SELF);
+
+            currentMember.setRole(MemberRole.MEMBER);
+            target.setRole(MemberRole.OWNER);
+            transferActorInfo = fetchActorInfo(currentUserId);
+            transferTargetInfo = fetchActorInfo(transferTo);
         }
 
         ActorInfo actorInfo = fetchActorInfo(currentUserId);
@@ -393,6 +407,12 @@ public class GroupConversationServiceImpl implements GroupConversationService {
                     .map(ConversationMember::getUserId).collect(Collectors.toSet());
             systemMessageService.sendSystemMessage(conversationId, currentUserId, actorInfo.name(), actorInfo.avatar(),
                     SystemActionType.LEAVE_GROUP, Map.of(), adminOwnerIds);
+        }
+
+        if (transferActorInfo != null && transferTargetInfo != null) {
+            systemMessageService.sendSystemMessage(conversationId, currentUserId, transferActorInfo.name(), transferActorInfo.avatar(),
+                    SystemActionType.TRANSFER_OWNER,
+                    Map.of("targetIds", List.of(transferTo), "payload", Map.of("targetName", transferTargetInfo.name())));
         }
 
         helper.broadcastConversationUpdate(conversationId);

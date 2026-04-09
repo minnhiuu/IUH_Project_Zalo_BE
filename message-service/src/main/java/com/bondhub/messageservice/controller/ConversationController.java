@@ -95,11 +95,12 @@ public class ConversationController {
     }
 
     @DeleteMapping("/{conversationId}/leave")
-    @Operation(summary = "Leave group conversation")
+    @Operation(summary = "Leave group conversation (Owner can pass transferTo to transfer ownership before leaving)")
     public ResponseEntity<ApiResponse<Void>> leaveGroup(
             @PathVariable String conversationId,
-            @RequestParam(defaultValue = "false") boolean silent) {
-                groupConversationService.leaveGroup(conversationId, silent);
+            @RequestParam(defaultValue = "false") boolean silent,
+            @RequestParam(required = false) String transferTo) {
+                groupConversationService.leaveGroup(conversationId, silent, transferTo);
         return ResponseEntity.ok(ApiResponse.success(null));
     }
 

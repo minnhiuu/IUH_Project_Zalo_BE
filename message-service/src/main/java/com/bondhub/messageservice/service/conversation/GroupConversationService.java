@@ -28,7 +28,7 @@ public interface GroupConversationService {
 
     void disbandGroup(String conversationId);
 
-    void leaveGroup(String conversationId, boolean silent);
+    void leaveGroup(String conversationId, boolean silent, String transferTo);
 
     PageResponse<List<SearchMemberResponse>> searchMembersToAdd(String conversationId, String query, int page, int size);
 

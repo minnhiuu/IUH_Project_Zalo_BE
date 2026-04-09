@@ -9,5 +9,6 @@ public enum SystemActionType {
     UPDATE_AVATAR,
     DISBAND_GROUP,
     PROMOTE_ADMIN,
-    DEMOTE_ADMIN
+    DEMOTE_ADMIN,
+    TRANSFER_OWNER
 }
