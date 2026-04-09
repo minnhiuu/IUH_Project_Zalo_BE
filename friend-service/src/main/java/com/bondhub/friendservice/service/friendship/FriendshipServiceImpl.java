@@ -13,6 +13,10 @@ import com.bondhub.common.event.notification.RawNotificationEvent;
 import com.bondhub.common.event.notification.CleanupNotificationEvent;
 import com.bondhub.common.publisher.RawNotificationEventPublisher;
 import com.bondhub.friendservice.dto.response.*;
+import com.bondhub.common.enums.FriendshipAction;
+import com.bondhub.common.event.friend.FriendshipChangedEvent;
+import com.bondhub.common.model.kafka.EventType;
+import com.bondhub.common.publisher.OutboxEventPublisher;
 import com.bondhub.friendservice.mapper.FriendShipMapper;
 import com.bondhub.friendservice.model.FriendShip;
 import com.bondhub.friendservice.model.enums.FriendStatus;
@@ -28,7 +32,6 @@ import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 
 @Service
@@ -40,6 +43,7 @@ public class FriendshipServiceImpl implements FriendshipService {
     FriendShipMapper friendShipMapper;
     UserServiceClient userServiceClient;
     SecurityUtil securityUtil;
+    OutboxEventPublisher outboxEventPublisher;
     RawNotificationEventPublisher rawNotificationEventPublisher;
 
     @Override
@@ -76,6 +80,7 @@ public class FriendshipServiceImpl implements FriendshipService {
                 .build();
 
         friendShip = friendShipRepository.save(friendShip);
+        publishFriendshipEvent(friendShip.getRequested(), friendShip.getReceived(), friendShip.getId(), FriendshipAction.REQUESTED);
         log.info("Friend request created with id: {}", friendShip.getId());
 
         UserSummaryResponse requester = getUserSummary(friendShip.getRequested());
@@ -116,6 +121,8 @@ public class FriendshipServiceImpl implements FriendshipService {
         friendShip.setFriendStatus(FriendStatus.ACCEPTED);
         friendShip = friendShipRepository.save(friendShip);
 
+        publishFriendshipEvent(friendShip.getRequested(), friendShip.getReceived(), friendShip.getId(), FriendshipAction.ADDED);
+
         log.info("Friend request {} accepted successfully", friendshipId);
         UserSummaryResponse requester = getUserSummary(friendShip.getRequested());
         UserSummaryResponse receiver = getUserSummary(friendShip.getReceived());
@@ -131,7 +138,6 @@ public class FriendshipServiceImpl implements FriendshipService {
                 .occurredAt(LocalDateTime.now())
                 .build();
         rawNotificationEventPublisher.publish(notificationEvent);
-
 
         CleanupNotificationEvent cleanupEvent = CleanupNotificationEvent.builder()
                 .recipientId(currentUserId)
@@ -162,6 +168,7 @@ public class FriendshipServiceImpl implements FriendshipService {
 
         friendShip.setFriendStatus(FriendStatus.DECLINED);
         friendShipRepository.save(friendShip);
+        publishFriendshipEvent(friendShip.getRequested(), friendShip.getReceived(), friendShip.getId(), FriendshipAction.DECLINED);
         log.info("Friend request {} declined with status DECLINED", friendshipId);
 
         CleanupNotificationEvent cleanupEvent = CleanupNotificationEvent.builder()
@@ -191,6 +198,7 @@ public class FriendshipServiceImpl implements FriendshipService {
 
         friendShip.setFriendStatus(FriendStatus.CANCELLED);
         friendShipRepository.save(friendShip);
+        publishFriendshipEvent(friendShip.getRequested(), friendShip.getReceived(), friendShip.getId(), FriendshipAction.CANCELLED);
 
         CleanupNotificationEvent cleanupEvent = CleanupNotificationEvent.builder()
                 .recipientId(currentUserId)
@@ -212,7 +220,24 @@ public class FriendshipServiceImpl implements FriendshipService {
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FRIENDS));
 
         friendShipRepository.delete(friendShip);
+
+        publishFriendshipEvent(currentUserId, friendId, friendShip.getId(), FriendshipAction.REMOVED);
+
         log.info("Friendship between {} and {} removed", currentUserId, friendId);
+    }
+
+    private void publishFriendshipEvent(String userA, String userB, String friendshipId, FriendshipAction action) {
+        FriendshipChangedEvent event = FriendshipChangedEvent.builder()
+                .userA(userA)
+                .userB(userB)
+                .friendshipId(friendshipId)
+                .action(action)
+                .timestamp(System.currentTimeMillis())
+                .build();
+
+        // We use userA as aggregateId for the outbox event, but the consumer will
+        // process both A and B.
+        outboxEventPublisher.saveAndPublish(userA, "Friendship", EventType.FRIENDSHIP_CHANGED, event);
     }
 
     @Override
@@ -360,6 +385,39 @@ public class FriendshipServiceImpl implements FriendshipService {
         return mutualFriendIds;
     }
 
+    @Override
+    public Set<String> getFriendIds(String userId) {
+        log.info("Fetching friend IDs for user {}", userId);
+        List<FriendShip> friendships = friendShipRepository.findAllFriendsByUserId(userId);
+        return extractFriendIds(friendships, userId);
+    }
+
+    @Override
+    public Map<String, String> batchCheckFriendshipStatus(List<String> targetUserIds) {
+        String currentUserId = securityUtil.getCurrentUserId();
+
+        // Lọc các ObjectId hợp lệ để tránh lỗi ConversionFailedException với các ID tĩnh như ai-assistant-001
+        List<String> validTargetIds = targetUserIds.stream()
+                .filter(id -> id != null && id.length() == 24 && id.matches("^[0-9a-fA-F]+$"))
+                .collect(Collectors.toList());
+
+        List<FriendShip> friendships = new ArrayList<>();
+        if (!validTargetIds.isEmpty()) {
+            friendships = friendShipRepository.findFriendshipsBetweenUserAndTargets(currentUserId, validTargetIds);
+        }
+
+        Map<String, String> result = new HashMap<>();
+        for (String id : targetUserIds) {
+            result.put(id, null);
+        }
+
+        for (FriendShip fs : friendships) {
+            String targetId = fs.getRequested().equals(currentUserId) ? fs.getReceived() : fs.getRequested();
+            result.put(targetId, fs.getFriendStatus().name());
+        }
+        return result;
+    }
+
     // Helper methods
 
     private Set<String> extractFriendIds(List<FriendShip> friendships, String userId) {
@@ -418,8 +476,7 @@ public class FriendshipServiceImpl implements FriendshipService {
                                 .id(id)
                                 .fullName("Unknown User")
                                 .avatar(null)
-                                .build()
-                ));
+                                .build()));
     }
 
     private Map<String, Long> calculateMutualFriendsInBatch(String currentUserId, List<String> friendIds) {

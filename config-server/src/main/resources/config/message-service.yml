@@ -1,5 +1,5 @@
 server:
-  port: 8082
+  port: 8087
 
 spring:
   application:
@@ -33,7 +33,7 @@ spring:
     # Listener configuration
     listener:
       concurrency: 3
-      ack-mode: manual
+      ack-mode: manual_immediate
 
 # Service-specific logging overrides
 logging:
@@ -73,3 +73,13 @@ springdoc:
     enabled: true
     path: /swagger-ui.html
   show-actuator: false
+
+# AWS S3 Configuration
+cloud:
+  aws:
+    region:
+      static: ${AWS_REGION}
+aws:
+  s3:
+    bucket:
+      name: ${AWS_S3_BUCKET_NAME}

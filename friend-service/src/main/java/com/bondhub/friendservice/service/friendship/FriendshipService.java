@@ -6,6 +6,7 @@ import com.bondhub.friendservice.dto.response.*;
 import org.springframework.data.domain.Pageable;
 
 import java.util.List;
+import java.util.Set;
 
 public interface FriendshipService {
     
@@ -30,4 +31,8 @@ public interface FriendshipService {
     MutualFriendsResponse getMutualFriends(String userId);
     
     Integer getMutualFriendsCount(String userId);
+
+    Set<String> getFriendIds(String userId);
+
+    java.util.Map<String, String> batchCheckFriendshipStatus(List<String> targetUserIds);
 }

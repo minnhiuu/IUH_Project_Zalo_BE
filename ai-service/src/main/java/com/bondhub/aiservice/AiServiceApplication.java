@@ -1,0 +1,32 @@
+package com.bondhub.aiservice;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
+import org.springframework.cloud.openfeign.EnableFeignClients;
+import org.springframework.context.annotation.ComponentScan;
+
+@SpringBootApplication
+@EnableDiscoveryClient
+@EnableFeignClients(basePackages = "com.bondhub.aiservice.client")
+@ComponentScan(
+        basePackages = {
+                "com.bondhub.aiservice",
+                "com.bondhub.common.config",
+                "com.bondhub.common.security",
+                "com.bondhub.common.utils",
+        },
+        excludeFilters = @ComponentScan.Filter(
+                type = org.springframework.context.annotation.FilterType.ASSIGNABLE_TYPE,
+                classes = {
+                        com.bondhub.common.config.I18nConfig.class,
+                        com.bondhub.common.config.FeignClientInterceptor.class,
+                        com.bondhub.common.config.FeignErrorDecoder.class
+                }
+        )
+)
+public class AiServiceApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(AiServiceApplication.class, args);
+    }
+}

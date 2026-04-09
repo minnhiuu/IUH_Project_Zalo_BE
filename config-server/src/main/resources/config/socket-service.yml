@@ -1,0 +1,78 @@
+server:
+  port: 8093
+
+spring:
+  application:
+    name: socket-service
+
+  messages:
+    basename: i18n/messages
+
+  # MongoDB – shares the same database as message-service
+  data:
+    mongodb:
+      uri: ${MONGODB_URI_MESSAGES}
+      auto-index-creation: true
+      uuid-representation: standard
+
+  # Kafka Configuration
+  kafka:
+    consumer:
+      group-id: ${spring.application.name}-${random.uuid}
+      client-id: socket-service-consumer
+      max-poll-records: 100
+      auto-offset-reset: latest
+      properties:
+        spring.json.use.type.headers: false
+        spring.json.value.default.type: com.bondhub.common.dto.client.socketservice.SocketEvent
+
+    listener:
+      concurrency: 3
+      ack-mode: batch
+
+# Service-specific logging
+logging:
+  level:
+    com.bondhub.socketservice: DEBUG
+  file:
+    name: logs/socket-service.log
+
+# Security – no extra public endpoints (WebSocket /ws/** is allowed in SecurityConfig)
+bondhub:
+  security:
+    public-endpoints: []
+
+# AWS S3 Configuration
+cloud:
+  aws:
+    region:
+      static: ${AWS_REGION}
+aws:
+  s3:
+    bucket:
+      name: ${AWS_S3_BUCKET_NAME}
+
+# Resilience4j
+resilience4j:
+  circuitbreaker:
+    instances:
+      socketService:
+        base-config: default
+  retry:
+    instances:
+      socketService:
+        base-config: default
+  timelimiter:
+    instances:
+      socketService:
+        base-config: default
+
+# SpringDoc
+springdoc:
+  api-docs:
+    enabled: true
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html
+  show-actuator: false

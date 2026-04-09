@@ -4,10 +4,13 @@ import com.bondhub.common.config.kafka.KafkaTopicProperties;
 import com.bondhub.common.event.account.AccountRegisteredEvent;
 import com.bondhub.common.event.user.UserIndexDeletedEvent;
 import com.bondhub.common.event.user.UserIndexRequestedEvent;
+import com.bondhub.common.event.user.UserProfileUpdatedEvent;
 import com.bondhub.common.model.kafka.EventType;
 import com.bondhub.common.model.kafka.OutboxEvent;
 import com.bondhub.common.repository.OutboxEventRepository;
+import com.bondhub.common.event.friend.FriendshipChangedEvent;
 import com.bondhub.common.event.user.UserCreatedEvent;
+import com.bondhub.common.event.user.UserPrivacyChangedEvent;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -131,6 +134,8 @@ public class OutboxEventPublisher {
             case USER_DELETED -> kafkaTopicProperties.getUserEvents().getDeleted();
             case USER_INDEX_REQUESTED -> kafkaTopicProperties.getUserEvents().getIndexRequested();
             case USER_INDEX_DELETED -> kafkaTopicProperties.getUserEvents().getIndexDeleted();
+            case USER_PRIVACY_CHANGED -> kafkaTopicProperties.getUserEvents().getPrivacyChanged();
+            case FRIENDSHIP_CHANGED -> kafkaTopicProperties.getFriendEvents().getFriendshipChanged();
         };
     }
 
@@ -138,9 +143,12 @@ public class OutboxEventPublisher {
         return switch (eventType) {
             case ACCOUNT_REGISTERED, ACCOUNT_UPDATED, ACCOUNT_DELETED, 
                  ACCOUNT_VERIFIED, ACCOUNT_ENABLED, ACCOUNT_DISABLED -> AccountRegisteredEvent.class;
-            case USER_CREATED, USER_UPDATED, USER_DELETED -> UserCreatedEvent.class;
+            case USER_CREATED, USER_DELETED -> UserCreatedEvent.class;
+            case USER_UPDATED -> UserProfileUpdatedEvent.class;
             case USER_INDEX_REQUESTED ->  UserIndexRequestedEvent.class;
             case USER_INDEX_DELETED -> UserIndexDeletedEvent.class;
+            case USER_PRIVACY_CHANGED -> UserPrivacyChangedEvent.class;
+            case FRIENDSHIP_CHANGED -> FriendshipChangedEvent.class;
         };
     }
 }

@@ -1,0 +1,51 @@
+server:
+  port: 8082
+
+spring:
+  data:
+    mongodb:
+      uri: ${MONGODB_URI_AI_SERVICE}
+  kafka:
+    bootstrap-servers: ${KAFKA_SERVERS:localhost:9092}
+    consumer:
+      group-id: ai-service-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+
+openai:
+  api-key: ${OPENAI_API_KEY}
+  logic-model-name: gpt-4o-mini
+  logic-temperature: 0.0
+  generator-model-name: gpt-4o
+  generator-temperature: 0.7
+  embedding-model-name: text-embedding-3-small
+
+tavily:
+  api-key: ${TAVILY_API_KEY}
+  base-url: https://api.tavily.com/search
+
+# Qdrant Vector Database
+qdrant:
+  host: ${QDRANT_HOST:localhost}
+  port: ${QDRANT_GRPC_PORT:6334}
+  collection-name: bondhub-messages
+  embedding-dimension: 1536
+
+eureka:
+  client:
+    serviceUrl:
+      defaultZone: ${EUREKA_SERVER_URL:http://localhost:8761/eureka/}
+    register-with-eureka: true
+    fetch-registry: true
+  instance:
+    prefer-ip-address: true
+
+feign:
+  okhttp:
+    enabled: true
