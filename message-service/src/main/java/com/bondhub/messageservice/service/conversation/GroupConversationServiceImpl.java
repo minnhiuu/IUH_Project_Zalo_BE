@@ -7,12 +7,14 @@ import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
 import com.bondhub.common.dto.client.fileservice.FileUploadResponse;
 import com.bondhub.messageservice.dto.request.GroupConversationCreateRequest;
+import com.bondhub.messageservice.dto.request.UpdateGroupSettingsRequest;
 import com.bondhub.messageservice.dto.response.ConversationResponse;
 import com.bondhub.messageservice.dto.response.GroupMemberListItemResponse;
 import com.bondhub.messageservice.dto.response.SearchMemberResponse;
 import com.bondhub.messageservice.model.ChatUser;
 import com.bondhub.messageservice.model.Conversation;
 import com.bondhub.messageservice.model.ConversationMember;
+import com.bondhub.messageservice.model.GroupSettings;
 import com.bondhub.messageservice.model.LastMessageInfo;
 import com.bondhub.messageservice.model.enums.MemberRole;
 import com.bondhub.messageservice.repository.ChatUserRepository;
@@ -92,6 +94,7 @@ public class GroupConversationServiceImpl implements GroupConversationService {
         Conversation conversation = Conversation.builder()
                 .name(groupName).avatar(avatarUrl).isGroup(true)
                 .members(members).unreadCounts(unreadCounts)
+                .settings(GroupSettings.builder().build())
                 .lastMessage(LastMessageInfo.builder().timestamp(now).build())
                 .build();
 
@@ -267,6 +270,7 @@ public class GroupConversationServiceImpl implements GroupConversationService {
         String currentUserId = helper.getSecurityUtil().getCurrentUserId();
         Conversation conversation = findGroupConversation(conversationId);
         helper.assertMember(conversation, currentUserId);
+        helper.assertSettingAllowed(conversation, currentUserId, GroupSettings::isMemberCanChangeInfo);
 
         String normalizedName = (name == null || name.strip().isEmpty()) ? null : name.strip();
         String oldName = conversation.getName();
@@ -306,6 +310,7 @@ public class GroupConversationServiceImpl implements GroupConversationService {
         String currentUserId = helper.getSecurityUtil().getCurrentUserId();
         Conversation conversation = findGroupConversation(conversationId);
         helper.assertMember(conversation, currentUserId);
+        helper.assertSettingAllowed(conversation, currentUserId, GroupSettings::isMemberCanChangeInfo);
 
         if (file != null && !file.isEmpty()) {
             String folder = "conversations/groups/" + conversationId + "/avatar";
@@ -338,6 +343,69 @@ public class GroupConversationServiceImpl implements GroupConversationService {
 
         helper.broadcastConversationUpdate(conversation);
         return helper.buildConversationResponseForCurrentUser(conversation, currentUserId);
+    }
+
+    @Override
+    public ConversationResponse updateGroupSettings(String conversationId, UpdateGroupSettingsRequest request) {
+        String currentUserId = helper.getSecurityUtil().getCurrentUserId();
+        Conversation conversation = findGroupConversation(conversationId);
+
+        ConversationMember actor = helper.getMemberOrThrow(conversation, currentUserId);
+        helper.assertOwnerOrAdmin(actor);
+
+        GroupSettings settings = conversation.getSettings();
+        if (settings == null) {
+            settings = GroupSettings.builder().build();
+        }
+
+        // Track which system-message-worthy settings changed
+        boolean sendMessageChanged = false;
+        boolean membershipApprovalChanged = false;
+        boolean joinByLinkChanged = false;
+
+        if (request.memberCanChangeInfo() != null) settings.setMemberCanChangeInfo(request.memberCanChangeInfo());
+        if (request.memberCanPinMessages() != null) settings.setMemberCanPinMessages(request.memberCanPinMessages());
+        if (request.memberCanCreateNotes() != null) settings.setMemberCanCreateNotes(request.memberCanCreateNotes());
+        if (request.memberCanCreatePolls() != null) settings.setMemberCanCreatePolls(request.memberCanCreatePolls());
+        if (request.memberCanSendMessages() != null) {
+            sendMessageChanged = settings.isMemberCanSendMessages() != request.memberCanSendMessages();
+            settings.setMemberCanSendMessages(request.memberCanSendMessages());
+        }
+        if (request.membershipApprovalEnabled() != null) {
+            membershipApprovalChanged = settings.isMembershipApprovalEnabled() != request.membershipApprovalEnabled();
+            settings.setMembershipApprovalEnabled(request.membershipApprovalEnabled());
+        }
+        if (request.highlightAdminMessages() != null) settings.setHighlightAdminMessages(request.highlightAdminMessages());
+        if (request.newMembersCanReadRecent() != null) settings.setNewMembersCanReadRecent(request.newMembersCanReadRecent());
+        if (request.joinByLinkEnabled() != null) {
+            joinByLinkChanged = settings.isJoinByLinkEnabled() != request.joinByLinkEnabled();
+            settings.setJoinByLinkEnabled(request.joinByLinkEnabled());
+        }
+
+        conversation.setSettings(settings);
+        Conversation saved = conversationRepository.save(conversation);
+
+        ActorInfo actorInfo = fetchActorInfo(currentUserId);
+
+        if (sendMessageChanged) {
+            systemMessageService.sendSystemMessage(conversationId, currentUserId, actorInfo.name(), actorInfo.avatar(),
+                    SystemActionType.UPDATE_SETTINGS,
+                    Map.of("payload", Map.of("setting", "memberCanSendMessages", "value", settings.isMemberCanSendMessages())));
+        }
+
+        if (membershipApprovalChanged) {
+            systemMessageService.sendSystemMessage(conversationId, currentUserId, actorInfo.name(), actorInfo.avatar(),
+                    SystemActionType.UPDATE_SETTINGS,
+                    Map.of("payload", Map.of("setting", "membershipApprovalEnabled", "value", settings.isMembershipApprovalEnabled())));
+        }
+
+        if (joinByLinkChanged && settings.isJoinByLinkEnabled()) {
+            systemMessageService.sendSystemMessage(conversationId, currentUserId, actorInfo.name(), actorInfo.avatar(),
+                    SystemActionType.UPDATE_SETTINGS,
+                    Map.of("payload", Map.of("setting", "joinByLinkEnabled", "value", true)));
+        }
+
+        return broadcastAndRespond(saved, currentUserId);
     }
 
     @Override

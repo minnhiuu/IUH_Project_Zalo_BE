@@ -105,6 +105,7 @@ public enum ErrorCode {
         CHAT_TARGET_NOT_ADMIN(HttpStatus.BAD_REQUEST, 4016, "error.chat.target.not.admin"),
         CHAT_TARGET_NOT_MEMBER(HttpStatus.BAD_REQUEST, 4017, "error.chat.target.not.member"),
         CHAT_CANNOT_TRANSFER_TO_SELF(HttpStatus.BAD_REQUEST, 4018, "error.chat.cannot.transfer.to.self"),
+        CHAT_SETTING_RESTRICTED(HttpStatus.FORBIDDEN, 4019, "error.chat.setting.restricted"),
 
         //  NOTIFICATION_TEMPLATE (23xx)
         NOTIFICATION_TEMPLATE_NOT_FOUND(HttpStatus.NOT_FOUND, 2300, "error.notification.template.not.found"),

@@ -11,6 +11,7 @@ import com.bondhub.messageservice.dto.response.*;
 import com.bondhub.messageservice.model.ChatUser;
 import com.bondhub.messageservice.model.Conversation;
 import com.bondhub.messageservice.model.ConversationMember;
+import com.bondhub.messageservice.model.GroupSettings;
 import com.bondhub.messageservice.model.LastMessageInfo;
 import com.bondhub.messageservice.model.enums.MemberRole;
 import com.bondhub.messageservice.repository.ChatUserRepository;
@@ -23,6 +24,7 @@ import org.springframework.stereotype.Component;
 
 import java.time.*;
 import java.util.*;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 /**
@@ -74,6 +76,17 @@ public class ConversationHelper {
         MemberRole actorRole = resolveRole(actor);
         if (actorRole == MemberRole.MEMBER) {
             throw new AppException(ErrorCode.CHAT_NOT_GROUP_MANAGER);
+        }
+    }
+
+    public void assertSettingAllowed(Conversation conversation, String userId,
+                                     Predicate<GroupSettings> settingCheck) {
+        if (!conversation.isGroup()) return;
+        GroupSettings settings = conversation.getSettings();
+        if (settings == null || settingCheck.test(settings)) return;
+        ConversationMember member = getMemberOrThrow(conversation, userId);
+        if (resolveRole(member) == MemberRole.MEMBER) {
+            throw new AppException(ErrorCode.CHAT_SETTING_RESTRICTED);
         }
     }
 
@@ -182,6 +195,7 @@ public class ConversationHelper {
                         .metadata(last.getMetadata())
                         .build() : null)
                 .members(members)
+                .settings(room.isGroup() ? room.getSettings() : null)
                 .build();
     }
 

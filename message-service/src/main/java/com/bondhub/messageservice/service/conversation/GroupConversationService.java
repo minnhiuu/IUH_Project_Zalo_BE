@@ -1,5 +1,6 @@
 package com.bondhub.messageservice.service.conversation;
 
+import com.bondhub.messageservice.dto.request.UpdateGroupSettingsRequest;
 import com.bondhub.common.dto.PageResponse;
 import com.bondhub.messageservice.dto.request.GroupConversationCreateRequest;
 import com.bondhub.messageservice.dto.response.ConversationResponse;
@@ -25,6 +26,8 @@ public interface GroupConversationService {
     ConversationResponse updateGroupName(String conversationId, String name);
 
     ConversationResponse updateGroupAvatar(String conversationId, MultipartFile file);
+
+    ConversationResponse updateGroupSettings(String conversationId, UpdateGroupSettingsRequest request);
 
     void disbandGroup(String conversationId);
 

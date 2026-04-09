@@ -58,4 +58,6 @@ public class Conversation extends BaseModel {
     @Indexed
     @Builder.Default
     boolean isDisbanded = false;
+
+    GroupSettings settings;
 }

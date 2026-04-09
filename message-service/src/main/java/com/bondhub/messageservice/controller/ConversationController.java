@@ -4,6 +4,7 @@ import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.common.dto.PageResponse;
 import com.bondhub.messageservice.dto.request.AddMembersRequest;
 import com.bondhub.messageservice.dto.request.GroupConversationCreateRequest;
+import com.bondhub.messageservice.dto.request.UpdateGroupSettingsRequest;
 import com.bondhub.messageservice.dto.response.ConversationResponse;
 import com.bondhub.messageservice.dto.response.GroupMemberListItemResponse;
 import com.bondhub.messageservice.dto.response.SearchMemberResponse;
@@ -78,6 +79,15 @@ public class ConversationController {
             @RequestPart("file") MultipartFile file) {
         return ResponseEntity.ok(ApiResponse.success(
                 groupConversationService.updateGroupAvatar(conversationId, file)));
+    }
+
+    @PatchMapping("/{conversationId}/settings")
+    @Operation(summary = "Update group settings (Owner/Admin only)")
+    public ResponseEntity<ApiResponse<ConversationResponse>> updateGroupSettings(
+            @PathVariable String conversationId,
+            @RequestBody UpdateGroupSettingsRequest request) {
+        return ResponseEntity.ok(ApiResponse.success(
+                groupConversationService.updateGroupSettings(conversationId, request)));
     }
 
     @DeleteMapping("/{conversationId}")

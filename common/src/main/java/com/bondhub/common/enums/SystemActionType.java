@@ -10,5 +10,6 @@ public enum SystemActionType {
     DISBAND_GROUP,
     PROMOTE_ADMIN,
     DEMOTE_ADMIN,
-    TRANSFER_OWNER
+    TRANSFER_OWNER,
+    UPDATE_SETTINGS
 }

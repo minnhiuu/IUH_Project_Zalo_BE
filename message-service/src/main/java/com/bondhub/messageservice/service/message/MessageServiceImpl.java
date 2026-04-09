@@ -39,6 +39,9 @@ import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.data.mongodb.core.FindAndModifyOptions;
 
+import com.bondhub.messageservice.model.GroupSettings;
+import com.bondhub.messageservice.service.conversation.ConversationHelper;
+
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -56,6 +59,7 @@ public class MessageServiceImpl implements MessageService {
     private final MongoTemplate mongoTemplate;
     private final MessageMapper messageMapper;
     private final ConversationService conversationService;
+    private final ConversationHelper conversationHelper;
 
     @Value("${aws.s3.bucket.name}")
     private String bucketName;
@@ -128,6 +132,7 @@ public class MessageServiceImpl implements MessageService {
         }
 
         assertActiveMember(room, currentUserId);
+        conversationHelper.assertSettingAllowed(room, currentUserId, GroupSettings::isMemberCanSendMessages);
 
         // 2. Enrich sender info
         ChatUser sender = chatUserRepository.findById(currentUserId).orElse(null);
