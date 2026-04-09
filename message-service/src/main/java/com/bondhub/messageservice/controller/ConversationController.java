@@ -7,6 +7,7 @@ import com.bondhub.messageservice.dto.request.GroupConversationCreateRequest;
 import com.bondhub.messageservice.dto.request.UpdateGroupSettingsRequest;
 import com.bondhub.messageservice.dto.response.ConversationResponse;
 import com.bondhub.messageservice.dto.response.GroupMemberListItemResponse;
+import com.bondhub.messageservice.dto.response.JoinGroupPreviewResponse;
 import com.bondhub.messageservice.dto.response.SearchMemberResponse;
 import com.bondhub.messageservice.service.conversation.ConversationService;
 import com.bondhub.messageservice.service.conversation.GroupConversationService;
@@ -193,6 +194,13 @@ public class ConversationController {
     public ResponseEntity<ApiResponse<String>> refreshJoinLink(@PathVariable String conversationId) {
         return ResponseEntity.ok(ApiResponse.success(
                 groupConversationService.refreshJoinLink(conversationId)));
+    }
+
+    @GetMapping("/join/{token}/preview")
+    @Operation(summary = "Get group preview info before joining via invite link")
+    public ResponseEntity<ApiResponse<JoinGroupPreviewResponse>> getJoinPreview(@PathVariable String token) {
+        return ResponseEntity.ok(ApiResponse.success(
+                groupConversationService.getJoinPreview(token)));
     }
 
     @PostMapping("/join/{token}")

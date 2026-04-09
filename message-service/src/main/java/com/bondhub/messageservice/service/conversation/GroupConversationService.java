@@ -5,6 +5,7 @@ import com.bondhub.common.dto.PageResponse;
 import com.bondhub.messageservice.dto.request.GroupConversationCreateRequest;
 import com.bondhub.messageservice.dto.response.ConversationResponse;
 import com.bondhub.messageservice.dto.response.GroupMemberListItemResponse;
+import com.bondhub.messageservice.dto.response.JoinGroupPreviewResponse;
 import com.bondhub.messageservice.dto.response.SearchMemberResponse;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -44,4 +45,6 @@ public interface GroupConversationService {
     String refreshJoinLink(String conversationId);
 
     ConversationResponse joinByLink(String token);
+
+    JoinGroupPreviewResponse getJoinPreview(String token);
 }

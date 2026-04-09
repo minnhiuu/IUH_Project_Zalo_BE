@@ -10,6 +10,7 @@ import com.bondhub.messageservice.dto.request.GroupConversationCreateRequest;
 import com.bondhub.messageservice.dto.request.UpdateGroupSettingsRequest;
 import com.bondhub.messageservice.dto.response.ConversationResponse;
 import com.bondhub.messageservice.dto.response.GroupMemberListItemResponse;
+import com.bondhub.messageservice.dto.response.JoinGroupPreviewResponse;
 import com.bondhub.messageservice.dto.response.SearchMemberResponse;
 import com.bondhub.messageservice.model.ChatUser;
 import com.bondhub.messageservice.model.Conversation;
@@ -31,6 +32,8 @@ import org.springframework.data.mongodb.core.aggregation.Aggregation;
 import org.springframework.data.mongodb.core.aggregation.AggregationOperation;
 import org.springframework.data.mongodb.core.aggregation.AggregationResults;
 import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -400,9 +403,23 @@ public class GroupConversationServiceImpl implements GroupConversationService {
         }
 
         if (joinByLinkChanged && settings.isJoinByLinkEnabled()) {
+            if (saved.getJoinLinkToken() == null) {
+                String token = UUID.randomUUID().toString().replace("-", "");
+                saved.setJoinLinkToken(token);
+                saved = conversationRepository.save(saved);
+            }
             systemMessageService.sendSystemMessage(conversationId, currentUserId, actorInfo.name(), actorInfo.avatar(),
-                    SystemActionType.UPDATE_SETTINGS,
-                    Map.of("payload", Map.of("setting", "joinByLinkEnabled", "value", true)));
+                    SystemActionType.GENERATE_JOIN_LINK,
+                    Map.of("payload", Map.of("token", saved.getJoinLinkToken())));
+        }
+
+        if (joinByLinkChanged && !settings.isJoinByLinkEnabled()) {
+            mongoTemplate.updateFirst(
+                    Query.query(Criteria.where("_id").is(saved.getId())),
+                    new Update().unset("joinLinkToken"),
+                    Conversation.class
+            );
+            saved.setJoinLinkToken(null);
         }
 
         return broadcastAndRespond(saved, currentUserId);
@@ -747,6 +764,67 @@ public class GroupConversationServiceImpl implements GroupConversationService {
 
         log.info("[Group] User {} joined conversation {} via link", currentUserId, saved.getId());
         return broadcastAndRespond(saved, currentUserId);
+    }
+
+    @Override
+    public JoinGroupPreviewResponse getJoinPreview(String token) {
+        String currentUserId = helper.getSecurityUtil().getCurrentUserId();
+
+        Conversation conversation = conversationRepository.findByJoinLinkToken(token)
+                .orElseThrow(() -> new AppException(ErrorCode.CHAT_JOIN_LINK_INVALID));
+
+        if (!conversation.isGroup()) throw new AppException(ErrorCode.CHAT_NOT_A_GROUP);
+
+        GroupSettings settings = conversation.getSettings();
+        if (settings == null || !settings.isJoinByLinkEnabled()) {
+            throw new AppException(ErrorCode.CHAT_JOIN_LINK_DISABLED);
+        }
+
+        Set<ConversationMember> activeMembers = conversation.getMembers().stream()
+                .filter(helper::isActiveMember).collect(Collectors.toSet());
+
+        boolean isAlreadyMember = activeMembers.stream()
+                .anyMatch(m -> m.getUserId().equals(currentUserId));
+
+        // Single batch query for all member info
+        Set<String> allMemberIds = activeMembers.stream()
+                .map(ConversationMember::getUserId).collect(Collectors.toSet());
+        Map<String, ChatUser> userCache = chatUserRepository.findAllById(allMemberIds).stream()
+                .collect(Collectors.toMap(ChatUser::getId, u -> u));
+
+        String ownerUserId = activeMembers.stream()
+                .filter(m -> m.getRole() == MemberRole.OWNER)
+                .map(ConversationMember::getUserId)
+                .findFirst().orElse(null);
+        String createdByName = ownerUserId != null && userCache.containsKey(ownerUserId)
+                ? userCache.get(ownerUserId).getFullName() : null;
+
+        String baseUrl = helper.getBaseUrl();
+        List<JoinGroupPreviewResponse.MemberPreview> memberPreviews = activeMembers.stream()
+                .map(ConversationMember::getUserId)
+                .limit(5)
+                .map(userCache::get)
+                .filter(Objects::nonNull)
+                .map(u -> JoinGroupPreviewResponse.MemberPreview.builder()
+                        .name(u.getFullName())
+                        .avatar(u.getAvatar() != null ? baseUrl + u.getAvatar() : null)
+                        .build())
+                .collect(Collectors.toList());
+
+        String groupName = conversation.getName();
+        if (groupName == null || groupName.isBlank()) {
+            groupName = helper.getDynamicGroupName(conversation, currentUserId, userCache);
+        }
+
+        return JoinGroupPreviewResponse.builder()
+                .conversationId(conversation.getId())
+                .groupName(groupName)
+                .groupAvatar(conversation.getAvatar() != null ? baseUrl + conversation.getAvatar() : null)
+                .memberCount(activeMembers.size())
+                .createdByName(createdByName)
+                .memberPreviews(memberPreviews)
+                .isAlreadyMember(isAlreadyMember)
+                .build();
     }
 
     private Conversation findGroupConversation(String conversationId) {
