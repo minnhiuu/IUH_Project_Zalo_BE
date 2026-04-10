@@ -1,4 +1,4 @@
-package com.bondhub.aiservice.dto;
+package com.bondhub.aiservice.model;
 
 import dev.langchain4j.data.message.ChatMessage;
 import lombok.AllArgsConstructor;

@@ -1,6 +1,6 @@
 package com.bondhub.aiservice.service.core.crag;
 
-import com.bondhub.aiservice.dto.CragState;
+import com.bondhub.aiservice.model.CragState;
 import com.bondhub.aiservice.model.enums.AiProcessingStatus;
 import com.bondhub.aiservice.model.MongoChatMemoryStore;
 import com.bondhub.aiservice.security.AiSecurityContextHolder;

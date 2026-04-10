@@ -1,6 +1,6 @@
 package com.bondhub.aiservice.service.core.state;
 
-import com.bondhub.aiservice.dto.CragState;
+import com.bondhub.aiservice.model.CragState;
 import com.bondhub.aiservice.model.MongoGraphCheckpoint;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
