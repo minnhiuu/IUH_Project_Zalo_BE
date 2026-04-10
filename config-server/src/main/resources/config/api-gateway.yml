@@ -234,17 +234,28 @@ spring:
                     name: friendServiceCircuitBreaker
                     fallbackUri: forward:/fallback/friend-service
 
-            - id: ai-service
-              uri: lb://ai-service
+            # Agent Service Routes (Python FastAPI - LangGraph)
+            - id: agent-service
+              uri: lb://agent-service
               predicates:
-                - Path=/api/ai/**
+                - Path=/api/v1/ai/**
               filters:
-                - RewritePath=/api/ai/(?<segment>.*), /ai/${segment}
+                # Rewrite Path: /api/v1/ai/chat -> /api/v1/ai/chat
+                - RewritePath=/api/v1/ai/(?<segment>.*), /api/v1/ai/${segment}
+                # QUAN TRỌNG: Tắt buffering để Stream SSE từ Python đổ về mượt mà
                 - AddResponseHeader=X-Accel-Buffering, no
                 - name: CircuitBreaker
                   args:
-                    name: aiServiceCircuitBreaker
-                    fallbackUri: forward:/fallback/ai-service
+                    name: agentServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/agent-service
+
+            - id: agent-service-docs
+              uri: lb://agent-service
+              predicates:
+                - Path=/agent/v3/api-docs/**
+              filters:
+                # FastAPI mặc định để docs tại /openapi.json
+                - RewritePath=/agent/v3/api-docs, /openapi.json
 
           # Global CORS Configuration
           globalCors:
@@ -508,8 +519,10 @@ springdoc:
         url: /friend/v3/api-docs
       - name: Search Service
         url: /search/v3/api-docs
-      - name: AI Service
+      - name: AI Service (Legacy)
         url: /ai/v3/api-docs
+      - name: Agent Service (Python)
+        url: /agent/v3/api-docs
     # Enable "Try it out" functionality
     use-root-path: true
     path: /swagger-ui.html
