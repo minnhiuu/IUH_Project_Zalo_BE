@@ -31,4 +31,6 @@ public interface GraphFriendService {
     void mergeInContact(String fromUserId, String toUserId, double score, String source);
 
     void deleteUserNode(String userId);
+
+    PageResponse<List<FriendSuggestionResponse>> getUnifiedSuggestions(String userId, Pageable pageable);
 }

@@ -9,5 +9,7 @@ public record FriendSuggestionResponse(
     String avatar,
     String phoneNumber,
     Integer mutualFriendsCount,
-    Double contactScore
+    Integer sharedGroupsCount,
+    Double contactScore,
+    Double totalScore
 ) {}

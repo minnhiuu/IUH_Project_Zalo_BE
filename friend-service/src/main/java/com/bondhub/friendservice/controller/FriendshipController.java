@@ -134,4 +134,13 @@ public class FriendshipController {
         Pageable pageable = PageRequest.of(page, size);
         return ResponseEntity.ok(ApiResponse.success(friendshipService.getContactSuggestions(pageable)));
     }
+
+    @GetMapping("/suggestions")
+    @Operation(summary = "Unified friend suggestions", description = "Get friend suggestions based on mutual friends, shared groups, and contacts")
+    public ResponseEntity<ApiResponse<PageResponse<List<FriendSuggestionResponse>>>> getUnifiedSuggestions(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        Pageable pageable = PageRequest.of(page, size);
+        return ResponseEntity.ok(ApiResponse.success(friendshipService.getUnifiedSuggestions(pageable)));
+    }
 }

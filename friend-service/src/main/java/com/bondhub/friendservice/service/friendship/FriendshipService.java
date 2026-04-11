@@ -39,4 +39,6 @@ public interface FriendshipService {
     PageResponse<List<FriendSuggestionResponse>> getGraphSuggestions(Pageable pageable);
 
     PageResponse<List<FriendSuggestionResponse>> getContactSuggestions(Pageable pageable);
+
+    PageResponse<List<FriendSuggestionResponse>> getUnifiedSuggestions(Pageable pageable);
 }

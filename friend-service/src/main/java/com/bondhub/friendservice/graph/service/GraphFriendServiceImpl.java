@@ -122,6 +122,26 @@ public class GraphFriendServiceImpl implements GraphFriendService {
         userNodeRepository.deleteUserNode(userId);
     }
 
+    @Override
+    public PageResponse<List<FriendSuggestionResponse>> getUnifiedSuggestions(String userId, Pageable pageable) {
+        long skip = pageable.getOffset();
+        int limit = pageable.getPageSize();
+        log.info("Neo4j: Getting unified suggestions for user {} (skip={}, limit={})", userId, skip, limit);
+
+        List<Map<String, Object>> results = userNodeRepository.findUnifiedSuggestions(userId, skip, limit);
+        long total = userNodeRepository.countUnifiedSuggestions(userId);
+
+        List<FriendSuggestionResponse> data = enrichUnifiedSuggestions(results);
+
+        return PageResponse.<List<FriendSuggestionResponse>>builder()
+                .data(data)
+                .page(pageable.getPageNumber())
+                .totalPages((int) Math.ceil((double) total / pageable.getPageSize()))
+                .limit(pageable.getPageSize())
+                .totalItems(total)
+                .build();
+    }
+
     // ===== Private helpers =====
 
     private List<FriendSuggestionResponse> enrichSuggestions(List<Map<String, Object>> results, boolean isGraphSuggestion) {
@@ -129,14 +149,18 @@ public class GraphFriendServiceImpl implements GraphFriendService {
             return Collections.emptyList();
         }
 
-        List<String> userIds = results.stream()
+        List<Map<String, Object>> normalized = results.stream()
+            .map(this::normalizeRow)
+            .toList();
+
+        List<String> userIds = normalized.stream()
                 .map(r -> (String) r.get("userId"))
                 .filter(Objects::nonNull)
                 .toList();
 
         Map<String, UserSummaryResponse> userMap = fetchUserSummaries(userIds);
 
-        return results.stream()
+        return normalized.stream()
                 .map(r -> {
                     String uid = (String) r.get("userId");
                     UserSummaryResponse user = userMap.get(uid);
@@ -149,6 +173,8 @@ public class GraphFriendServiceImpl implements GraphFriendService {
                             .phoneNumber(user.phoneNumber())
                             .mutualFriendsCount(isGraphSuggestion ? ((Number) r.get("mutualCount")).intValue() : null)
                             .contactScore(!isGraphSuggestion ? ((Number) r.get("score")).doubleValue() : null)
+                            .sharedGroupsCount(null)
+                            .totalScore(null)
                             .build();
                 })
                 .filter(Objects::nonNull)
@@ -166,5 +192,54 @@ public class GraphFriendServiceImpl implements GraphFriendService {
             log.error("Failed to batch fetch user summaries for suggestions: {}", userIds, e);
         }
         return Collections.emptyMap();
+    }
+
+    private List<FriendSuggestionResponse> enrichUnifiedSuggestions(List<Map<String, Object>> results) {
+        if (results == null || results.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        List<Map<String, Object>> normalized = results.stream()
+            .map(this::normalizeRow)
+            .toList();
+
+        List<String> userIds = normalized.stream()
+                .map(r -> (String) r.get("userId"))
+                .filter(Objects::nonNull)
+                .toList();
+
+        Map<String, UserSummaryResponse> userMap = fetchUserSummaries(userIds);
+
+        return normalized.stream()
+                .map(r -> {
+                    String uid = (String) r.get("userId");
+                    UserSummaryResponse user = userMap.get(uid);
+                    if (user == null) return null;
+
+                    return FriendSuggestionResponse.builder()
+                            .userId(uid)
+                            .fullName(user.fullName())
+                            .avatar(user.avatar())
+                            .phoneNumber(user.phoneNumber())
+                            .mutualFriendsCount(((Number) r.get("mutualFriendsCount")).intValue())
+                            .sharedGroupsCount(((Number) r.get("sharedGroupsCount")).intValue())
+                            .contactScore(((Number) r.get("contactScore")).doubleValue())
+                            .totalScore(((Number) r.get("totalScore")).doubleValue())
+                            .build();
+                })
+                .filter(Objects::nonNull)
+                .toList();
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> normalizeRow(Map<String, Object> row) {
+        if (row == null) {
+            return Collections.emptyMap();
+        }
+        Object nested = row.get("row");
+        if (nested instanceof Map<?, ?> nestedMap) {
+            return (Map<String, Object>) nestedMap;
+        }
+        return row;
     }
 }

@@ -62,4 +62,6 @@ public interface FriendShipRepository extends MongoRepository<FriendShip, String
            "  { 'received': ?0, 'requested': { '$in': ?1 } } " +
            "] }")
     List<FriendShip> findFriendshipsBetweenUserAndTargets(String currentUserId, List<String> targetIds);
+
+    List<FriendShip> findAllByFriendStatus(FriendStatus status);
 }

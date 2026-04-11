@@ -9,6 +9,7 @@ import com.bondhub.common.model.kafka.EventType;
 import com.bondhub.common.model.kafka.OutboxEvent;
 import com.bondhub.common.repository.OutboxEventRepository;
 import com.bondhub.common.event.friend.FriendshipChangedEvent;
+import com.bondhub.common.event.group.GroupMemberChangedEvent;
 import com.bondhub.common.event.user.UserCreatedEvent;
 import com.bondhub.common.event.user.UserPrivacyChangedEvent;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -136,6 +137,7 @@ public class OutboxEventPublisher {
             case USER_INDEX_DELETED -> kafkaTopicProperties.getUserEvents().getIndexDeleted();
             case USER_PRIVACY_CHANGED -> kafkaTopicProperties.getUserEvents().getPrivacyChanged();
             case FRIENDSHIP_CHANGED -> kafkaTopicProperties.getFriendEvents().getFriendshipChanged();
+            case GROUP_MEMBER_CHANGED -> kafkaTopicProperties.getGroupEvents().getMemberChanged();
         };
     }
 
@@ -149,6 +151,7 @@ public class OutboxEventPublisher {
             case USER_INDEX_DELETED -> UserIndexDeletedEvent.class;
             case USER_PRIVACY_CHANGED -> UserPrivacyChangedEvent.class;
             case FRIENDSHIP_CHANGED -> FriendshipChangedEvent.class;
+            case GROUP_MEMBER_CHANGED -> GroupMemberChangedEvent.class;
         };
     }
 }

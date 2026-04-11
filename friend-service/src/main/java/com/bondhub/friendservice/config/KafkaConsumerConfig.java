@@ -40,7 +40,8 @@ public class KafkaConsumerConfig {
         props.put(JsonDeserializer.USE_TYPE_INFO_HEADERS, false);
         props.put(JsonDeserializer.TYPE_MAPPINGS, 
                 "userDeleted:com.bondhub.common.event.user.UserDeletedEvent," +
-                "friendshipChanged:com.bondhub.common.event.friend.FriendshipChangedEvent");
+                "friendshipChanged:com.bondhub.common.event.friend.FriendshipChangedEvent," +
+                "groupMemberChanged:com.bondhub.common.event.group.GroupMemberChangedEvent");
         props.put(JsonDeserializer.VALUE_DEFAULT_TYPE, "java.lang.Object");
         props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
         props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);

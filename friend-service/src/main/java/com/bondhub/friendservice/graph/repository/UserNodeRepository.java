@@ -60,7 +60,7 @@ public interface UserNodeRepository extends Neo4jRepository<UserNode, String> {
 
     @Query("MATCH (u:User {id: $userId})-[:FRIEND]-(f:User)-[:FRIEND]-(suggest:User) " +
            "WHERE NOT (u)-[:FRIEND]-(suggest) AND u <> suggest " +
-           "RETURN suggest.id AS userId, count(f) AS mutualCount " +
+           "RETURN {userId: suggest.id, mutualCount: count(f)} AS row " +
            "ORDER BY mutualCount DESC " +
            "SKIP $skip LIMIT $limit")
     List<Map<String, Object>> findFriendSuggestions(@Param("userId") String userId,
@@ -76,7 +76,7 @@ public interface UserNodeRepository extends Neo4jRepository<UserNode, String> {
 
     @Query("MATCH (u:User {id: $userId})-[c:IN_CONTACT]->(suggest:User) " +
            "WHERE NOT (u)-[:FRIEND]-(suggest) " +
-           "RETURN suggest.id AS userId, c.score AS score " +
+           "RETURN {userId: suggest.id, score: c.score} AS row " +
            "ORDER BY c.score DESC " +
            "SKIP $skip LIMIT $limit")
     List<Map<String, Object>> findContactSuggestions(@Param("userId") String userId,
@@ -99,4 +99,47 @@ public interface UserNodeRepository extends Neo4jRepository<UserNode, String> {
                                      @Param("toUserId") String toUserId,
                                      @Param("score") double score,
                                      @Param("source") String source);
+
+    // ===== IN_GROUP RELATIONSHIP =====
+
+    @Query("MERGE (u:User {id: $userId}) " +
+           "MERGE (g:Group {id: $groupId}) " +
+           "MERGE (u)-[:IN_GROUP]->(g)")
+    void mergeInGroupRelationship(@Param("userId") String userId,
+                                   @Param("groupId") String groupId);
+
+    @Query("MATCH (u:User {id: $userId})-[r:IN_GROUP]->(g:Group {id: $groupId}) DELETE r")
+    void removeInGroupRelationship(@Param("userId") String userId,
+                                    @Param("groupId") String groupId);
+
+    // ===== UNIFIED SUGGESTIONS =====
+
+    @Query("MATCH (u:User {id: $userId}) " +
+           "MATCH (suggest:User) WHERE suggest <> u AND NOT (u)-[:FRIEND]-(suggest) " +
+           "OPTIONAL MATCH (u)-[:FRIEND]-(mutual:User)-[:FRIEND]-(suggest) " +
+           "WITH u, suggest, count(DISTINCT mutual) AS mutualFriendsCount " +
+           "OPTIONAL MATCH (u)-[:IN_GROUP]->(g:Group)<-[:IN_GROUP]-(suggest) " +
+           "WITH u, suggest, mutualFriendsCount, count(DISTINCT g) AS sharedGroupsCount " +
+           "OPTIONAL MATCH (u)-[c:IN_CONTACT]->(suggest) " +
+           "WITH suggest, mutualFriendsCount, sharedGroupsCount, coalesce(c.score, 0.0) AS contactScore, " +
+           "(mutualFriendsCount * 10 + sharedGroupsCount * 3 + coalesce(c.score, 0.0) * 5) AS totalScore " +
+           "WHERE mutualFriendsCount > 0 OR sharedGroupsCount > 0 OR contactScore > 0 " +
+           "RETURN {userId: suggest.id, mutualFriendsCount: mutualFriendsCount, sharedGroupsCount: sharedGroupsCount, contactScore: contactScore, totalScore: totalScore} AS row " +
+           "ORDER BY totalScore DESC " +
+           "SKIP $skip LIMIT $limit")
+    List<Map<String, Object>> findUnifiedSuggestions(@Param("userId") String userId,
+                                                      @Param("skip") long skip,
+                                                      @Param("limit") int limit);
+
+    @Query("MATCH (u:User {id: $userId}) " +
+           "MATCH (suggest:User) WHERE suggest <> u AND NOT (u)-[:FRIEND]-(suggest) " +
+           "OPTIONAL MATCH (u)-[:FRIEND]-(mutual:User)-[:FRIEND]-(suggest) " +
+           "WITH u, suggest, count(DISTINCT mutual) AS mutualFriendsCount " +
+           "OPTIONAL MATCH (u)-[:IN_GROUP]->(g:Group)<-[:IN_GROUP]-(suggest) " +
+           "WITH u, suggest, mutualFriendsCount, count(DISTINCT g) AS sharedGroupsCount " +
+           "OPTIONAL MATCH (u)-[c:IN_CONTACT]->(suggest) " +
+           "WITH suggest, mutualFriendsCount, sharedGroupsCount, coalesce(c.score, 0.0) AS contactScore " +
+           "WHERE mutualFriendsCount > 0 OR sharedGroupsCount > 0 OR contactScore > 0 " +
+           "RETURN count(suggest)")
+    long countUnifiedSuggestions(@Param("userId") String userId);
 }

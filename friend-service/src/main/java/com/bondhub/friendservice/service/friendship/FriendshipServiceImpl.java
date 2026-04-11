@@ -123,6 +123,13 @@ public class FriendshipServiceImpl implements FriendshipService {
         friendShip.setFriendStatus(FriendStatus.ACCEPTED);
         friendShip = friendShipRepository.save(friendShip);
 
+        // Sync to Neo4j directly for immediate consistency
+        try {
+            graphFriendService.createFriendRelationship(friendShip.getRequested(), friendShip.getReceived());
+        } catch (Exception e) {
+            log.warn("Failed to sync friendship to Neo4j directly, relying on Kafka: {}", e.getMessage());
+        }
+
         publishFriendshipEvent(friendShip.getRequested(), friendShip.getReceived(), friendShip.getId(), FriendshipAction.ADDED);
 
         log.info("Friend request {} accepted successfully", friendshipId);
@@ -222,6 +229,13 @@ public class FriendshipServiceImpl implements FriendshipService {
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FRIENDS));
 
         friendShipRepository.delete(friendShip);
+
+        // Sync to Neo4j directly for immediate consistency
+        try {
+            graphFriendService.removeFriendRelationship(currentUserId, friendId);
+        } catch (Exception e) {
+            log.warn("Failed to remove friendship from Neo4j directly, relying on Kafka: {}", e.getMessage());
+        }
 
         publishFriendshipEvent(currentUserId, friendId, friendShip.getId(), FriendshipAction.REMOVED);
 
@@ -422,6 +436,13 @@ public class FriendshipServiceImpl implements FriendshipService {
         String currentUserId = securityUtil.getCurrentUserId();
         log.info("Fetching contact-based friend suggestions for user {} with pagination: {}", currentUserId, pageable);
         return graphFriendService.getContactSuggestions(currentUserId, pageable);
+    }
+
+    @Override
+    public PageResponse<List<FriendSuggestionResponse>> getUnifiedSuggestions(Pageable pageable) {
+        String currentUserId = securityUtil.getCurrentUserId();
+        log.info("Fetching unified friend suggestions for user {} with pagination: {}", currentUserId, pageable);
+        return graphFriendService.getUnifiedSuggestions(currentUserId, pageable);
     }
 
     @Override
