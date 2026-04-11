@@ -17,4 +17,10 @@ public class ConversationMember {
     String lastReadMessageId;
     MemberRole role;
     LocalDateTime joinedAt;
+
+    @Builder.Default
+    Boolean active = true;
+
+    LocalDateTime removedAt;
+    String removedBy;
 }

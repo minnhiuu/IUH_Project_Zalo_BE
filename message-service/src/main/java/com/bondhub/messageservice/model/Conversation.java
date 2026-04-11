@@ -10,6 +10,7 @@ import org.springframework.data.mongodb.core.index.CompoundIndexes;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -50,4 +51,16 @@ public class Conversation extends BaseModel {
 
     @Builder.Default
     Map<String, Integer> unreadCounts = new HashMap<>();
+
+    @Builder.Default
+    Map<String, LocalDateTime> deletedBefore = new HashMap<>();
+
+    @Indexed
+    @Builder.Default
+    boolean isDisbanded = false;
+
+    GroupSettings settings;
+
+    @Indexed(unique = true, sparse = true)
+    String joinLinkToken;
 }

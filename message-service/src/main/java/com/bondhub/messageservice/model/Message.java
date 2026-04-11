@@ -12,6 +12,7 @@ import org.springframework.data.mongodb.core.index.CompoundIndex;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
 @Data
@@ -39,6 +40,12 @@ public class Message extends BaseModel {
     @Builder.Default
     MessageStatus status = MessageStatus.NORMAL;
 
+    Map<String, Object> metadata;
+
+    LinkPreview linkPreview;
+
     @Builder.Default
     Set<String> deletedBy = new HashSet<>();
+
+    Set<String> visibleTo;
 }
