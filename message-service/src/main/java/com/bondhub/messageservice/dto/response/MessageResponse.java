@@ -28,5 +28,6 @@ public record MessageResponse(
                 ReplyMetadataResponse replyTo,
                 boolean isForwarded,
                 MessageStatus status,
-                Map<String, Object> metadata) {
+                Map<String, Object> metadata,
+                LinkPreviewResponse linkPreview) {
 }

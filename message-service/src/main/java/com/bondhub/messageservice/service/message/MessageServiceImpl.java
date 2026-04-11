@@ -40,16 +40,21 @@ import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.data.mongodb.core.FindAndModifyOptions;
 
 import com.bondhub.messageservice.model.GroupSettings;
+import com.bondhub.messageservice.model.LinkPreview;
 import com.bondhub.messageservice.service.conversation.ConversationHelper;
 
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class MessageServiceImpl implements MessageService {
+
+    private static final Pattern JOIN_LINK_PATTERN = Pattern.compile("^https?://[^/]+/g/([a-zA-Z0-9_-]+)$");
 
     private final MessageRepository messageRepository;
     private final ConversationRepository conversationRepository;
@@ -138,6 +143,19 @@ public class MessageServiceImpl implements MessageService {
         ChatUser sender = chatUserRepository.findById(currentUserId).orElse(null);
 
         // 3. Lưu tin nhắn
+        MessageType messageType = MessageType.CHAT;
+        LinkPreview linkPreview = null;
+
+        String trimmedContent = request.content() != null ? request.content().trim() : "";
+        Matcher joinLinkMatcher = JOIN_LINK_PATTERN.matcher(trimmedContent);
+        if (joinLinkMatcher.matches()) {
+            String token = joinLinkMatcher.group(1);
+            linkPreview = buildJoinLinkPreview(trimmedContent, token);
+            if (linkPreview != null) {
+                messageType = MessageType.LINK;
+            }
+        }
+
         Message message = Message.builder()
                 .conversationId(room.getId())
                 .senderId(currentUserId)
@@ -147,7 +165,8 @@ public class MessageServiceImpl implements MessageService {
                 .clientMessageId(request.clientMessageId())
                 .replyTo(request.replyTo())
                 .isForwarded(request.isForwarded())
-                .type(MessageType.CHAT)
+                .type(messageType)
+                .linkPreview(linkPreview)
                 .build();
         messageRepository.save(message);
 
@@ -155,6 +174,7 @@ public class MessageServiceImpl implements MessageService {
         String previewContent = switch (message.getType() == null ? MessageType.CHAT : message.getType()) {
             case IMAGE -> "[IMAGE]";
             case FILE -> "[FILE]";
+            case LINK -> "[LINK]";
             default -> message.getContent();
         };
         LastMessageInfo lastInfo = LastMessageInfo.builder()
@@ -356,6 +376,54 @@ public class MessageServiceImpl implements MessageService {
             kafkaTemplate.send(socketEventsTopic,
                     new SocketEvent(SocketEventType.MESSAGE, member.getUserId(),
                             "/queue/status-updates", payload));
+        }
+    }
+
+    private LinkPreview buildJoinLinkPreview(String url, String token) {
+        try {
+            Conversation target = conversationRepository.findByJoinLinkToken(token).orElse(null);
+            if (target == null || !target.isGroup()) return null;
+
+            GroupSettings settings = target.getSettings();
+            if (settings == null || !settings.isJoinByLinkEnabled()) return null;
+
+            Set<ConversationMember> activeMembers = target.getMembers().stream()
+                    .filter(m -> !Boolean.FALSE.equals(m.getActive()))
+                    .collect(Collectors.toSet());
+
+            Set<String> memberIds = activeMembers.stream()
+                    .map(ConversationMember::getUserId).collect(Collectors.toSet());
+            Map<String, ChatUser> userCache = chatUserRepository.findAllById(memberIds).stream()
+                    .collect(Collectors.toMap(ChatUser::getId, u -> u));
+
+            String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+            List<LinkPreview.MemberSnapshot> previews = activeMembers.stream()
+                    .map(ConversationMember::getUserId)
+                    .limit(5)
+                    .map(userCache::get)
+                    .filter(Objects::nonNull)
+                    .map(u -> LinkPreview.MemberSnapshot.builder()
+                            .name(u.getFullName())
+                            .avatar(u.getAvatar() != null ? baseUrl + u.getAvatar() : null)
+                            .build())
+                    .toList();
+
+            String groupName = target.getName();
+            if (groupName == null || groupName.isBlank()) {
+                groupName = conversationHelper.getDynamicGroupName(target, null, userCache);
+            }
+
+            return LinkPreview.builder()
+                    .url(url)
+                    .token(token)
+                    .groupName(groupName)
+                    .groupAvatar(target.getAvatar() != null ? baseUrl + target.getAvatar() : null)
+                    .memberCount(activeMembers.size())
+                    .memberPreviews(previews)
+                    .build();
+        } catch (Exception e) {
+            log.warn("[Chat] Failed to build join link preview for token {}: {}", token, e.getMessage());
+            return null;
         }
     }
 }

@@ -42,6 +42,8 @@ public class Message extends BaseModel {
 
     Map<String, Object> metadata;
 
+    LinkPreview linkPreview;
+
     @Builder.Default
     Set<String> deletedBy = new HashSet<>();
 
