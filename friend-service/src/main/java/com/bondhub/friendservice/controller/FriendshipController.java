@@ -116,4 +116,22 @@ public class FriendshipController {
             @RequestBody List<String> targetUserIds) {
         return ResponseEntity.ok(ApiResponse.success(friendshipService.batchCheckFriendshipStatus(targetUserIds)));
     }
+
+    @GetMapping("/suggestions/graph")
+    @Operation(summary = "Friend suggestions from graph", description = "Get friend suggestions based on friends-of-friends")
+    public ResponseEntity<ApiResponse<PageResponse<List<FriendSuggestionResponse>>>> getGraphSuggestions(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        Pageable pageable = PageRequest.of(page, size);
+        return ResponseEntity.ok(ApiResponse.success(friendshipService.getGraphSuggestions(pageable)));
+    }
+
+    @GetMapping("/suggestions/contacts")
+    @Operation(summary = "Friend suggestions from contacts", description = "Get friend suggestions based on imported contacts")
+    public ResponseEntity<ApiResponse<PageResponse<List<FriendSuggestionResponse>>>> getContactSuggestions(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        Pageable pageable = PageRequest.of(page, size);
+        return ResponseEntity.ok(ApiResponse.success(friendshipService.getContactSuggestions(pageable)));
+    }
 }

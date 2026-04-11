@@ -21,6 +21,7 @@ import com.bondhub.friendservice.mapper.FriendShipMapper;
 import com.bondhub.friendservice.model.FriendShip;
 import com.bondhub.friendservice.model.enums.FriendStatus;
 import com.bondhub.friendservice.repository.FriendShipRepository;
+import com.bondhub.friendservice.graph.service.GraphFriendService;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
@@ -45,6 +46,7 @@ public class FriendshipServiceImpl implements FriendshipService {
     SecurityUtil securityUtil;
     OutboxEventPublisher outboxEventPublisher;
     RawNotificationEventPublisher rawNotificationEventPublisher;
+    GraphFriendService graphFriendService;
 
     @Override
     @Transactional
@@ -285,28 +287,54 @@ public class FriendshipServiceImpl implements FriendshipService {
     @Override
     public PageResponse<List<FriendResponse>> getMyFriends(Pageable pageable) {
         String currentUserId = securityUtil.getCurrentUserId();
-        log.info("Fetching friends list for user {} with pagination: {}", currentUserId, pageable);
+        log.info("Fetching friends list for user {} with pagination: {} (via Neo4j)", currentUserId, pageable);
 
-        Page<FriendShip> friendshipsPage = friendShipRepository.findAllFriendsByUserId(currentUserId, pageable);
+        // Get friend IDs from Neo4j (paginated)
+        List<String> friendIds = graphFriendService.getFriendIdsPaginated(currentUserId, pageable);
+        long totalFriends = graphFriendService.countFriends(currentUserId);
 
-        List<String> friendIds = friendshipsPage.getContent().stream()
-                .map(friendship -> friendship.getRequested().equals(currentUserId)
-                        ? friendship.getReceived()
-                        : friendship.getRequested())
-                .toList();
+        if (friendIds.isEmpty()) {
+            return PageResponse.<List<FriendResponse>>builder()
+                    .data(Collections.emptyList())
+                    .page(pageable.getPageNumber())
+                    .totalPages((int) Math.ceil((double) totalFriends / pageable.getPageSize()))
+                    .limit(pageable.getPageSize())
+                    .totalItems(totalFriends)
+                    .build();
+        }
 
+        // Fetch user details in batch from user-service
         Map<String, UserSummaryResponse> userMap = fetchUserSummariesInBatch(friendIds);
 
-        Map<String, Long> mutualFriendsMap = calculateMutualFriendsInBatch(currentUserId, friendIds);
+        // Get mutual friend counts from Neo4j in batch
+        Map<String, Integer> mutualCountMap = new HashMap<>();
+        for (String friendId : friendIds) {
+            mutualCountMap.put(friendId, graphFriendService.getMutualFriendsCount(currentUserId, friendId));
+        }
 
-        return PageResponse.fromPage(friendshipsPage, friendship -> {
-            String friendId = friendship.getRequested().equals(currentUserId)
-                    ? friendship.getReceived()
-                    : friendship.getRequested();
-            UserSummaryResponse friend = userMap.get(friendId);
-            Integer mutualCount = mutualFriendsMap.getOrDefault(friendId, 0L).intValue();
-            return friendShipMapper.toFriendResponse(friend, friendship, mutualCount);
-        });
+        List<FriendResponse> friends = friendIds.stream()
+                .map(friendId -> {
+                    UserSummaryResponse user = userMap.get(friendId);
+                    if (user == null) return null;
+                    Integer mutualCount = mutualCountMap.getOrDefault(friendId, 0);
+                    return FriendResponse.builder()
+                            .userId(friendId)
+                            .userName(user.fullName())
+                            .userAvatar(user.avatar())
+                            .userPhone(user.phoneNumber())
+                            .mutualFriendsCount(mutualCount)
+                            .build();
+                })
+                .filter(Objects::nonNull)
+                .toList();
+
+        return PageResponse.<List<FriendResponse>>builder()
+                .data(friends)
+                .page(pageable.getPageNumber())
+                .totalPages((int) Math.ceil((double) totalFriends / pageable.getPageSize()))
+                .limit(pageable.getPageSize())
+                .totalItems(totalFriends)
+                .build();
     }
 
     @Override
@@ -347,15 +375,20 @@ public class FriendshipServiceImpl implements FriendshipService {
 
     @Override
     public MutualFriendsResponse getMutualFriends(String userId) {
-        log.info("Fetching mutual friends with user {}", userId);
+        String currentUserId = securityUtil.getCurrentUserId();
+        log.info("Fetching mutual friends between {} and {} (via Neo4j)", currentUserId, userId);
 
-        Set<String> mutualFriendIds = findMutualFriendIds(userId);
+        List<String> mutualFriendIds = graphFriendService.getMutualFriendIds(currentUserId, userId);
+
+        Map<String, UserSummaryResponse> userMap = fetchUserSummariesInBatch(mutualFriendIds);
 
         List<FriendResponse> mutualFriends = mutualFriendIds.stream()
                 .map(friendId -> {
-                    UserSummaryResponse user = getUserSummary(friendId);
+                    UserSummaryResponse user = userMap.get(friendId);
+                    if (user == null) return null;
                     return friendShipMapper.toFriendResponseFromUser(user);
                 })
+                .filter(Objects::nonNull)
                 .toList();
 
         return MutualFriendsResponse.builder()
@@ -366,30 +399,29 @@ public class FriendshipServiceImpl implements FriendshipService {
 
     @Override
     public Integer getMutualFriendsCount(String userId) {
-        log.info("Counting mutual friends with user {}", userId);
-        return findMutualFriendIds(userId).size();
-    }
-
-    private Set<String> findMutualFriendIds(String targetUserId) {
         String currentUserId = securityUtil.getCurrentUserId();
-
-        List<FriendShip> currentUserFriends = friendShipRepository.findAllFriendsByUserId(currentUserId);
-        Set<String> currentUserFriendIds = extractFriendIds(currentUserFriends, currentUserId);
-
-        List<FriendShip> targetUserFriends = friendShipRepository.findAllFriendsByUserId(targetUserId);
-        Set<String> targetUserFriendIds = extractFriendIds(targetUserFriends, targetUserId);
-
-        Set<String> mutualFriendIds = new HashSet<>(currentUserFriendIds);
-        mutualFriendIds.retainAll(targetUserFriendIds);
-
-        return mutualFriendIds;
+        log.info("Counting mutual friends between {} and {} (via Neo4j)", currentUserId, userId);
+        return graphFriendService.getMutualFriendsCount(currentUserId, userId);
     }
 
     @Override
     public Set<String> getFriendIds(String userId) {
-        log.info("Fetching friend IDs for user {}", userId);
-        List<FriendShip> friendships = friendShipRepository.findAllFriendsByUserId(userId);
-        return extractFriendIds(friendships, userId);
+        log.info("Fetching friend IDs for user {} (via Neo4j)", userId);
+        return new HashSet<>(graphFriendService.getFriendIds(userId));
+    }
+
+    @Override
+    public PageResponse<List<FriendSuggestionResponse>> getGraphSuggestions(Pageable pageable) {
+        String currentUserId = securityUtil.getCurrentUserId();
+        log.info("Fetching graph-based friend suggestions for user {} with pagination: {}", currentUserId, pageable);
+        return graphFriendService.getFriendSuggestionsFromGraph(currentUserId, pageable);
+    }
+
+    @Override
+    public PageResponse<List<FriendSuggestionResponse>> getContactSuggestions(Pageable pageable) {
+        String currentUserId = securityUtil.getCurrentUserId();
+        log.info("Fetching contact-based friend suggestions for user {} with pagination: {}", currentUserId, pageable);
+        return graphFriendService.getContactSuggestions(currentUserId, pageable);
     }
 
     @Override
@@ -477,27 +509,5 @@ public class FriendshipServiceImpl implements FriendshipService {
                                 .fullName("Unknown User")
                                 .avatar(null)
                                 .build()));
-    }
-
-    private Map<String, Long> calculateMutualFriendsInBatch(String currentUserId, List<String> friendIds) {
-        String currentUserIdStr = currentUserId;
-
-        List<FriendShip> currentUserFriendships = friendShipRepository.findAllFriendsByUserId(currentUserIdStr);
-        Set<String> currentUserFriendSet = extractFriendIds(currentUserFriendships, currentUserIdStr);
-
-        Map<String, Long> mutualCountMap = new HashMap<>();
-
-        for (String friendId : friendIds) {
-            List<FriendShip> targetFriendships = friendShipRepository.findAllFriendsByUserId(friendId);
-            Set<String> targetFriendSet = extractFriendIds(targetFriendships, friendId);
-
-            long mutualCount = targetFriendSet.stream()
-                    .filter(currentUserFriendSet::contains)
-                    .count();
-
-            mutualCountMap.put(friendId, mutualCount);
-        }
-
-        return mutualCountMap;
     }
 }

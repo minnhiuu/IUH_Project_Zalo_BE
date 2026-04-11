@@ -73,6 +73,15 @@ public enum ErrorCode {
         NOT_AUTHORIZED_TO_CANCEL(HttpStatus.FORBIDDEN, 3008, "error.friend.not.authorized.to.cancel"),
         FRIEND_REQUEST_NOT_PENDING(HttpStatus.BAD_REQUEST, 3009, "error.friend.request.not.pending"),
 
+        // Contact errors (34xx)
+        CONTACT_IMPORT_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, 3401, "error.contact.import.failed"),
+        CONTACT_NO_VALID_PHONES(HttpStatus.BAD_REQUEST, 3402, "error.contact.no.valid.phones"),
+        CONTACT_TOO_MANY(HttpStatus.BAD_REQUEST, 3403, "error.contact.too.many"),
+
+        // Graph errors (35xx)
+        GRAPH_SYNC_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, 3501, "error.graph.sync.failed"),
+        GRAPH_QUERY_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, 3502, "error.graph.query.failed"),
+
         // Admin / ban errors
         CANNOT_BAN_YOURSELF(HttpStatus.BAD_REQUEST, 2208, "error.cannot.ban.yourself"),
         CANNOT_BAN_ADMIN(HttpStatus.FORBIDDEN, 2209, "error.cannot.ban.admin"),

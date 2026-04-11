@@ -23,4 +23,10 @@ public interface UserServiceClient {
     @GetMapping("/account/{accountId}")
     ApiResponse<UserSummaryResponse> getUserByAccountId(@PathVariable("accountId") String accountId);
 
+    @PostMapping("/search/by-phones")
+    ApiResponse<List<UserSummaryResponse>> findUsersByPhones(@RequestBody List<String> phones);
+
+    @PostMapping("/search/by-emails")
+    ApiResponse<List<UserSummaryResponse>> findUsersByEmails(@RequestBody List<String> emails);
+
 }

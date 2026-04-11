@@ -18,6 +18,13 @@ spring:
       auto-index-creation: true
       uuid-representation: standard
 
+  # Neo4j Configuration
+  neo4j:
+    uri: ${NEO4J_URI:bolt://localhost:7687}
+    authentication:
+      username: ${NEO4J_USERNAME:neo4j}
+      password: ${NEO4J_PASSWORD:bondhub123}
+
   # Kafka Configuration for User Service
   kafka:
     # Producer configuration for user events
@@ -75,6 +82,12 @@ bondhub:
   security:
     public-endpoints:
       - /friendships
+
+# Kafka Topics
+kafka:
+  topics:
+    friendship-changed: friend.friendship.changed
+    user-deleted: user.deleted
 
 # AWS S3 Configuration
 cloud:
