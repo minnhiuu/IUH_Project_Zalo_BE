@@ -8,6 +8,7 @@ import lombok.NoArgsConstructor;
 import com.bondhub.common.enums.MessageType;
 import java.time.LocalDateTime;
 import java.util.Map;
+import java.util.Set;
 
 @Data
 @Builder
@@ -21,4 +22,5 @@ public class LastMessageInfo {
     MessageType type;
     MessageStatus status;
     Map<String, Object> metadata;
+    Set<String> visibleTo;
 }

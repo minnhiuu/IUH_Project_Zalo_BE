@@ -13,12 +13,19 @@ import com.bondhub.messageservice.model.Conversation;
 import com.bondhub.messageservice.model.ConversationMember;
 import com.bondhub.messageservice.model.GroupSettings;
 import com.bondhub.messageservice.model.LastMessageInfo;
+import com.bondhub.messageservice.model.Message;
+import com.bondhub.messageservice.model.enums.JoinRequestStatus;
 import com.bondhub.messageservice.model.enums.MemberRole;
 import com.bondhub.messageservice.repository.ChatUserRepository;
 import com.bondhub.messageservice.repository.ConversationRepository;
+import com.bondhub.messageservice.repository.JoinRequestRepository;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 
@@ -37,8 +44,10 @@ public class ConversationHelper {
 
     private final ConversationRepository conversationRepository;
     private final ChatUserRepository chatUserRepository;
+    private final JoinRequestRepository joinRequestRepository;
     private final SecurityUtil securityUtil;
     private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final MongoTemplate mongoTemplate;
 
     @Value("${aws.s3.bucket.name}")
     private String bucketName;
@@ -137,6 +146,10 @@ public class ConversationHelper {
             Map<String, ChatUser> userCache, String baseUrl, boolean viewerCanSee, String friendshipStatus) {
 
         LastMessageInfo last = room.getLastMessage();
+        if (last != null && last.getVisibleTo() != null && !last.getVisibleTo().isEmpty()
+                && !last.getVisibleTo().contains(currentUserId)) {
+            last = findFallbackLastMessage(room.getId(), currentUserId);
+        }
         List<ConversationMemberResponse> members = buildMembersWithCache(
                 room, currentUserId, userCache, baseUrl, viewerCanSee);
 
@@ -184,9 +197,7 @@ public class ConversationHelper {
                 .lastMessage(last != null ? LastMessageResponse.builder()
                         .id(last.getMessageId())
                         .senderId(last.getSenderId())
-                        .senderName(last.getSenderId() != null
-                                ? userCache.getOrDefault(last.getSenderId(),
-                                ChatUser.builder().fullName("").build()).getFullName() : null)
+                        .senderName(resolveSenderName(last, userCache))
                         .content(last.getContent())
                         .timestamp(toOffset(last.getTimestamp()))
                         .type(last.getType())
@@ -197,6 +208,10 @@ public class ConversationHelper {
                 .members(members)
                 .settings(room.isGroup() ? room.getSettings() : null)
                 .joinLinkToken(room.isGroup() ? room.getJoinLinkToken() : null)
+                .pendingJoinRequestCount(room.isGroup() && room.getSettings() != null
+                        && room.getSettings().isMembershipApprovalEnabled()
+                        ? joinRequestRepository.countByConversationIdAndStatus(room.getId(), JoinRequestStatus.PENDING)
+                        : null)
                 .build();
     }
 
@@ -337,6 +352,48 @@ public class ConversationHelper {
 
     public boolean isPhoneNumber(String query) {
         return query.matches("\\d{9,11}");
+    }
+
+    private LastMessageInfo findFallbackLastMessage(String conversationId, String currentUserId) {
+        Criteria criteria = new Criteria().andOperator(
+                Criteria.where("conversationId").is(conversationId),
+                Criteria.where("deletedBy").ne(currentUserId),
+                new Criteria().orOperator(
+                        Criteria.where("visibleTo").exists(false),
+                        Criteria.where("visibleTo").is(null),
+                        Criteria.where("visibleTo").size(0),
+                        Criteria.where("visibleTo").is(currentUserId)
+                )
+        );
+        Query query = new Query(criteria)
+                .with(Sort.by(Sort.Direction.DESC, "createdAt"))
+                .limit(1);
+        Message msg = mongoTemplate.findOne(query, Message.class);
+        if (msg == null) return null;
+        return LastMessageInfo.builder()
+                .messageId(msg.getId())
+                .senderId(msg.getSenderId())
+                .content(msg.getContent())
+                .timestamp(msg.getCreatedAt())
+                .type(msg.getType())
+                .status(msg.getStatus())
+                .metadata(msg.getMetadata())
+                .build();
+    }
+
+    private String resolveSenderName(LastMessageInfo last, Map<String, ChatUser> userCache) {
+        if (last.getSenderId() == null) return null;
+        ChatUser cached = userCache.get(last.getSenderId());
+        if (cached != null && cached.getFullName() != null && !cached.getFullName().isBlank()) {
+            return cached.getFullName();
+        }
+        if (last.getMetadata() != null) {
+            Object actorName = last.getMetadata().get("actorName");
+            if (actorName instanceof String name && !name.isBlank()) {
+                return name;
+            }
+        }
+        return "";
     }
 
     public String getBaseUrl() {

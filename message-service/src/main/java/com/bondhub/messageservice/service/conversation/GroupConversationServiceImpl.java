@@ -11,15 +11,19 @@ import com.bondhub.messageservice.dto.request.UpdateGroupSettingsRequest;
 import com.bondhub.messageservice.dto.response.ConversationResponse;
 import com.bondhub.messageservice.dto.response.GroupMemberListItemResponse;
 import com.bondhub.messageservice.dto.response.JoinGroupPreviewResponse;
+import com.bondhub.messageservice.dto.response.JoinRequestResponse;
 import com.bondhub.messageservice.dto.response.SearchMemberResponse;
 import com.bondhub.messageservice.model.ChatUser;
 import com.bondhub.messageservice.model.Conversation;
 import com.bondhub.messageservice.model.ConversationMember;
 import com.bondhub.messageservice.model.GroupSettings;
+import com.bondhub.messageservice.model.JoinRequest;
 import com.bondhub.messageservice.model.LastMessageInfo;
+import com.bondhub.messageservice.model.enums.JoinRequestStatus;
 import com.bondhub.messageservice.model.enums.MemberRole;
 import com.bondhub.messageservice.repository.ChatUserRepository;
 import com.bondhub.messageservice.repository.ConversationRepository;
+import com.bondhub.messageservice.repository.JoinRequestRepository;
 import com.bondhub.messageservice.repository.MessageRepository;
 import com.bondhub.messageservice.service.message.SystemMessageService;
 import com.bondhub.messageservice.client.FileServiceClient;
@@ -59,6 +63,7 @@ public class GroupConversationServiceImpl implements GroupConversationService {
     private final ConversationRepository conversationRepository;
     private final ChatUserRepository chatUserRepository;
     private final MessageRepository messageRepository;
+    private final JoinRequestRepository joinRequestRepository;
     private final MongoTemplate mongoTemplate;
     private final SystemMessageService systemMessageService;
     private final FileServiceClient fileServiceClient;
@@ -737,33 +742,11 @@ public class GroupConversationServiceImpl implements GroupConversationService {
             throw new AppException(ErrorCode.CHAT_ALREADY_MEMBER);
         }
 
-        LocalDateTime now = LocalDateTime.now();
-        ConversationMember existingMember = conversation.getMembers().stream()
-                .filter(m -> m.getUserId().equals(currentUserId))
-                .findFirst().orElse(null);
-
-        if (existingMember != null) {
-            existingMember.setActive(true);
-            existingMember.setRemovedAt(null);
-            existingMember.setRemovedBy(null);
-            existingMember.setRole(MemberRole.MEMBER);
-            existingMember.setJoinedAt(now);
-        } else {
-            conversation.getMembers().add(
-                    ConversationMember.builder().userId(currentUserId).role(MemberRole.MEMBER).joinedAt(now).build());
+        if (settings.isMembershipApprovalEnabled()) {
+            return handleJoinRequest(conversation, currentUserId);
         }
 
-        if (conversation.getUnreadCounts() == null) conversation.setUnreadCounts(new HashMap<>());
-        conversation.getUnreadCounts().putIfAbsent(currentUserId, 0);
-
-        Conversation saved = conversationRepository.save(conversation);
-
-        ActorInfo actorInfo = fetchActorInfo(currentUserId);
-        systemMessageService.sendSystemMessage(saved.getId(), currentUserId, actorInfo.name(), actorInfo.avatar(),
-                SystemActionType.JOIN_BY_LINK, Map.of());
-
-        log.info("[Group] User {} joined conversation {} via link", currentUserId, saved.getId());
-        return broadcastAndRespond(saved, currentUserId);
+        return directJoinByLink(conversation, currentUserId);
     }
 
     @Override
@@ -816,6 +799,9 @@ public class GroupConversationServiceImpl implements GroupConversationService {
             groupName = helper.getDynamicGroupName(conversation, currentUserId, userCache);
         }
 
+        boolean hasPendingRequest = joinRequestRepository.existsByConversationIdAndUserIdAndStatus(
+                conversation.getId(), currentUserId, JoinRequestStatus.PENDING);
+
         return JoinGroupPreviewResponse.builder()
                 .conversationId(conversation.getId())
                 .groupName(groupName)
@@ -824,7 +810,224 @@ public class GroupConversationServiceImpl implements GroupConversationService {
                 .createdByName(createdByName)
                 .memberPreviews(memberPreviews)
                 .isAlreadyMember(isAlreadyMember)
+                .membershipApprovalEnabled(settings.isMembershipApprovalEnabled())
+                .hasPendingRequest(hasPendingRequest)
                 .build();
+    }
+
+    @Override
+    public PageResponse<List<JoinRequestResponse>> getJoinRequests(String conversationId, int page, int size) {
+        String currentUserId = helper.getSecurityUtil().getCurrentUserId();
+        Conversation conversation = findGroupConversation(conversationId);
+        ConversationMember actor = helper.getMemberOrThrow(conversation, currentUserId);
+        helper.assertOwnerOrAdmin(actor);
+
+        Page<JoinRequest> requestPage = joinRequestRepository.findByConversationIdAndStatus(
+                conversationId, JoinRequestStatus.PENDING,
+                PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, "createdAt")));
+
+        Set<String> userIds = requestPage.getContent().stream()
+                .map(JoinRequest::getUserId).collect(Collectors.toSet());
+        String baseUrl = helper.getBaseUrl();
+        Map<String, ChatUser> userCache = chatUserRepository.findAllById(userIds).stream()
+                .collect(Collectors.toMap(ChatUser::getId, u -> u));
+
+        List<JoinRequestResponse> responses = requestPage.getContent().stream()
+                .map(req -> {
+                    ChatUser user = userCache.get(req.getUserId());
+                    return JoinRequestResponse.builder()
+                            .id(req.getId())
+                            .conversationId(req.getConversationId())
+                            .userId(req.getUserId())
+                            .fullName(user != null ? user.getFullName() : "Người dùng")
+                            .avatar(user != null && user.getAvatar() != null ? baseUrl + user.getAvatar() : null)
+                            .status(req.getStatus())
+                            .requestedAt(req.getCreatedAt())
+                            .processedAt(req.getProcessedAt())
+                            .processedBy(req.getProcessedBy())
+                            .build();
+                })
+                .collect(Collectors.toList());
+
+        return PageResponse.<List<JoinRequestResponse>>builder()
+                .page(page)
+                .limit(size)
+                .totalItems(requestPage.getTotalElements())
+                .totalPages(requestPage.getTotalPages())
+                .data(responses)
+                .build();
+
+    }
+
+    @Override
+    public ConversationResponse approveJoinRequest(String conversationId, String requestId) {
+        String currentUserId = helper.getSecurityUtil().getCurrentUserId();
+        Conversation conversation = findGroupConversation(conversationId);
+        ConversationMember actor = helper.getMemberOrThrow(conversation, currentUserId);
+        helper.assertOwnerOrAdmin(actor);
+
+        JoinRequest joinRequest = joinRequestRepository.findById(requestId)
+                .orElseThrow(() -> new AppException(ErrorCode.CHAT_JOIN_REQUEST_NOT_FOUND));
+
+        if (!joinRequest.getConversationId().equals(conversationId)) {
+            throw new AppException(ErrorCode.CHAT_JOIN_REQUEST_NOT_FOUND);
+        }
+        if (joinRequest.getStatus() != JoinRequestStatus.PENDING) {
+            throw new AppException(ErrorCode.CHAT_JOIN_REQUEST_ALREADY_PROCESSED);
+        }
+
+        joinRequest.setStatus(JoinRequestStatus.APPROVED);
+        joinRequest.setProcessedAt(LocalDateTime.now());
+        joinRequest.setProcessedBy(currentUserId);
+        joinRequestRepository.save(joinRequest);
+
+        String targetUserId = joinRequest.getUserId();
+        ConversationResponse response = addMemberToConversation(conversation, targetUserId);
+
+        ActorInfo actorInfo = fetchActorInfo(currentUserId);
+        ActorInfo targetInfo = fetchActorInfo(targetUserId);
+        systemMessageService.sendSystemMessage(conversationId, currentUserId,
+                actorInfo.name(), actorInfo.avatar(),
+                SystemActionType.JOIN_REQUEST_APPROVED,
+                Map.of("targetIds", List.of(targetUserId),
+                        "payload", Map.of("targetNames", List.of(targetInfo.name()),
+                                "targetAvatars", List.of(targetInfo.avatar() != null ? targetInfo.avatar() : ""))));
+
+        log.info("[Group] Join request {} approved by {} for user {} in conversation {}",
+                requestId, currentUserId, targetUserId, conversationId);
+        return response;
+    }
+
+    @Override
+    public void rejectJoinRequest(String conversationId, String requestId) {
+        String currentUserId = helper.getSecurityUtil().getCurrentUserId();
+        Conversation conversation = findGroupConversation(conversationId);
+        ConversationMember actor = helper.getMemberOrThrow(conversation, currentUserId);
+        helper.assertOwnerOrAdmin(actor);
+
+        JoinRequest joinRequest = joinRequestRepository.findById(requestId)
+                .orElseThrow(() -> new AppException(ErrorCode.CHAT_JOIN_REQUEST_NOT_FOUND));
+
+        if (!joinRequest.getConversationId().equals(conversationId)) {
+            throw new AppException(ErrorCode.CHAT_JOIN_REQUEST_NOT_FOUND);
+        }
+        if (joinRequest.getStatus() != JoinRequestStatus.PENDING) {
+            throw new AppException(ErrorCode.CHAT_JOIN_REQUEST_ALREADY_PROCESSED);
+        }
+
+        joinRequest.setStatus(JoinRequestStatus.REJECTED);
+        joinRequest.setProcessedAt(LocalDateTime.now());
+        joinRequest.setProcessedBy(currentUserId);
+        joinRequestRepository.save(joinRequest);
+
+        ActorInfo actorInfo = fetchActorInfo(currentUserId);
+        systemMessageService.sendSystemMessage(conversationId, currentUserId,
+                actorInfo.name(), actorInfo.avatar(),
+                SystemActionType.JOIN_REQUEST_REJECTED, Map.of(),
+                Set.of(joinRequest.getUserId()));
+
+        log.info("[Group] Join request {} rejected by {} for user {} in conversation {}",
+                requestId, currentUserId, joinRequest.getUserId(), conversationId);
+    }
+
+    @Override
+    public void cancelMyJoinRequest(String conversationId) {
+        String currentUserId = helper.getSecurityUtil().getCurrentUserId();
+
+        JoinRequest joinRequest = joinRequestRepository
+                .findByConversationIdAndUserIdAndStatus(conversationId, currentUserId, JoinRequestStatus.PENDING)
+                .orElseThrow(() -> new AppException(ErrorCode.CHAT_JOIN_REQUEST_NOT_FOUND));
+
+        joinRequest.setStatus(JoinRequestStatus.CANCELLED);
+        joinRequest.setProcessedAt(LocalDateTime.now());
+        joinRequest.setProcessedBy(currentUserId);
+        joinRequestRepository.save(joinRequest);
+
+        log.info("[Group] User {} cancelled join request for conversation {}", currentUserId, conversationId);
+    }
+
+    private ConversationResponse handleJoinRequest(Conversation conversation, String currentUserId) {
+        boolean alreadyPending = joinRequestRepository.existsByConversationIdAndUserIdAndStatus(
+                conversation.getId(), currentUserId, JoinRequestStatus.PENDING);
+        if (alreadyPending) {
+            throw new AppException(ErrorCode.CHAT_JOIN_REQUEST_ALREADY_PENDING);
+        }
+
+        JoinRequest joinRequest = JoinRequest.builder()
+                .conversationId(conversation.getId())
+                .userId(currentUserId)
+                .status(JoinRequestStatus.PENDING)
+                .build();
+        joinRequestRepository.save(joinRequest);
+
+        Set<String> adminIds = conversation.getMembers().stream()
+                .filter(m -> helper.isActiveMember(m) && helper.resolveRole(m) != MemberRole.MEMBER)
+                .map(ConversationMember::getUserId)
+                .collect(Collectors.toSet());
+
+        ActorInfo actorInfo = fetchActorInfo(currentUserId);
+        systemMessageService.sendSystemMessage(conversation.getId(), currentUserId,
+                actorInfo.name(), actorInfo.avatar(),
+                SystemActionType.JOIN_REQUEST_CREATED, Map.of(),
+                adminIds);
+
+        log.info("[Group] Join request created by user {} for conversation {}", currentUserId, conversation.getId());
+
+        return null;
+    }
+
+    private ConversationResponse directJoinByLink(Conversation conversation, String currentUserId) {
+        LocalDateTime now = LocalDateTime.now();
+        ConversationMember existingMember = conversation.getMembers().stream()
+                .filter(m -> m.getUserId().equals(currentUserId))
+                .findFirst().orElse(null);
+
+        if (existingMember != null) {
+            existingMember.setActive(true);
+            existingMember.setRemovedAt(null);
+            existingMember.setRemovedBy(null);
+            existingMember.setRole(MemberRole.MEMBER);
+            existingMember.setJoinedAt(now);
+        } else {
+            conversation.getMembers().add(
+                    ConversationMember.builder().userId(currentUserId).role(MemberRole.MEMBER).joinedAt(now).build());
+        }
+
+        if (conversation.getUnreadCounts() == null) conversation.setUnreadCounts(new HashMap<>());
+        conversation.getUnreadCounts().putIfAbsent(currentUserId, 0);
+
+        Conversation saved = conversationRepository.save(conversation);
+
+        ActorInfo actorInfo = fetchActorInfo(currentUserId);
+        systemMessageService.sendSystemMessage(saved.getId(), currentUserId, actorInfo.name(), actorInfo.avatar(),
+                SystemActionType.JOIN_BY_LINK, Map.of());
+
+        log.info("[Group] User {} joined conversation {} via link", currentUserId, saved.getId());
+        return broadcastAndRespond(saved, currentUserId);
+    }
+
+    private ConversationResponse addMemberToConversation(Conversation conversation, String userId) {
+        LocalDateTime now = LocalDateTime.now();
+        ConversationMember existingMember = conversation.getMembers().stream()
+                .filter(m -> m.getUserId().equals(userId))
+                .findFirst().orElse(null);
+
+        if (existingMember != null) {
+            existingMember.setActive(true);
+            existingMember.setRemovedAt(null);
+            existingMember.setRemovedBy(null);
+            existingMember.setRole(MemberRole.MEMBER);
+            existingMember.setJoinedAt(now);
+        } else {
+            conversation.getMembers().add(
+                    ConversationMember.builder().userId(userId).role(MemberRole.MEMBER).joinedAt(now).build());
+        }
+
+        if (conversation.getUnreadCounts() == null) conversation.setUnreadCounts(new HashMap<>());
+        conversation.getUnreadCounts().putIfAbsent(userId, 0);
+
+        Conversation saved = conversationRepository.save(conversation);
+        return broadcastAndRespond(saved, userId);
     }
 
     private Conversation findGroupConversation(String conversationId) {

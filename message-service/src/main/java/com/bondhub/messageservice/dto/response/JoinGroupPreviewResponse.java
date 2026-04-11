@@ -12,7 +12,9 @@ public record JoinGroupPreviewResponse(
         int memberCount,
         String createdByName,
         List<MemberPreview> memberPreviews,
-        boolean isAlreadyMember
+        boolean isAlreadyMember,
+        boolean membershipApprovalEnabled,
+        boolean hasPendingRequest
 ) {
     @Builder
     public record MemberPreview(String name, String avatar) {

@@ -8,6 +8,7 @@ import com.bondhub.messageservice.dto.request.UpdateGroupSettingsRequest;
 import com.bondhub.messageservice.dto.response.ConversationResponse;
 import com.bondhub.messageservice.dto.response.GroupMemberListItemResponse;
 import com.bondhub.messageservice.dto.response.JoinGroupPreviewResponse;
+import com.bondhub.messageservice.dto.response.JoinRequestResponse;
 import com.bondhub.messageservice.dto.response.SearchMemberResponse;
 import com.bondhub.messageservice.service.conversation.ConversationService;
 import com.bondhub.messageservice.service.conversation.GroupConversationService;
@@ -204,9 +205,44 @@ public class ConversationController {
     }
 
     @PostMapping("/join/{token}")
-    @Operation(summary = "Join a group conversation using an invite link token")
+    @Operation(summary = "Join a group conversation using an invite link token (creates pending request if approval is enabled)")
     public ResponseEntity<ApiResponse<ConversationResponse>> joinByLink(@PathVariable String token) {
         return ResponseEntity.ok(ApiResponse.success(
                 groupConversationService.joinByLink(token)));
+    }
+
+    @GetMapping("/{conversationId}/join-requests")
+    @Operation(summary = "Get pending join requests for a group (Owner/Admin only)")
+    public ResponseEntity<ApiResponse<PageResponse<List<JoinRequestResponse>>>> getJoinRequests(
+            @PathVariable String conversationId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(ApiResponse.success(
+                groupConversationService.getJoinRequests(conversationId, page, size)));
+    }
+
+    @PostMapping("/{conversationId}/join-requests/{requestId}/approve")
+    @Operation(summary = "Approve a pending join request (Owner/Admin only)")
+    public ResponseEntity<ApiResponse<ConversationResponse>> approveJoinRequest(
+            @PathVariable String conversationId,
+            @PathVariable String requestId) {
+        return ResponseEntity.ok(ApiResponse.success(
+                groupConversationService.approveJoinRequest(conversationId, requestId)));
+    }
+
+    @PostMapping("/{conversationId}/join-requests/{requestId}/reject")
+    @Operation(summary = "Reject a pending join request (Owner/Admin only)")
+    public ResponseEntity<ApiResponse<Void>> rejectJoinRequest(
+            @PathVariable String conversationId,
+            @PathVariable String requestId) {
+        groupConversationService.rejectJoinRequest(conversationId, requestId);
+        return ResponseEntity.ok(ApiResponse.success(null));
+    }
+
+    @DeleteMapping("/{conversationId}/join-requests/me")
+    @Operation(summary = "Cancel my pending join request")
+    public ResponseEntity<ApiResponse<Void>> cancelMyJoinRequest(@PathVariable String conversationId) {
+        groupConversationService.cancelMyJoinRequest(conversationId);
+        return ResponseEntity.ok(ApiResponse.success(null));
     }
 }

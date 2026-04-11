@@ -24,5 +24,6 @@ public record ConversationResponse(
         LastMessageResponse lastMessage,
         List<ConversationMemberResponse> members,
         GroupSettings settings,
-        String joinLinkToken) {
+        String joinLinkToken,
+        Long pendingJoinRequestCount) {
 }
