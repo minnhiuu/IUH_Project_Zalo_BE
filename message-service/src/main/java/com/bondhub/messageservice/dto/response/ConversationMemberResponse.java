@@ -1,5 +1,6 @@
 package com.bondhub.messageservice.dto.response;
 
+import com.bondhub.messageservice.model.enums.MemberRole;
 import lombok.Builder;
 
 @Builder
@@ -8,7 +9,6 @@ public record ConversationMemberResponse(
         String fullName,
         String avatar,
         String lastReadMessageId,
-        //replace with enum when group chat is implemented
-        String role
+        MemberRole role
 ) {
 }
