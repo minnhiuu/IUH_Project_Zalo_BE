@@ -347,7 +347,14 @@ public class JoinRequestServiceImpl implements JoinRequestService {
 
         if (conversation.getUnreadCounts() == null) conversation.setUnreadCounts(new HashMap<>());
         conversation.getUnreadCounts().putIfAbsent(currentUserId, 0);
-        if (conversation.getDeletedBefore() != null) conversation.getDeletedBefore().remove(currentUserId);
+
+        boolean canReadRecent = conversation.getSettings() == null || conversation.getSettings().isNewMembersCanReadRecent();
+        if (conversation.getDeletedBefore() == null) conversation.setDeletedBefore(new HashMap<>());
+        if (canReadRecent) {
+            conversation.getDeletedBefore().remove(currentUserId);
+        } else {
+            conversation.getDeletedBefore().put(currentUserId, now);
+        }
 
         Conversation saved = conversationRepository.save(conversation);
 
@@ -378,7 +385,14 @@ public class JoinRequestServiceImpl implements JoinRequestService {
 
         if (conversation.getUnreadCounts() == null) conversation.setUnreadCounts(new HashMap<>());
         conversation.getUnreadCounts().putIfAbsent(userId, 0);
-        if (conversation.getDeletedBefore() != null) conversation.getDeletedBefore().remove(userId);
+
+        boolean canReadRecent = conversation.getSettings() == null || conversation.getSettings().isNewMembersCanReadRecent();
+        if (conversation.getDeletedBefore() == null) conversation.setDeletedBefore(new HashMap<>());
+        if (canReadRecent) {
+            conversation.getDeletedBefore().remove(userId);
+        } else {
+            conversation.getDeletedBefore().put(userId, LocalDateTime.now());
+        }
 
         Conversation saved = conversationRepository.save(conversation);
         return helper.broadcastAndRespond(saved, userId);

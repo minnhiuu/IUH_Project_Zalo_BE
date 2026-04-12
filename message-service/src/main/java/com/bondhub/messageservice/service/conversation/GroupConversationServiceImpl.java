@@ -8,6 +8,7 @@ import com.bondhub.common.exception.ErrorCode;
 import com.bondhub.common.dto.client.fileservice.FileUploadResponse;
 import com.bondhub.messageservice.dto.request.GroupConversationCreateRequest;
 import com.bondhub.messageservice.dto.request.UpdateGroupSettingsRequest;
+import com.bondhub.messageservice.dto.response.AdminMemberResponse;
 import com.bondhub.messageservice.dto.response.ConversationResponse;
 import com.bondhub.messageservice.dto.response.GroupMemberListItemResponse;
 import com.bondhub.messageservice.dto.response.SearchMemberResponse;
@@ -152,9 +153,16 @@ public class GroupConversationServiceImpl implements GroupConversationService {
 
         if (conversation.getUnreadCounts() == null) conversation.setUnreadCounts(new HashMap<>());
         requestedIds.forEach(id -> conversation.getUnreadCounts().putIfAbsent(id, 0));
-        if (conversation.getDeletedBefore() != null) {
-            requestedIds.forEach(id -> conversation.getDeletedBefore().remove(id));
-        }
+
+        boolean canReadRecent = conversation.getSettings() == null || conversation.getSettings().isNewMembersCanReadRecent();
+        if (conversation.getDeletedBefore() == null) conversation.setDeletedBefore(new HashMap<>());
+        requestedIds.forEach(id -> {
+            if (canReadRecent) {
+                conversation.getDeletedBefore().remove(id);
+            } else {
+                conversation.getDeletedBefore().put(id, now);
+            }
+        });
 
         Conversation saved = conversationRepository.save(conversation);
 
@@ -553,7 +561,6 @@ public class GroupConversationServiceImpl implements GroupConversationService {
         return PageResponse.fromPage(candidatesPage, u -> SearchMemberResponse.builder()
                 .userId(u.getId()).fullName(u.getFullName())
                 .avatar(u.getAvatar() != null ? baseUrl + u.getAvatar() : null)
-                .phoneNumber(helper.isPhoneNumber(query) ? u.getPhoneNumber() : null)
                 .isAlreadyMember(memberIds.contains(u.getId())).build());
     }
 
@@ -654,6 +661,193 @@ public class GroupConversationServiceImpl implements GroupConversationService {
                 .data(pageData).page(pageable.getPageNumber())
                 .totalPages(totalItems == 0 ? 0 : (int) Math.ceil((double) totalItems / pageable.getPageSize()))
                 .limit(pageable.getPageSize()).totalItems(totalItems).build();
+    }
+
+    @Override
+    public PageResponse<List<AdminMemberResponse>> getGroupAdmins(String conversationId, int page, int size) {
+        String currentUserId = helper.getSecurityUtil().getCurrentUserId();
+        Conversation conversation = helper.findGroupConversation(conversationId);
+        helper.assertMember(conversation, currentUserId);
+
+        String baseUrl = helper.getBaseUrl();
+        Pageable pageable = PageRequest.of(Math.max(page, 0), Math.max(size, 1));
+
+        List<AggregationOperation> pipeline = new ArrayList<>();
+        pipeline.add(Aggregation.match(Criteria.where("_id").is(conversationId).and("isGroup").is(true)));
+        pipeline.add(Aggregation.unwind("members"));
+        pipeline.add(Aggregation.match(Criteria.where("members.active").ne(false)
+                .and("members.role").in("OWNER", "ADMIN")));
+        pipeline.add(context -> new Document("$lookup", new Document()
+                .append("from", "chat_users")
+                .append("let", new Document("memberUserId", "$members.userId"))
+                .append("pipeline", List.of(
+                        new Document("$match", new Document("$expr", new Document("$or", List.of(
+                                new Document("$eq", List.of("$_id", "$$memberUserId")),
+                                new Document("$eq", List.of("$_id",
+                                        new Document("$convert", new Document("input", "$$memberUserId")
+                                                .append("to", "objectId").append("onError", null).append("onNull", null))))
+                        ))))))
+                .append("as", "user")));
+        pipeline.add(Aggregation.unwind("user", true));
+
+        Document sortBucketExpr = new Document("$cond", List.of(
+                new Document("$eq", List.of("$members.role", "OWNER")), 0, 1));
+        Document addSortFieldsDoc = new Document("sortBucket", sortBucketExpr)
+                .append("nameSort", new Document("$toLower", new Document("$ifNull", List.of("$user.fullName", ""))));
+        Document projectFieldsDoc = new Document()
+                .append("_id", 0).append("userId", "$members.userId")
+                .append("fullName", new Document("$ifNull", List.of("$user.fullName", "Người dùng")))
+                .append("avatar", "$user.avatar")
+                .append("role", "$members.role");
+
+        Document facetDoc = new Document("$facet", new Document()
+                .append("metadata", List.of(new Document("$count", "totalItems")))
+                .append("data", List.of(
+                        new Document("$addFields", addSortFieldsDoc),
+                        new Document("$sort", new Document("sortBucket", 1).append("nameSort", 1)),
+                        new Document("$skip", pageable.getOffset()),
+                        new Document("$limit", pageable.getPageSize()),
+                        new Document("$project", projectFieldsDoc))));
+
+        pipeline.add(context -> facetDoc);
+
+        AggregationResults<Document> aggregated = mongoTemplate.aggregate(
+                Aggregation.newAggregation(pipeline), "conversations", Document.class);
+
+        Document root = aggregated.getUniqueMappedResult();
+        List<Document> metadata = extractDocumentList(root != null ? root.get("metadata") : null);
+        List<Document> dataDocs = extractDocumentList(root != null ? root.get("data") : null);
+        int totalItems = !metadata.isEmpty() ? metadata.getFirst().getInteger("totalItems", 0) : 0;
+
+        List<AdminMemberResponse> pageData = dataDocs.stream().map(doc -> {
+            String avatar = doc.getString("avatar");
+            String roleRaw = doc.getString("role");
+            return AdminMemberResponse.builder()
+                    .userId(doc.getString("userId"))
+                    .fullName(doc.getString("fullName") != null ? doc.getString("fullName") : "Người dùng")
+                    .avatar(avatar != null ? baseUrl + avatar : null)
+                    .role(roleRaw != null ? MemberRole.valueOf(roleRaw) : MemberRole.ADMIN)
+                    .build();
+        }).toList();
+
+        return PageResponse.<List<AdminMemberResponse>>builder()
+                .data(pageData).page(pageable.getPageNumber())
+                .totalPages(totalItems == 0 ? 0 : (int) Math.ceil((double) totalItems / pageable.getPageSize()))
+                .limit(pageable.getPageSize()).totalItems(totalItems).build();
+    }
+
+    @Override
+    public PageResponse<List<AdminMemberResponse>> getAdminCandidates(String conversationId, String query, int page, int size) {
+        String currentUserId = helper.getSecurityUtil().getCurrentUserId();
+        Conversation conversation = helper.findGroupConversation(conversationId);
+
+        ConversationMember actor = helper.getMemberOrThrow(conversation, currentUserId);
+        if (helper.resolveRole(actor) != MemberRole.OWNER) throw new AppException(ErrorCode.CHAT_NOT_OWNER);
+
+        String normalizedQuery = query == null ? "" : query.trim();
+        boolean hasQuery = !normalizedQuery.isBlank();
+        String baseUrl = helper.getBaseUrl();
+        Pageable pageable = PageRequest.of(Math.max(page, 0), Math.max(size, 1));
+
+        List<AggregationOperation> pipeline = new ArrayList<>();
+        pipeline.add(Aggregation.match(Criteria.where("_id").is(conversationId).and("isGroup").is(true)));
+        pipeline.add(Aggregation.unwind("members"));
+        pipeline.add(Aggregation.match(Criteria.where("members.active").ne(false)
+                .and("members.role").ne("OWNER")));
+        pipeline.add(context -> new Document("$lookup", new Document()
+                .append("from", "chat_users")
+                .append("let", new Document("memberUserId", "$members.userId"))
+                .append("pipeline", List.of(
+                        new Document("$match", new Document("$expr", new Document("$or", List.of(
+                                new Document("$eq", List.of("$_id", "$$memberUserId")),
+                                new Document("$eq", List.of("$_id",
+                                        new Document("$convert", new Document("input", "$$memberUserId")
+                                                .append("to", "objectId").append("onError", null).append("onNull", null))))
+                        ))))))
+                .append("as", "user")));
+        pipeline.add(Aggregation.unwind("user", true));
+
+        if (hasQuery) {
+            String escaped = Pattern.quote(normalizedQuery);
+            pipeline.add(Aggregation.match(new Criteria().orOperator(
+                    Criteria.where("user.fullName").regex(escaped, "i"),
+                    Criteria.where("user.phoneNumber").regex(escaped, "i"))));
+        }
+
+        // Admins first (checked), then regular members (unchecked), both sorted by name ASC
+        Document sortBucketExpr = new Document("$cond", List.of(
+                new Document("$eq", List.of("$members.role", "ADMIN")), 0, 1));
+        Document addSortFieldsDoc = new Document("sortBucket", sortBucketExpr)
+                .append("nameSort", new Document("$toLower", new Document("$ifNull", List.of("$user.fullName", ""))));
+        Document projectFieldsDoc = new Document()
+                .append("_id", 0).append("userId", "$members.userId")
+                .append("fullName", new Document("$ifNull", List.of("$user.fullName", "Người dùng")))
+                .append("avatar", "$user.avatar")
+                .append("role", "$members.role");
+
+        Document facetDoc = new Document("$facet", new Document()
+                .append("metadata", List.of(new Document("$count", "totalItems")))
+                .append("data", List.of(
+                        new Document("$addFields", addSortFieldsDoc),
+                        new Document("$sort", new Document("sortBucket", 1).append("nameSort", 1)),
+                        new Document("$skip", pageable.getOffset()),
+                        new Document("$limit", pageable.getPageSize()),
+                        new Document("$project", projectFieldsDoc))));
+
+        pipeline.add(context -> facetDoc);
+
+        AggregationResults<Document> aggregated = mongoTemplate.aggregate(
+                Aggregation.newAggregation(pipeline), "conversations", Document.class);
+
+        Document root = aggregated.getUniqueMappedResult();
+        List<Document> metadata = extractDocumentList(root != null ? root.get("metadata") : null);
+        List<Document> dataDocs = extractDocumentList(root != null ? root.get("data") : null);
+        int totalItems = !metadata.isEmpty() ? metadata.getFirst().getInteger("totalItems", 0) : 0;
+
+        List<AdminMemberResponse> pageData = dataDocs.stream().map(doc -> {
+            String avatar = doc.getString("avatar");
+            String roleRaw = doc.getString("role");
+            return AdminMemberResponse.builder()
+                    .userId(doc.getString("userId"))
+                    .fullName(doc.getString("fullName") != null ? doc.getString("fullName") : "Người dùng")
+                    .avatar(avatar != null ? baseUrl + avatar : null)
+                    .role(roleRaw != null ? MemberRole.valueOf(roleRaw) : MemberRole.MEMBER)
+                    .build();
+        }).toList();
+
+        return PageResponse.<List<AdminMemberResponse>>builder()
+                .data(pageData).page(pageable.getPageNumber())
+                .totalPages(totalItems == 0 ? 0 : (int) Math.ceil((double) totalItems / pageable.getPageSize()))
+                .limit(pageable.getPageSize()).totalItems(totalItems).build();
+    }
+
+    @Override
+    public ConversationResponse transferOwnership(String conversationId, String targetUserId) {
+        String currentUserId = helper.getSecurityUtil().getCurrentUserId();
+        Conversation conversation = helper.findGroupConversation(conversationId);
+
+        ConversationMember actor = helper.getMemberOrThrow(conversation, currentUserId);
+        if (helper.resolveRole(actor) != MemberRole.OWNER) throw new AppException(ErrorCode.CHAT_NOT_OWNER);
+
+        if (targetUserId == null || targetUserId.isBlank() || targetUserId.equals(currentUserId)) {
+            throw new AppException(ErrorCode.CHAT_CANNOT_TRANSFER_TO_SELF);
+        }
+
+        ConversationMember target = helper.getMemberOrThrow(conversation, targetUserId);
+
+        actor.setRole(MemberRole.MEMBER);
+        target.setRole(MemberRole.OWNER);
+        Conversation saved = conversationRepository.save(conversation);
+
+        var actorInfo = helper.fetchActorInfo(currentUserId);
+        var targetInfo = helper.fetchActorInfo(targetUserId);
+
+        systemMessageService.sendSystemMessage(conversationId, currentUserId, actorInfo.name(), actorInfo.avatar(),
+                SystemActionType.TRANSFER_OWNER,
+                Map.of("targetIds", List.of(targetUserId),
+                        "payload", Map.of("targetName", targetInfo.name())));
+
+        return helper.broadcastAndRespond(saved, currentUserId);
     }
 
     @Override

@@ -3,6 +3,7 @@ package com.bondhub.messageservice.service.conversation;
 import com.bondhub.messageservice.dto.request.UpdateGroupSettingsRequest;
 import com.bondhub.common.dto.PageResponse;
 import com.bondhub.messageservice.dto.request.GroupConversationCreateRequest;
+import com.bondhub.messageservice.dto.response.AdminMemberResponse;
 import com.bondhub.messageservice.dto.response.ConversationResponse;
 import com.bondhub.messageservice.dto.response.GroupMemberListItemResponse;
 import com.bondhub.messageservice.dto.response.SearchMemberResponse;
@@ -38,6 +39,12 @@ public interface GroupConversationService {
     Map<String, List<SearchMemberResponse>> getFriendsDirectory(String conversationId);
 
     PageResponse<List<GroupMemberListItemResponse>> getGroupMembers(String conversationId, String query, int page, int size);
+
+    PageResponse<List<AdminMemberResponse>> getGroupAdmins(String conversationId, int page, int size);
+
+    PageResponse<List<AdminMemberResponse>> getAdminCandidates(String conversationId, String query, int page, int size);
+
+    ConversationResponse transferOwnership(String conversationId, String targetUserId);
 
     String generateJoinLink(String conversationId);
 
