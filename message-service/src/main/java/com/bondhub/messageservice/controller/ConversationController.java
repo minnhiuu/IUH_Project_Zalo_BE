@@ -14,6 +14,7 @@ import com.bondhub.messageservice.dto.response.JoinRequestResponse;
 import com.bondhub.messageservice.dto.response.SearchMemberResponse;
 import com.bondhub.messageservice.service.conversation.ConversationService;
 import com.bondhub.messageservice.service.conversation.GroupConversationService;
+import com.bondhub.messageservice.service.conversation.JoinRequestService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -34,6 +35,7 @@ public class ConversationController {
 
     private final ConversationService conversationService;
         private final GroupConversationService groupConversationService;
+    private final JoinRequestService joinRequestService;
 
     @GetMapping
     @Operation(summary = "Get conversations of current user (paginated)")
@@ -203,7 +205,7 @@ public class ConversationController {
     @Operation(summary = "Get group preview info before joining via invite link")
     public ResponseEntity<ApiResponse<JoinGroupPreviewResponse>> getJoinPreview(@PathVariable String token) {
         return ResponseEntity.ok(ApiResponse.success(
-                groupConversationService.getJoinPreview(token)));
+                joinRequestService.getJoinPreview(token)));
     }
 
     @PostMapping("/join/{token}")
@@ -212,7 +214,7 @@ public class ConversationController {
             @PathVariable String token,
             @RequestBody(required = false) JoinByLinkRequest request) {
         return ResponseEntity.ok(ApiResponse.success(
-                groupConversationService.joinByLink(token, request)));
+                joinRequestService.joinByLink(token, request)));
     }
 
     @PutMapping("/{conversationId}/join-question")
@@ -220,9 +222,10 @@ public class ConversationController {
     public ResponseEntity<ApiResponse<Void>> updateJoinQuestion(
             @PathVariable String conversationId,
             @RequestBody @Valid UpdateJoinQuestionRequest request) {
-        groupConversationService.updateJoinQuestion(conversationId, request.question());
+        joinRequestService.updateJoinQuestion(conversationId, request.question());
         return ResponseEntity.ok(ApiResponse.success(null));
     }
+
 
     @GetMapping("/{conversationId}/join-requests")
     @Operation(summary = "Get pending join requests for a group (Owner/Admin only)")
@@ -231,7 +234,7 @@ public class ConversationController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         return ResponseEntity.ok(ApiResponse.success(
-                groupConversationService.getJoinRequests(conversationId, page, size)));
+                joinRequestService.getJoinRequests(conversationId, page, size)));
     }
 
     @PostMapping("/{conversationId}/join-requests/{requestId}/approve")
@@ -240,7 +243,7 @@ public class ConversationController {
             @PathVariable String conversationId,
             @PathVariable String requestId) {
         return ResponseEntity.ok(ApiResponse.success(
-                groupConversationService.approveJoinRequest(conversationId, requestId)));
+                joinRequestService.approveJoinRequest(conversationId, requestId)));
     }
 
     @PostMapping("/{conversationId}/join-requests/{requestId}/reject")
@@ -248,14 +251,14 @@ public class ConversationController {
     public ResponseEntity<ApiResponse<Void>> rejectJoinRequest(
             @PathVariable String conversationId,
             @PathVariable String requestId) {
-        groupConversationService.rejectJoinRequest(conversationId, requestId);
+        joinRequestService.rejectJoinRequest(conversationId, requestId);
         return ResponseEntity.ok(ApiResponse.success(null));
     }
 
     @DeleteMapping("/{conversationId}/join-requests/me")
     @Operation(summary = "Cancel my pending join request")
     public ResponseEntity<ApiResponse<Void>> cancelMyJoinRequest(@PathVariable String conversationId) {
-        groupConversationService.cancelMyJoinRequest(conversationId);
+        joinRequestService.cancelMyJoinRequest(conversationId);
         return ResponseEntity.ok(ApiResponse.success(null));
     }
 }

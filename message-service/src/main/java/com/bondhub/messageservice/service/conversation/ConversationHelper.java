@@ -58,6 +58,30 @@ public class ConversationHelper {
     @Value("${kafka.topics.socket-events}")
     private String socketEventsTopic;
 
+    public record ActorInfo(String name, String avatar) {
+        public static ActorInfo of(ChatUser user, String fallbackName) {
+            return user != null
+                    ? new ActorInfo(user.getFullName(), user.getAvatar())
+                    : new ActorInfo(fallbackName, null);
+        }
+    }
+
+    public ActorInfo fetchActorInfo(String userId) {
+        return ActorInfo.of(chatUserRepository.findById(userId).orElse(null), "Người dùng");
+    }
+
+    public Conversation findGroupConversation(String conversationId) {
+        Conversation conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
+        if (!conversation.isGroup()) throw new AppException(ErrorCode.CHAT_NOT_A_GROUP);
+        return conversation;
+    }
+
+    public ConversationResponse broadcastAndRespond(Conversation saved, String currentUserId) {
+        broadcastConversationUpdate(saved);
+        return buildConversationResponseForCurrentUser(saved, currentUserId);
+    }
+
     public void assertMember(Conversation room, String userId) {
         boolean isMember = room.getMembers().stream()
                 .anyMatch(m -> m.getUserId().equals(userId) && isActiveMember(m));
@@ -144,6 +168,13 @@ public class ConversationHelper {
     public ConversationResponse buildConversationResponse(
             Conversation room, ChatUser partner, String currentUserId,
             Map<String, ChatUser> userCache, String baseUrl, boolean viewerCanSee, String friendshipStatus) {
+        return buildConversationResponse(room, partner, currentUserId, userCache, baseUrl, viewerCanSee, friendshipStatus, null);
+    }
+
+    public ConversationResponse buildConversationResponse(
+            Conversation room, ChatUser partner, String currentUserId,
+            Map<String, ChatUser> userCache, String baseUrl, boolean viewerCanSee,
+            String friendshipStatus, Long pendingJoinRequestCount) {
 
         LastMessageInfo last = room.getLastMessage();
         if (last != null && last.getVisibleTo() != null && !last.getVisibleTo().isEmpty()
@@ -208,10 +239,11 @@ public class ConversationHelper {
                 .members(members)
                 .settings(room.isGroup() ? room.getSettings() : null)
                 .joinLinkToken(room.isGroup() ? room.getJoinLinkToken() : null)
-                .pendingJoinRequestCount(room.isGroup() && room.getSettings() != null
-                        && room.getSettings().isMembershipApprovalEnabled()
-                        ? joinRequestRepository.countByConversationIdAndStatus(room.getId(), JoinRequestStatus.PENDING)
-                        : null)
+                .pendingJoinRequestCount(pendingJoinRequestCount != null ? pendingJoinRequestCount
+                        : (room.isGroup() && room.getSettings() != null
+                                && room.getSettings().isMembershipApprovalEnabled()
+                                ? joinRequestRepository.countByConversationIdAndStatus(room.getId(), JoinRequestStatus.PENDING)
+                                : null))
                 .build();
     }
 
@@ -232,6 +264,11 @@ public class ConversationHelper {
 
         String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
 
+        Long pendingJoinRequestCount = room.isGroup() && room.getSettings() != null
+                && room.getSettings().isMembershipApprovalEnabled()
+                ? joinRequestRepository.countByConversationIdAndStatus(room.getId(), JoinRequestStatus.PENDING)
+                : null;
+
         for (ConversationMember member : room.getMembers()) {
             if (!isActiveMember(member)) continue;
             String viewerId = member.getUserId();
@@ -249,7 +286,7 @@ public class ConversationHelper {
             }
 
             ConversationResponse payload = buildConversationResponse(
-                    room, partner, viewerId, userCache, baseUrl, viewerCanSee, null
+                    room, partner, viewerId, userCache, baseUrl, viewerCanSee, null, pendingJoinRequestCount
             );
 
             kafkaTemplate.send(socketEventsTopic,

@@ -1,6 +1,5 @@
 package com.bondhub.messageservice.service.conversation;
 
-import com.bondhub.common.utils.S3Util;
 import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
@@ -19,9 +18,7 @@ import com.bondhub.common.enums.SocketEventType;
 import com.bondhub.common.dto.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 
 import org.springframework.data.domain.Page;
@@ -48,19 +45,9 @@ public class ConversationServiceImpl implements ConversationService {
     private final ChatUserRepository chatUserRepository;
     private final SecurityUtil securityUtil;
     private final ApplicationEventPublisher eventPublisher;
-    private final KafkaTemplate<String, Object> kafkaTemplate;
     private final MongoTemplate mongoTemplate;
     private final FriendServiceClient friendServiceClient;
     private final ConversationHelper helper;
-
-    @Value("${aws.s3.bucket.name}")
-    private String bucketName;
-
-    @Value("${cloud.aws.region.static}")
-    private String region;
-
-    @Value("${kafka.topics.socket-events}")
-    private String socketEventsTopic;
 
     // ─────────────────────────── Core: Tạo / Lấy phòng chat ───────────────────────────
 
@@ -107,7 +94,7 @@ public class ConversationServiceImpl implements ConversationService {
 
         ChatUser partner = helper.resolvePartner(partnerId, currentUserId, userCache);
         boolean viewerCanSee = helper.canViewerSeeStatus(currentUserId, userCache);
-        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+        String baseUrl = helper.getBaseUrl();
 
         String friendshipStatus = null;
         try {
@@ -158,7 +145,7 @@ public class ConversationServiceImpl implements ConversationService {
         final Map<String, String> friendshipStatusMap = tempMap;
 
         boolean viewerCanSee = helper.canViewerSeeStatus(currentUserId, userCache);
-        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+        String baseUrl = helper.getBaseUrl();
 
         return PageResponse.fromPage(roomsPage, room -> {
             String partnerId = room.getMembers().stream()
@@ -251,22 +238,31 @@ public class ConversationServiceImpl implements ConversationService {
     // ─────────────────────────── Private helpers ───────────────────────────
 
     private void broadcastReadReceipt(Conversation room, String currentUserId, String lastReadMessageId) {
-        room.getMembers().stream()
+        List<ConversationMember> otherMembers = room.getMembers().stream()
                 .filter(helper::isActiveMember)
                 .filter(m -> !m.getUserId().equals(currentUserId))
-                .forEach(m -> {
-                    chatUserRepository.findById(m.getUserId()).ifPresent(partnerUser -> {
-                        if (partnerUser.isShowSeenStatus()) {
-                            kafkaTemplate.send(socketEventsTopic,
-                                    new SocketEvent(SocketEventType.MESSAGE, m.getUserId(),
-                                            "/queue/read-receipts",
-                                            ReadReceiptNotification.builder()
-                                                    .conversationId(room.getId())
-                                                    .userId(currentUserId)
-                                                    .lastReadMessageId(lastReadMessageId)
-                                                    .build()));
-                        }
-                    });
-                });
+                .toList();
+
+        if (otherMembers.isEmpty()) return;
+
+        Set<String> memberIds = otherMembers.stream()
+                .map(ConversationMember::getUserId)
+                .collect(Collectors.toSet());
+        Map<String, ChatUser> userCache = chatUserRepository.findAllById(memberIds).stream()
+                .collect(Collectors.toMap(ChatUser::getId, u -> u));
+
+        otherMembers.forEach(m -> {
+            ChatUser partnerUser = userCache.get(m.getUserId());
+            if (partnerUser != null && partnerUser.isShowSeenStatus()) {
+                helper.getKafkaTemplate().send(helper.getSocketEventsTopic(),
+                        new SocketEvent(SocketEventType.MESSAGE, m.getUserId(),
+                                "/queue/read-receipts",
+                                ReadReceiptNotification.builder()
+                                        .conversationId(room.getId())
+                                        .userId(currentUserId)
+                                        .lastReadMessageId(lastReadMessageId)
+                                        .build()));
+            }
+        });
     }
 }
