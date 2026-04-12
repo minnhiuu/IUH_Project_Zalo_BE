@@ -18,5 +18,6 @@ public record JoinRequestResponse(
         LocalDateTime requestedAt,
         @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss")
         LocalDateTime processedAt,
-        String processedBy
+        String processedBy,
+        String joinAnswer
 ) {}

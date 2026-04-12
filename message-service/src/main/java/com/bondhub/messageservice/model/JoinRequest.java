@@ -39,4 +39,6 @@ public class JoinRequest extends BaseModel {
 
     LocalDateTime processedAt;
     String processedBy;
+
+    String joinAnswer;
 }

@@ -7,6 +7,7 @@ import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
 import com.bondhub.common.dto.client.fileservice.FileUploadResponse;
 import com.bondhub.messageservice.dto.request.GroupConversationCreateRequest;
+import com.bondhub.messageservice.dto.request.JoinByLinkRequest;
 import com.bondhub.messageservice.dto.request.UpdateGroupSettingsRequest;
 import com.bondhub.messageservice.dto.response.ConversationResponse;
 import com.bondhub.messageservice.dto.response.GroupMemberListItemResponse;
@@ -723,7 +724,7 @@ public class GroupConversationServiceImpl implements GroupConversationService {
     }
 
     @Override
-    public ConversationResponse joinByLink(String token) {
+    public ConversationResponse joinByLink(String token, JoinByLinkRequest request) {
         String currentUserId = helper.getSecurityUtil().getCurrentUserId();
 
         Conversation conversation = conversationRepository.findByJoinLinkToken(token)
@@ -742,8 +743,9 @@ public class GroupConversationServiceImpl implements GroupConversationService {
             throw new AppException(ErrorCode.CHAT_ALREADY_MEMBER);
         }
 
-        if (settings.isMembershipApprovalEnabled()) {
-            return handleJoinRequest(conversation, currentUserId);
+        if (settings.isMembershipApprovalEnabled() || settings.getJoinQuestion() != null) {
+            String joinAnswer = request != null ? request.joinAnswer() : null;
+            return handleJoinRequest(conversation, currentUserId, joinAnswer);
         }
 
         return directJoinByLink(conversation, currentUserId);
@@ -812,6 +814,7 @@ public class GroupConversationServiceImpl implements GroupConversationService {
                 .isAlreadyMember(isAlreadyMember)
                 .membershipApprovalEnabled(settings.isMembershipApprovalEnabled())
                 .hasPendingRequest(hasPendingRequest)
+                .joinQuestion(settings.getJoinQuestion())
                 .build();
     }
 
@@ -845,6 +848,7 @@ public class GroupConversationServiceImpl implements GroupConversationService {
                             .requestedAt(req.getCreatedAt())
                             .processedAt(req.getProcessedAt())
                             .processedBy(req.getProcessedBy())
+                            .joinAnswer(req.getJoinAnswer())
                             .build();
                 })
                 .collect(Collectors.toList());
@@ -946,17 +950,25 @@ public class GroupConversationServiceImpl implements GroupConversationService {
         log.info("[Group] User {} cancelled join request for conversation {}", currentUserId, conversationId);
     }
 
-    private ConversationResponse handleJoinRequest(Conversation conversation, String currentUserId) {
+    private ConversationResponse handleJoinRequest(Conversation conversation, String currentUserId, String joinAnswer) {
         boolean alreadyPending = joinRequestRepository.existsByConversationIdAndUserIdAndStatus(
                 conversation.getId(), currentUserId, JoinRequestStatus.PENDING);
         if (alreadyPending) {
             throw new AppException(ErrorCode.CHAT_JOIN_REQUEST_ALREADY_PENDING);
         }
 
+        GroupSettings settings = conversation.getSettings();
+        if (settings != null && settings.getJoinQuestion() != null) {
+            if (joinAnswer == null || joinAnswer.isBlank()) {
+                throw new AppException(ErrorCode.CHAT_JOIN_QUESTION_REQUIRED);
+            }
+        }
+
         JoinRequest joinRequest = JoinRequest.builder()
                 .conversationId(conversation.getId())
                 .userId(currentUserId)
                 .status(JoinRequestStatus.PENDING)
+                .joinAnswer(joinAnswer)
                 .build();
         joinRequestRepository.save(joinRequest);
 
@@ -1028,6 +1040,28 @@ public class GroupConversationServiceImpl implements GroupConversationService {
 
         Conversation saved = conversationRepository.save(conversation);
         return broadcastAndRespond(saved, userId);
+    }
+
+    @Override
+    public void updateJoinQuestion(String conversationId, String question) {
+        String currentUserId = helper.getSecurityUtil().getCurrentUserId();
+        Conversation conversation = findGroupConversation(conversationId);
+        ConversationMember actor = helper.getMemberOrThrow(conversation, currentUserId);
+        helper.assertOwnerOrAdmin(actor);
+
+        GroupSettings settings = conversation.getSettings();
+        if (settings == null) {
+            settings = GroupSettings.builder().build();
+            conversation.setSettings(settings);
+        }
+        if (!settings.isMembershipApprovalEnabled()) {
+            throw new AppException(ErrorCode.CHAT_APPROVAL_NOT_ENABLED);
+        }
+
+        settings.setJoinQuestion(question != null ? question.trim() : null);
+        conversationRepository.save(conversation);
+
+        log.info("[Group] Join question updated for conversation {} by user {}", conversationId, currentUserId);
     }
 
     private Conversation findGroupConversation(String conversationId) {

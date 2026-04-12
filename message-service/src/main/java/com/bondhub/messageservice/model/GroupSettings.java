@@ -37,4 +37,6 @@ public class GroupSettings {
 
     @Builder.Default
     private boolean joinByLinkEnabled = false;
+
+    private String joinQuestion;
 }

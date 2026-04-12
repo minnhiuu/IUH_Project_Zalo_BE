@@ -4,7 +4,9 @@ import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.common.dto.PageResponse;
 import com.bondhub.messageservice.dto.request.AddMembersRequest;
 import com.bondhub.messageservice.dto.request.GroupConversationCreateRequest;
+import com.bondhub.messageservice.dto.request.JoinByLinkRequest;
 import com.bondhub.messageservice.dto.request.UpdateGroupSettingsRequest;
+import com.bondhub.messageservice.dto.request.UpdateJoinQuestionRequest;
 import com.bondhub.messageservice.dto.response.ConversationResponse;
 import com.bondhub.messageservice.dto.response.GroupMemberListItemResponse;
 import com.bondhub.messageservice.dto.response.JoinGroupPreviewResponse;
@@ -206,9 +208,20 @@ public class ConversationController {
 
     @PostMapping("/join/{token}")
     @Operation(summary = "Join a group conversation using an invite link token (creates pending request if approval is enabled)")
-    public ResponseEntity<ApiResponse<ConversationResponse>> joinByLink(@PathVariable String token) {
+    public ResponseEntity<ApiResponse<ConversationResponse>> joinByLink(
+            @PathVariable String token,
+            @RequestBody(required = false) JoinByLinkRequest request) {
         return ResponseEntity.ok(ApiResponse.success(
-                groupConversationService.joinByLink(token)));
+                groupConversationService.joinByLink(token, request)));
+    }
+
+    @PutMapping("/{conversationId}/join-question")
+    @Operation(summary = "Set/update the join question for a group (Owner/Admin only, requires membershipApprovalEnabled)")
+    public ResponseEntity<ApiResponse<Void>> updateJoinQuestion(
+            @PathVariable String conversationId,
+            @RequestBody @Valid UpdateJoinQuestionRequest request) {
+        groupConversationService.updateJoinQuestion(conversationId, request.question());
+        return ResponseEntity.ok(ApiResponse.success(null));
     }
 
     @GetMapping("/{conversationId}/join-requests")

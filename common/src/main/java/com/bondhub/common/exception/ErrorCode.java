@@ -112,6 +112,8 @@ public enum ErrorCode {
         CHAT_JOIN_REQUEST_NOT_FOUND(HttpStatus.NOT_FOUND, 4023, "error.chat.join.request.not.found"),
         CHAT_JOIN_REQUEST_ALREADY_PENDING(HttpStatus.CONFLICT, 4024, "error.chat.join.request.already.pending"),
         CHAT_JOIN_REQUEST_ALREADY_PROCESSED(HttpStatus.BAD_REQUEST, 4025, "error.chat.join.request.already.processed"),
+        CHAT_JOIN_QUESTION_REQUIRED(HttpStatus.BAD_REQUEST, 4026, "error.chat.join.question.required"),
+        CHAT_APPROVAL_NOT_ENABLED(HttpStatus.BAD_REQUEST, 4027, "error.chat.approval.not.enabled"),
 
         //  NOTIFICATION_TEMPLATE (23xx)
         NOTIFICATION_TEMPLATE_NOT_FOUND(HttpStatus.NOT_FOUND, 2300, "error.notification.template.not.found"),

@@ -1,5 +1,6 @@
 package com.bondhub.messageservice.service.conversation;
 
+import com.bondhub.messageservice.dto.request.JoinByLinkRequest;
 import com.bondhub.messageservice.dto.request.UpdateGroupSettingsRequest;
 import com.bondhub.common.dto.PageResponse;
 import com.bondhub.messageservice.dto.request.GroupConversationCreateRequest;
@@ -45,9 +46,11 @@ public interface GroupConversationService {
 
     String refreshJoinLink(String conversationId);
 
-    ConversationResponse joinByLink(String token);
+    ConversationResponse joinByLink(String token, JoinByLinkRequest request);
 
     JoinGroupPreviewResponse getJoinPreview(String token);
+
+    void updateJoinQuestion(String conversationId, String question);
 
     PageResponse<List<JoinRequestResponse>> getJoinRequests(String conversationId, int page, int size);
 

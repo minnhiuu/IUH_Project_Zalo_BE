@@ -14,7 +14,8 @@ public record JoinGroupPreviewResponse(
         List<MemberPreview> memberPreviews,
         boolean isAlreadyMember,
         boolean membershipApprovalEnabled,
-        boolean hasPendingRequest
+        boolean hasPendingRequest,
+        String joinQuestion
 ) {
     @Builder
     public record MemberPreview(String name, String avatar) {
