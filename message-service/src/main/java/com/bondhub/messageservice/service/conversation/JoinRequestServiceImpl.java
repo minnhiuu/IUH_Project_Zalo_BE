@@ -61,6 +61,11 @@ public class JoinRequestServiceImpl implements JoinRequestService {
             throw new AppException(ErrorCode.CHAT_ALREADY_MEMBER);
         }
 
+        // Check if user is blocked from this group
+        if (conversation.getBlockedUserIds() != null && conversation.getBlockedUserIds().contains(currentUserId)) {
+            throw new AppException(ErrorCode.CHAT_USER_BLOCKED_FROM_GROUP);
+        }
+
         if (settings.isMembershipApprovalEnabled() || settings.getJoinQuestion() != null) {
             String joinAnswer = request != null ? request.joinAnswer() : null;
             return handleJoinRequest(conversation, currentUserId, joinAnswer);
@@ -129,6 +134,7 @@ public class JoinRequestServiceImpl implements JoinRequestService {
                 .createdByName(createdByName)
                 .memberPreviews(memberPreviews)
                 .isAlreadyMember(isAlreadyMember)
+                .isBlockedFromGroup(conversation.getBlockedUserIds() != null && conversation.getBlockedUserIds().contains(currentUserId))
                 .membershipApprovalEnabled(settings.isMembershipApprovalEnabled())
                 .hasPendingRequest(hasPendingRequest)
                 .joinQuestion(settings.getJoinQuestion())

@@ -32,7 +32,7 @@ public interface GroupConversationService {
 
     void disbandGroup(String conversationId);
 
-    void leaveGroup(String conversationId, boolean silent, String transferTo);
+    void leaveGroup(String conversationId, boolean silent, String transferTo, boolean blockReJoin);
 
     PageResponse<List<SearchMemberResponse>> searchMembersToAdd(String conversationId, String query, int page, int size);
 
@@ -49,4 +49,13 @@ public interface GroupConversationService {
     String generateJoinLink(String conversationId);
 
     String refreshJoinLink(String conversationId);
+
+    ConversationResponse blockMemberFromGroup(String conversationId, String targetUserId);
+
+    ConversationResponse unblockMemberFromGroup(String conversationId, String targetUserId);
+
+    PageResponse<List<SearchMemberResponse>> getBlockedMembers(String conversationId, int page, int size);
+
+    PageResponse<List<SearchMemberResponse>> getBlockCandidates(String conversationId, String query, int page, int size);
+
 }

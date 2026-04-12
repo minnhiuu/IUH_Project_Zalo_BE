@@ -13,6 +13,7 @@ public record JoinGroupPreviewResponse(
         String createdByName,
         List<MemberPreview> memberPreviews,
         boolean isAlreadyMember,
+        boolean isBlockedFromGroup,
         boolean membershipApprovalEnabled,
         boolean hasPendingRequest,
         String joinQuestion

@@ -114,6 +114,13 @@ public enum ErrorCode {
         CHAT_JOIN_REQUEST_ALREADY_PROCESSED(HttpStatus.BAD_REQUEST, 4025, "error.chat.join.request.already.processed"),
         CHAT_JOIN_QUESTION_REQUIRED(HttpStatus.BAD_REQUEST, 4026, "error.chat.join.question.required"),
         CHAT_APPROVAL_NOT_ENABLED(HttpStatus.BAD_REQUEST, 4027, "error.chat.approval.not.enabled"),
+        CHAT_USER_BLOCKED_FROM_GROUP(HttpStatus.FORBIDDEN, 4028, "error.chat.user.blocked.from.group"),
+        CHAT_USER_ALREADY_BLOCKED_FROM_GROUP(HttpStatus.CONFLICT, 4029, "error.chat.user.already.blocked.from.group"),
+        CHAT_USER_NOT_BLOCKED_FROM_GROUP(HttpStatus.BAD_REQUEST, 4030, "error.chat.user.not.blocked.from.group"),
+        CHAT_CANNOT_BLOCK_OWNER(HttpStatus.FORBIDDEN, 4031, "error.chat.cannot.block.owner"),
+        CHAT_BLOCKED_FROM_ADDING(HttpStatus.FORBIDDEN, 4032, "error.chat.blocked.from.adding"),
+        CHAT_GROUP_ADD_ALREADY_BLOCKED(HttpStatus.CONFLICT, 4033, "error.chat.group.add.already.blocked"),
+        CHAT_GROUP_ADD_NOT_BLOCKED(HttpStatus.BAD_REQUEST, 4034, "error.chat.group.add.not.blocked"),
 
         //  NOTIFICATION_TEMPLATE (23xx)
         NOTIFICATION_TEMPLATE_NOT_FOUND(HttpStatus.NOT_FOUND, 2300, "error.notification.template.not.found"),

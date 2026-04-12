@@ -79,7 +79,8 @@ public class SystemMessageServiceImpl implements SystemMessageService {
         boolean isRestricted = recipientUserIds != null && !recipientUserIds.isEmpty();
 
         boolean isNegativeAction = action == SystemActionType.LEAVE_GROUP
-                || action == SystemActionType.REMOVE_MEMBER;
+                || action == SystemActionType.REMOVE_MEMBER
+                || action == SystemActionType.BLOCK_MEMBER;
 
         Conversation room;
         Query query = new Query(Criteria.where("id").is(conversationId));

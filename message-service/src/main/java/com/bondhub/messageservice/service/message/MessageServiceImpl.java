@@ -367,6 +367,8 @@ public class MessageServiceImpl implements MessageService {
         if (conversation == null) return;
 
         for (ConversationMember member : conversation.getMembers()) {
+            if (Boolean.FALSE.equals(member.getActive())) continue;
+
             Map<String, Object> payload = new HashMap<>();
             payload.put("type", "MESSAGE_STATUS_UPDATE");
             payload.put("conversationId", conversationId);

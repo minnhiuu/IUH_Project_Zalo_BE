@@ -126,6 +126,33 @@ public class GroupConversationServiceImpl implements GroupConversationService {
         requestedIds.remove(currentUserId);
         if (requestedIds.isEmpty()) return helper.buildConversationResponseForCurrentUser(conversation, currentUserId);
 
+        // Check group block list
+        Set<String> blockedIds = getBlockedUserIds(conversation);
+        ConversationMember actor = helper.getMemberOrThrow(conversation, currentUserId);
+        MemberRole actorRole = helper.resolveRole(actor);
+        Set<String> blockedInRequest = requestedIds.stream().filter(blockedIds::contains).collect(Collectors.toSet());
+        if (!blockedInRequest.isEmpty()) {
+            if (actorRole == MemberRole.OWNER || actorRole == MemberRole.ADMIN) {
+                // Owner re-adding blocked users → auto-unblock them
+                conversation.getBlockedUserIds().removeAll(blockedInRequest);
+            } else {
+                // Member tries to add blocked users → send system message and skip blocked users
+                var actorInfo = helper.fetchActorInfo(currentUserId);
+                for (String blockedUserId : blockedInRequest) {
+                    var targetInfo = helper.fetchActorInfo(blockedUserId);
+                    systemMessageService.sendSystemMessage(conversationId, currentUserId,
+                            actorInfo.name(), actorInfo.avatar(),
+                            SystemActionType.BLOCKED_FROM_JOINING,
+                            Map.of("targetIds", List.of(blockedUserId),
+                                    "payload", Map.of("targetName", targetInfo.name(),
+                                            "targetAvatar", targetInfo.avatar() != null ? targetInfo.avatar() : "")),
+                            Set.of(currentUserId));
+                }
+                requestedIds.removeAll(blockedInRequest);
+                if (requestedIds.isEmpty()) return helper.buildConversationResponseForCurrentUser(conversation, currentUserId);
+            }
+        }
+
         Map<String, ConversationMember> existingMembersById = conversation.getMembers().stream()
                 .collect(Collectors.toMap(ConversationMember::getUserId, m -> m, (a, b) -> a));
         Set<String> existingActiveMemberIds = conversation.getMembers().stream()
@@ -206,6 +233,9 @@ public class GroupConversationServiceImpl implements GroupConversationService {
         target.setRemovedBy(currentUserId);
 
         if (conversation.getUnreadCounts() != null) conversation.getUnreadCounts().remove(targetUserId);
+
+        if (conversation.getDeletedBefore() == null) conversation.setDeletedBefore(new HashMap<>());
+        conversation.getDeletedBefore().put(targetUserId, LocalDateTime.now());
 
         Conversation saved = conversationRepository.save(conversation);
 
@@ -450,7 +480,7 @@ public class GroupConversationServiceImpl implements GroupConversationService {
     }
 
     @Override
-    public void leaveGroup(String conversationId, boolean silent, String transferTo) {
+    public void leaveGroup(String conversationId, boolean silent, String transferTo, boolean blockReJoin) {
         String currentUserId = helper.getSecurityUtil().getCurrentUserId();
         Conversation conversation = helper.findGroupConversation(conversationId);
         helper.assertMember(conversation, currentUserId);
@@ -479,6 +509,11 @@ public class GroupConversationServiceImpl implements GroupConversationService {
 
         if (conversation.getDeletedBefore() == null) conversation.setDeletedBefore(new HashMap<>());
         conversation.getDeletedBefore().put(currentUserId, LocalDateTime.now());
+
+        if (blockReJoin) {
+            if (conversation.getBlockedUserIds() == null) conversation.setBlockedUserIds(new HashSet<>());
+            conversation.getBlockedUserIds().add(currentUserId);
+        }
 
         conversationRepository.save(conversation);
 
@@ -905,6 +940,201 @@ public class GroupConversationServiceImpl implements GroupConversationService {
                 .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND))
                 .getMembers().stream().filter(helper::isActiveMember)
                 .map(ConversationMember::getUserId).collect(Collectors.toSet());
+    }
+
+    private Set<String> getBlockedUserIds(Conversation conversation) {
+        return conversation.getBlockedUserIds() != null ? conversation.getBlockedUserIds() : Collections.emptySet();
+    }
+
+    @Override
+    public ConversationResponse blockMemberFromGroup(String conversationId, String targetUserId) {
+        String currentUserId = helper.getSecurityUtil().getCurrentUserId();
+        Conversation conversation = helper.findGroupConversation(conversationId);
+
+        ConversationMember actor = helper.getMemberOrThrow(conversation, currentUserId);
+        helper.assertOwnerOrAdmin(actor);
+
+        if (targetUserId == null || targetUserId.isBlank() || targetUserId.equals(currentUserId)) {
+            throw new AppException(ErrorCode.CHAT_CANNOT_REMOVE_YOURSELF);
+        }
+
+        ConversationMember target = helper.getMemberOrThrow(conversation, targetUserId);
+        MemberRole targetRole = helper.resolveRole(target);
+        if (targetRole == MemberRole.OWNER) throw new AppException(ErrorCode.CHAT_CANNOT_BLOCK_OWNER);
+        helper.assertCanRemoveMember(actor, target);
+
+        if (conversation.getBlockedUserIds() == null) conversation.setBlockedUserIds(new HashSet<>());
+        if (conversation.getBlockedUserIds().contains(targetUserId)) {
+            throw new AppException(ErrorCode.CHAT_USER_ALREADY_BLOCKED_FROM_GROUP);
+        }
+
+        // Remove member from group
+        target.setActive(false);
+        target.setRemovedAt(LocalDateTime.now());
+        target.setRemovedBy(currentUserId);
+        if (conversation.getUnreadCounts() != null) conversation.getUnreadCounts().remove(targetUserId);
+
+        // Set deletedBefore so conversation won't reappear on refetch
+        if (conversation.getDeletedBefore() == null) conversation.setDeletedBefore(new HashMap<>());
+        conversation.getDeletedBefore().put(targetUserId, LocalDateTime.now());
+
+        // Add to block list
+        conversation.getBlockedUserIds().add(targetUserId);
+
+        Conversation saved = conversationRepository.save(conversation);
+
+        var actorInfo = helper.fetchActorInfo(currentUserId);
+        var targetInfo = helper.fetchActorInfo(targetUserId);
+
+        systemMessageService.sendSystemMessage(conversationId, currentUserId, actorInfo.name(), actorInfo.avatar(),
+                SystemActionType.BLOCK_MEMBER,
+                Map.of("targetIds", List.of(targetUserId),
+                        "payload", Map.of("targetName", targetInfo.name(), "targetAvatar", targetInfo.avatar() != null ? targetInfo.avatar() : "")));
+
+        log.info("[Group] User {} blocked member {} from group {}", currentUserId, targetUserId, conversationId);
+        return helper.broadcastAndRespond(saved, currentUserId);
+    }
+
+    @Override
+    public ConversationResponse unblockMemberFromGroup(String conversationId, String targetUserId) {
+        String currentUserId = helper.getSecurityUtil().getCurrentUserId();
+        Conversation conversation = helper.findGroupConversation(conversationId);
+
+        ConversationMember actor = helper.getMemberOrThrow(conversation, currentUserId);
+        helper.assertOwnerOrAdmin(actor);
+
+        if (conversation.getBlockedUserIds() == null || !conversation.getBlockedUserIds().contains(targetUserId)) {
+            throw new AppException(ErrorCode.CHAT_USER_NOT_BLOCKED_FROM_GROUP);
+        }
+
+        conversation.getBlockedUserIds().remove(targetUserId);
+        Conversation saved = conversationRepository.save(conversation);
+
+        log.info("[Group] User {} unblocked member {} from group {}", currentUserId, targetUserId, conversationId);
+        return helper.broadcastAndRespond(saved, currentUserId);
+    }
+
+    @Override
+    public PageResponse<List<SearchMemberResponse>> getBlockedMembers(String conversationId, int page, int size) {
+        String currentUserId = helper.getSecurityUtil().getCurrentUserId();
+        Conversation conversation = helper.findGroupConversation(conversationId);
+
+        ConversationMember actor = helper.getMemberOrThrow(conversation, currentUserId);
+        helper.assertOwnerOrAdmin(actor);
+
+        Set<String> blockedIds = getBlockedUserIds(conversation);
+        if (blockedIds.isEmpty()) {
+            return PageResponse.<List<SearchMemberResponse>>builder()
+                    .data(List.of()).page(page).limit(size).totalItems(0).totalPages(0).build();
+        }
+
+        List<ChatUser> blockedUsers = chatUserRepository.findAllById(blockedIds);
+        String baseUrl = helper.getBaseUrl();
+
+        List<SearchMemberResponse> all = blockedUsers.stream()
+                .map(u -> SearchMemberResponse.builder()
+                        .userId(u.getId()).fullName(u.getFullName())
+                        .avatar(u.getAvatar() != null ? baseUrl + u.getAvatar() : null)
+                        .isAlreadyMember(false).build())
+                .sorted(Comparator.comparing(r -> r.fullName() != null ? r.fullName() : ""))
+                .toList();
+
+        int start = Math.min(page * size, all.size());
+        int end = Math.min(start + size, all.size());
+        List<SearchMemberResponse> pageData = all.subList(start, end);
+
+        return PageResponse.<List<SearchMemberResponse>>builder()
+                .data(pageData).page(page).limit(size)
+                .totalItems(all.size())
+                .totalPages(all.isEmpty() ? 0 : (int) Math.ceil((double) all.size() / size))
+                .build();
+    }
+
+    @Override
+    public PageResponse<List<SearchMemberResponse>> getBlockCandidates(String conversationId, String query, int page, int size) {
+        String currentUserId = helper.getSecurityUtil().getCurrentUserId();
+        Conversation conversation = helper.findGroupConversation(conversationId);
+
+        ConversationMember actor = helper.getMemberOrThrow(conversation, currentUserId);
+        helper.assertOwnerOrAdmin(actor);
+
+        Set<String> blockedIds = getBlockedUserIds(conversation);
+        String normalizedQuery = query == null ? "" : query.trim();
+        boolean hasQuery = !normalizedQuery.isBlank();
+        String baseUrl = helper.getBaseUrl();
+        Pageable pageable = PageRequest.of(Math.max(page, 0), Math.max(size, 1));
+
+        List<AggregationOperation> pipeline = new ArrayList<>();
+        pipeline.add(Aggregation.match(Criteria.where("_id").is(conversationId).and("isGroup").is(true)));
+        pipeline.add(Aggregation.unwind("members"));
+
+        Criteria memberCriteria = Criteria.where("members.active").ne(false)
+                .and("members.role").is("MEMBER");
+        if (!blockedIds.isEmpty()) {
+            memberCriteria = memberCriteria.and("members.userId").nin(blockedIds);
+        }
+        pipeline.add(Aggregation.match(memberCriteria));
+
+        pipeline.add(context -> new Document("$lookup", new Document()
+                .append("from", "chat_users")
+                .append("let", new Document("memberUserId", "$members.userId"))
+                .append("pipeline", List.of(
+                        new Document("$match", new Document("$expr", new Document("$or", List.of(
+                                new Document("$eq", List.of("$_id", "$$memberUserId")),
+                                new Document("$eq", List.of("$_id",
+                                        new Document("$convert", new Document("input", "$$memberUserId")
+                                                .append("to", "objectId").append("onError", null).append("onNull", null))))
+                        ))))))
+                .append("as", "user")));
+        pipeline.add(Aggregation.unwind("user", true));
+
+        if (hasQuery) {
+            String escaped = Pattern.quote(normalizedQuery);
+            pipeline.add(Aggregation.match(new Criteria().orOperator(
+                    Criteria.where("user.fullName").regex(escaped, "i"),
+                    Criteria.where("user.phoneNumber").regex(escaped, "i"))));
+        }
+
+        Document addSortFieldsDoc = new Document("nameSort",
+                new Document("$toLower", new Document("$ifNull", List.of("$user.fullName", ""))));
+        Document projectFieldsDoc = new Document()
+                .append("_id", 0).append("userId", "$members.userId")
+                .append("fullName", new Document("$ifNull", List.of("$user.fullName", "Người dùng")))
+                .append("avatar", "$user.avatar");
+
+        Document facetDoc = new Document("$facet", new Document()
+                .append("metadata", List.of(new Document("$count", "totalItems")))
+                .append("data", List.of(
+                        new Document("$addFields", addSortFieldsDoc),
+                        new Document("$sort", new Document("nameSort", 1)),
+                        new Document("$skip", pageable.getOffset()),
+                        new Document("$limit", pageable.getPageSize()),
+                        new Document("$project", projectFieldsDoc))));
+
+        pipeline.add(context -> facetDoc);
+
+        AggregationResults<Document> aggregated = mongoTemplate.aggregate(
+                Aggregation.newAggregation(pipeline), "conversations", Document.class);
+
+        Document root = aggregated.getUniqueMappedResult();
+        List<Document> metadata = extractDocumentList(root != null ? root.get("metadata") : null);
+        List<Document> dataDocs = extractDocumentList(root != null ? root.get("data") : null);
+        int totalItems = !metadata.isEmpty() ? metadata.getFirst().getInteger("totalItems", 0) : 0;
+
+        List<SearchMemberResponse> pageData = dataDocs.stream().map(doc -> {
+            String avatar = doc.getString("avatar");
+            return SearchMemberResponse.builder()
+                    .userId(doc.getString("userId"))
+                    .fullName(doc.getString("fullName") != null ? doc.getString("fullName") : "Người dùng")
+                    .avatar(avatar != null ? baseUrl + avatar : null)
+                    .isAlreadyMember(false)
+                    .build();
+        }).toList();
+
+        return PageResponse.<List<SearchMemberResponse>>builder()
+                .data(pageData).page(pageable.getPageNumber())
+                .totalPages(totalItems == 0 ? 0 : (int) Math.ceil((double) totalItems / pageable.getPageSize()))
+                .limit(pageable.getPageSize()).totalItems(totalItems).build();
     }
 
     private String normalizeForSort(String name) {

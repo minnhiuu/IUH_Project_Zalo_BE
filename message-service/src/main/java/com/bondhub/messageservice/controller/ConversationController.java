@@ -116,8 +116,9 @@ public class ConversationController {
     public ResponseEntity<ApiResponse<Void>> leaveGroup(
             @PathVariable String conversationId,
             @RequestParam(defaultValue = "false") boolean silent,
-            @RequestParam(required = false) String transferTo) {
-                groupConversationService.leaveGroup(conversationId, silent, transferTo);
+            @RequestParam(required = false) String transferTo,
+            @RequestParam(defaultValue = "false") boolean blockReJoin) {
+                groupConversationService.leaveGroup(conversationId, silent, transferTo, blockReJoin);
         return ResponseEntity.ok(ApiResponse.success(null));
     }
 
@@ -291,5 +292,44 @@ public class ConversationController {
     public ResponseEntity<ApiResponse<Void>> cancelMyJoinRequest(@PathVariable String conversationId) {
         joinRequestService.cancelMyJoinRequest(conversationId);
         return ResponseEntity.ok(ApiResponse.success(null));
+    }
+
+    @PostMapping("/{conversationId}/block/{targetUserId}")
+    @Operation(summary = "Block a member from group — removes them and prevents rejoin via link or being added (Owner/Admin with role constraints)")
+    public ResponseEntity<ApiResponse<ConversationResponse>> blockMemberFromGroup(
+            @PathVariable String conversationId,
+            @PathVariable String targetUserId) {
+        return ResponseEntity.ok(ApiResponse.success(
+                groupConversationService.blockMemberFromGroup(conversationId, targetUserId)));
+    }
+
+    @DeleteMapping("/{conversationId}/block/{targetUserId}")
+    @Operation(summary = "Unblock a member from group (Owner only)")
+    public ResponseEntity<ApiResponse<ConversationResponse>> unblockMemberFromGroup(
+            @PathVariable String conversationId,
+            @PathVariable String targetUserId) {
+        return ResponseEntity.ok(ApiResponse.success(
+                groupConversationService.unblockMemberFromGroup(conversationId, targetUserId)));
+    }
+
+    @GetMapping("/{conversationId}/blocked-members")
+    @Operation(summary = "Get blocked members list for a group (Owner/Admin only)")
+    public ResponseEntity<ApiResponse<PageResponse<List<SearchMemberResponse>>>> getBlockedMembers(
+            @PathVariable String conversationId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(ApiResponse.success(
+                groupConversationService.getBlockedMembers(conversationId, page, size)));
+    }
+
+    @GetMapping("/{conversationId}/block-candidates")
+    @Operation(summary = "Get active members with MEMBER role eligible for blocking (Owner/Admin only)")
+    public ResponseEntity<ApiResponse<PageResponse<List<SearchMemberResponse>>>> getBlockCandidates(
+            @PathVariable String conversationId,
+            @RequestParam(required = false) String query,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(ApiResponse.success(
+                groupConversationService.getBlockCandidates(conversationId, query, page, size)));
     }
 }
