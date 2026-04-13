@@ -85,6 +85,11 @@ public class PinServiceImpl implements PinService {
         Map<String, Object> meta = new HashMap<>();
         meta.put("messageId", messageId);
         meta.put("contentSnapshot", snapshot);
+        meta.put("originalSenderId", msg.getSenderId());
+        meta.put("originalSenderName", msg.getSenderName());
+        meta.put("originalSenderAvatar", msg.getSenderAvatar());
+        meta.put("originalContent", msg.getContent());
+        
         systemMessageService.sendSystemMessage(conversationId, actorId, actorName,
                 actor != null ? actor.getAvatar() : null,
                 SystemActionType.PIN_MESSAGE, meta);
@@ -114,8 +119,19 @@ public class PinServiceImpl implements PinService {
         ChatUser actor = chatUserRepository.findById(actorId).orElse(null);
         String actorName = actor != null ? actor.getFullName() : "Người dùng";
 
+        // Fetch original message to provide complete metadata
+        Message msg = messageRepository.findById(messageId).orElse(null);
+
         Map<String, Object> meta = new HashMap<>();
         meta.put("messageId", messageId);
+        
+        if (msg != null) {
+            meta.put("originalSenderId", msg.getSenderId());
+            meta.put("originalSenderName", msg.getSenderName());
+            meta.put("originalSenderAvatar", msg.getSenderAvatar());
+            meta.put("originalContent", msg.getContent());
+        }
+
         systemMessageService.sendSystemMessage(conversationId, actorId, actorName,
                 actor != null ? actor.getAvatar() : null,
                 SystemActionType.UNPIN_MESSAGE, meta);
