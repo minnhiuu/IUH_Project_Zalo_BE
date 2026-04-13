@@ -12,12 +12,7 @@ public class LocalizationUtil {
     private final MessageSource messageSource;
 
     public String getMessage(String key, Object... args) {
-        return messageSource.getMessage(
-                key,
-                args,
-                key,
-                LocaleContextHolder.getLocale()
-        );
+        return messageSource.getMessage(key, args, LocaleContextHolder.getLocale());
     }
 
     public String getCurrentLocale() {

@@ -3,10 +3,8 @@ package com.bondhub.messageservice.controller;
 import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.common.dto.PageResponse;
 import com.bondhub.common.dto.client.messageservice.MessageSendRequest;
-import com.bondhub.messageservice.dto.request.ReactionRequest;
 import com.bondhub.messageservice.dto.response.MessageResponse;
 import com.bondhub.messageservice.service.message.MessageService;
-import jakarta.validation.Valid;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -42,17 +40,6 @@ public class MessageController {
                 messageService.findChatMessages(conversationId, page, size)));
     }
 
-    @GetMapping("/conversations/{conversationId}/media")
-    @Operation(summary = "Get messages filtered by type (IMAGE, VIDEO, FILE, LINK)")
-    public ResponseEntity<ApiResponse<PageResponse<List<MessageResponse>>>> getMediaMessages(
-            @PathVariable String conversationId,
-            @RequestParam List<String> types,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(ApiResponse.success(
-                messageService.findMediaMessages(conversationId, types, page, size)));
-    }
-
     @PatchMapping("/messages/{messageId}/revoke")
     @Operation(summary = "Revoke a message (sender only)")
     public ResponseEntity<ApiResponse<Void>> revokeMessage(@PathVariable String messageId) {
@@ -64,22 +51,6 @@ public class MessageController {
     @Operation(summary = "Delete a message for current user only")
     public ResponseEntity<ApiResponse<Void>> deleteMessageForMe(@PathVariable String messageId) {
         messageService.deleteMessageForMe(messageId);
-        return ResponseEntity.ok(ApiResponse.success(null));
-    }
-
-    @PostMapping("/messages/{messageId}/reactions")
-    @Operation(summary = "Toggle reaction on a message (add if not present, remove if already reacted)")
-    public ResponseEntity<ApiResponse<Void>> toggleReaction(
-            @PathVariable String messageId,
-            @Valid @RequestBody ReactionRequest request) {
-        messageService.toggleReaction(messageId, request.emoji());
-        return ResponseEntity.ok(ApiResponse.success(null));
-    }
-
-    @DeleteMapping("/messages/{messageId}/reactions/me")
-    @Operation(summary = "Remove all reactions of current user from a message")
-    public ResponseEntity<ApiResponse<Void>> removeAllMyReactions(@PathVariable String messageId) {
-        messageService.removeAllMyReactions(messageId);
         return ResponseEntity.ok(ApiResponse.success(null));
     }
 }

@@ -7,15 +7,12 @@ import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
 import com.bondhub.common.dto.client.fileservice.FileUploadResponse;
 import com.bondhub.messageservice.dto.request.GroupConversationCreateRequest;
-import com.bondhub.messageservice.dto.request.UpdateGroupSettingsRequest;
 import com.bondhub.messageservice.dto.response.ConversationResponse;
 import com.bondhub.messageservice.dto.response.GroupMemberListItemResponse;
-import com.bondhub.messageservice.dto.response.JoinGroupPreviewResponse;
 import com.bondhub.messageservice.dto.response.SearchMemberResponse;
 import com.bondhub.messageservice.model.ChatUser;
 import com.bondhub.messageservice.model.Conversation;
 import com.bondhub.messageservice.model.ConversationMember;
-import com.bondhub.messageservice.model.GroupSettings;
 import com.bondhub.messageservice.model.LastMessageInfo;
 import com.bondhub.messageservice.model.enums.MemberRole;
 import com.bondhub.messageservice.repository.ChatUserRepository;
@@ -32,8 +29,6 @@ import org.springframework.data.mongodb.core.aggregation.Aggregation;
 import org.springframework.data.mongodb.core.aggregation.AggregationOperation;
 import org.springframework.data.mongodb.core.aggregation.AggregationResults;
 import org.springframework.data.mongodb.core.query.Criteria;
-import org.springframework.data.mongodb.core.query.Query;
-import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -97,7 +92,6 @@ public class GroupConversationServiceImpl implements GroupConversationService {
         Conversation conversation = Conversation.builder()
                 .name(groupName).avatar(avatarUrl).isGroup(true)
                 .members(members).unreadCounts(unreadCounts)
-                .settings(GroupSettings.builder().build())
                 .lastMessage(LastMessageInfo.builder().timestamp(now).build())
                 .build();
 
@@ -273,9 +267,8 @@ public class GroupConversationServiceImpl implements GroupConversationService {
         String currentUserId = helper.getSecurityUtil().getCurrentUserId();
         Conversation conversation = findGroupConversation(conversationId);
         helper.assertMember(conversation, currentUserId);
-        helper.assertSettingAllowed(conversation, currentUserId, GroupSettings::isMemberCanChangeInfo);
 
-        String normalizedName = (name == null || name.isBlank()) ? null : name.strip();
+        String normalizedName = (name == null || name.strip().isEmpty()) ? null : name.strip();
         String oldName = conversation.getName();
 
         if (Objects.equals(oldName, normalizedName))
@@ -313,7 +306,6 @@ public class GroupConversationServiceImpl implements GroupConversationService {
         String currentUserId = helper.getSecurityUtil().getCurrentUserId();
         Conversation conversation = findGroupConversation(conversationId);
         helper.assertMember(conversation, currentUserId);
-        helper.assertSettingAllowed(conversation, currentUserId, GroupSettings::isMemberCanChangeInfo);
 
         if (file != null && !file.isEmpty()) {
             String folder = "conversations/groups/" + conversationId + "/avatar";
@@ -346,83 +338,6 @@ public class GroupConversationServiceImpl implements GroupConversationService {
 
         helper.broadcastConversationUpdate(conversation);
         return helper.buildConversationResponseForCurrentUser(conversation, currentUserId);
-    }
-
-    @Override
-    public ConversationResponse updateGroupSettings(String conversationId, UpdateGroupSettingsRequest request) {
-        String currentUserId = helper.getSecurityUtil().getCurrentUserId();
-        Conversation conversation = findGroupConversation(conversationId);
-
-        ConversationMember actor = helper.getMemberOrThrow(conversation, currentUserId);
-        helper.assertOwnerOrAdmin(actor);
-
-        GroupSettings settings = conversation.getSettings();
-        if (settings == null) {
-            settings = GroupSettings.builder().build();
-        }
-
-        // Track which system-message-worthy settings changed
-        boolean sendMessageChanged = false;
-        boolean membershipApprovalChanged = false;
-        boolean joinByLinkChanged = false;
-
-        if (request.memberCanChangeInfo() != null) settings.setMemberCanChangeInfo(request.memberCanChangeInfo());
-        if (request.memberCanPinMessages() != null) settings.setMemberCanPinMessages(request.memberCanPinMessages());
-        if (request.memberCanCreateNotes() != null) settings.setMemberCanCreateNotes(request.memberCanCreateNotes());
-        if (request.memberCanCreatePolls() != null) settings.setMemberCanCreatePolls(request.memberCanCreatePolls());
-        if (request.memberCanSendMessages() != null) {
-            sendMessageChanged = settings.isMemberCanSendMessages() != request.memberCanSendMessages();
-            settings.setMemberCanSendMessages(request.memberCanSendMessages());
-        }
-        if (request.membershipApprovalEnabled() != null) {
-            membershipApprovalChanged = settings.isMembershipApprovalEnabled() != request.membershipApprovalEnabled();
-            settings.setMembershipApprovalEnabled(request.membershipApprovalEnabled());
-        }
-        if (request.highlightAdminMessages() != null) settings.setHighlightAdminMessages(request.highlightAdminMessages());
-        if (request.newMembersCanReadRecent() != null) settings.setNewMembersCanReadRecent(request.newMembersCanReadRecent());
-        if (request.joinByLinkEnabled() != null) {
-            joinByLinkChanged = settings.isJoinByLinkEnabled() != request.joinByLinkEnabled();
-            settings.setJoinByLinkEnabled(request.joinByLinkEnabled());
-        }
-
-        conversation.setSettings(settings);
-        Conversation saved = conversationRepository.save(conversation);
-
-        ActorInfo actorInfo = fetchActorInfo(currentUserId);
-
-        if (sendMessageChanged) {
-            systemMessageService.sendSystemMessage(conversationId, currentUserId, actorInfo.name(), actorInfo.avatar(),
-                    SystemActionType.UPDATE_SETTINGS,
-                    Map.of("payload", Map.of("setting", "memberCanSendMessages", "value", settings.isMemberCanSendMessages())));
-        }
-
-        if (membershipApprovalChanged) {
-            systemMessageService.sendSystemMessage(conversationId, currentUserId, actorInfo.name(), actorInfo.avatar(),
-                    SystemActionType.UPDATE_SETTINGS,
-                    Map.of("payload", Map.of("setting", "membershipApprovalEnabled", "value", settings.isMembershipApprovalEnabled())));
-        }
-
-        if (joinByLinkChanged && settings.isJoinByLinkEnabled()) {
-            if (saved.getJoinLinkToken() == null) {
-                String token = UUID.randomUUID().toString().replace("-", "");
-                saved.setJoinLinkToken(token);
-                saved = conversationRepository.save(saved);
-            }
-            systemMessageService.sendSystemMessage(conversationId, currentUserId, actorInfo.name(), actorInfo.avatar(),
-                    SystemActionType.GENERATE_JOIN_LINK,
-                    Map.of("payload", Map.of("token", saved.getJoinLinkToken())));
-        }
-
-        if (joinByLinkChanged && !settings.isJoinByLinkEnabled()) {
-            mongoTemplate.updateFirst(
-                    Query.query(Criteria.where("_id").is(saved.getId())),
-                    new Update().unset("joinLinkToken"),
-                    Conversation.class
-            );
-            saved.setJoinLinkToken(null);
-        }
-
-        return broadcastAndRespond(saved, currentUserId);
     }
 
     @Override
@@ -494,7 +409,7 @@ public class GroupConversationServiceImpl implements GroupConversationService {
                     SystemActionType.LEAVE_GROUP, Map.of(), adminOwnerIds);
         }
 
-        if (transferActorInfo != null) {
+        if (transferActorInfo != null && transferTargetInfo != null) {
             systemMessageService.sendSystemMessage(conversationId, currentUserId, transferActorInfo.name(), transferActorInfo.avatar(),
                     SystemActionType.TRANSFER_OWNER,
                     Map.of("targetIds", List.of(transferTo), "payload", Map.of("targetName", transferTargetInfo.name())));
@@ -631,7 +546,7 @@ public class GroupConversationServiceImpl implements GroupConversationService {
         Document root = aggregated.getUniqueMappedResult();
         List<Document> metadata = extractDocumentList(root != null ? root.get("metadata") : null);
         List<Document> dataDocs = extractDocumentList(root != null ? root.get("data") : null);
-        int totalItems = !metadata.isEmpty() ? metadata.getFirst().getInteger("totalItems", 0) : 0;
+        int totalItems = !metadata.isEmpty() ? metadata.get(0).getInteger("totalItems", 0) : 0;
 
         List<GroupMemberListItemResponse> pageData = dataDocs.stream().map(doc -> {
             String userId = doc.getString("userId");
@@ -655,176 +570,6 @@ public class GroupConversationServiceImpl implements GroupConversationService {
                 .data(pageData).page(pageable.getPageNumber())
                 .totalPages(totalItems == 0 ? 0 : (int) Math.ceil((double) totalItems / pageable.getPageSize()))
                 .limit(pageable.getPageSize()).totalItems(totalItems).build();
-    }
-
-    @Override
-    public String generateJoinLink(String conversationId) {
-        String currentUserId = helper.getSecurityUtil().getCurrentUserId();
-        Conversation conversation = findGroupConversation(conversationId);
-        ConversationMember actor = helper.getMemberOrThrow(conversation, currentUserId);
-        helper.assertOwnerOrAdmin(actor);
-
-        if (conversation.getJoinLinkToken() != null) {
-            return conversation.getJoinLinkToken();
-        }
-
-        String token = UUID.randomUUID().toString().replace("-", "");
-        conversation.setJoinLinkToken(token);
-
-        GroupSettings settings = conversation.getSettings();
-        if (settings == null) {
-            settings = GroupSettings.builder().build();
-            conversation.setSettings(settings);
-        }
-        settings.setJoinByLinkEnabled(true);
-
-        conversationRepository.save(conversation);
-
-        ActorInfo actorInfo = fetchActorInfo(currentUserId);
-        systemMessageService.sendSystemMessage(conversationId, currentUserId, actorInfo.name(), actorInfo.avatar(),
-                SystemActionType.GENERATE_JOIN_LINK, Map.of("payload", Map.of("token", token)));
-
-        helper.broadcastConversationUpdate(conversation);
-        log.info("[Group] Join link generated for conversation {} by user {}", conversationId, currentUserId);
-        return token;
-    }
-
-    @Override
-    public String refreshJoinLink(String conversationId) {
-        String currentUserId = helper.getSecurityUtil().getCurrentUserId();
-        Conversation conversation = findGroupConversation(conversationId);
-        ConversationMember actor = helper.getMemberOrThrow(conversation, currentUserId);
-        helper.assertOwnerOrAdmin(actor);
-
-        String newToken = UUID.randomUUID().toString().replace("-", "");
-        conversation.setJoinLinkToken(newToken);
-
-        GroupSettings settings = conversation.getSettings();
-        if (settings == null) {
-            settings = GroupSettings.builder().build();
-            conversation.setSettings(settings);
-        }
-        settings.setJoinByLinkEnabled(true);
-
-        conversationRepository.save(conversation);
-
-        ActorInfo actorInfo = fetchActorInfo(currentUserId);
-        systemMessageService.sendSystemMessage(conversationId, currentUserId, actorInfo.name(), actorInfo.avatar(),
-                SystemActionType.REFRESH_JOIN_LINK, Map.of("payload", Map.of("token", newToken)));
-
-        helper.broadcastConversationUpdate(conversation);
-        log.info("[Group] Join link refreshed for conversation {} by user {}", conversationId, currentUserId);
-        return newToken;
-    }
-
-    @Override
-    public ConversationResponse joinByLink(String token) {
-        String currentUserId = helper.getSecurityUtil().getCurrentUserId();
-
-        Conversation conversation = conversationRepository.findByJoinLinkToken(token)
-                .orElseThrow(() -> new AppException(ErrorCode.CHAT_JOIN_LINK_INVALID));
-
-        if (!conversation.isGroup()) throw new AppException(ErrorCode.CHAT_NOT_A_GROUP);
-
-        GroupSettings settings = conversation.getSettings();
-        if (settings == null || !settings.isJoinByLinkEnabled()) {
-            throw new AppException(ErrorCode.CHAT_JOIN_LINK_DISABLED);
-        }
-
-        boolean isAlreadyActive = conversation.getMembers().stream()
-                .anyMatch(m -> m.getUserId().equals(currentUserId) && helper.isActiveMember(m));
-        if (isAlreadyActive) {
-            throw new AppException(ErrorCode.CHAT_ALREADY_MEMBER);
-        }
-
-        LocalDateTime now = LocalDateTime.now();
-        ConversationMember existingMember = conversation.getMembers().stream()
-                .filter(m -> m.getUserId().equals(currentUserId))
-                .findFirst().orElse(null);
-
-        if (existingMember != null) {
-            existingMember.setActive(true);
-            existingMember.setRemovedAt(null);
-            existingMember.setRemovedBy(null);
-            existingMember.setRole(MemberRole.MEMBER);
-            existingMember.setJoinedAt(now);
-        } else {
-            conversation.getMembers().add(
-                    ConversationMember.builder().userId(currentUserId).role(MemberRole.MEMBER).joinedAt(now).build());
-        }
-
-        if (conversation.getUnreadCounts() == null) conversation.setUnreadCounts(new HashMap<>());
-        conversation.getUnreadCounts().putIfAbsent(currentUserId, 0);
-
-        Conversation saved = conversationRepository.save(conversation);
-
-        ActorInfo actorInfo = fetchActorInfo(currentUserId);
-        systemMessageService.sendSystemMessage(saved.getId(), currentUserId, actorInfo.name(), actorInfo.avatar(),
-                SystemActionType.JOIN_BY_LINK, Map.of());
-
-        log.info("[Group] User {} joined conversation {} via link", currentUserId, saved.getId());
-        return broadcastAndRespond(saved, currentUserId);
-    }
-
-    @Override
-    public JoinGroupPreviewResponse getJoinPreview(String token) {
-        String currentUserId = helper.getSecurityUtil().getCurrentUserId();
-
-        Conversation conversation = conversationRepository.findByJoinLinkToken(token)
-                .orElseThrow(() -> new AppException(ErrorCode.CHAT_JOIN_LINK_INVALID));
-
-        if (!conversation.isGroup()) throw new AppException(ErrorCode.CHAT_NOT_A_GROUP);
-
-        GroupSettings settings = conversation.getSettings();
-        if (settings == null || !settings.isJoinByLinkEnabled()) {
-            throw new AppException(ErrorCode.CHAT_JOIN_LINK_DISABLED);
-        }
-
-        Set<ConversationMember> activeMembers = conversation.getMembers().stream()
-                .filter(helper::isActiveMember).collect(Collectors.toSet());
-
-        boolean isAlreadyMember = activeMembers.stream()
-                .anyMatch(m -> m.getUserId().equals(currentUserId));
-
-        // Single batch query for all member info
-        Set<String> allMemberIds = activeMembers.stream()
-                .map(ConversationMember::getUserId).collect(Collectors.toSet());
-        Map<String, ChatUser> userCache = chatUserRepository.findAllById(allMemberIds).stream()
-                .collect(Collectors.toMap(ChatUser::getId, u -> u));
-
-        String ownerUserId = activeMembers.stream()
-                .filter(m -> m.getRole() == MemberRole.OWNER)
-                .map(ConversationMember::getUserId)
-                .findFirst().orElse(null);
-        String createdByName = ownerUserId != null && userCache.containsKey(ownerUserId)
-                ? userCache.get(ownerUserId).getFullName() : null;
-
-        String baseUrl = helper.getBaseUrl();
-        List<JoinGroupPreviewResponse.MemberPreview> memberPreviews = activeMembers.stream()
-                .map(ConversationMember::getUserId)
-                .limit(5)
-                .map(userCache::get)
-                .filter(Objects::nonNull)
-                .map(u -> JoinGroupPreviewResponse.MemberPreview.builder()
-                        .name(u.getFullName())
-                        .avatar(u.getAvatar() != null ? baseUrl + u.getAvatar() : null)
-                        .build())
-                .collect(Collectors.toList());
-
-        String groupName = conversation.getName();
-        if (groupName == null || groupName.isBlank()) {
-            groupName = helper.getDynamicGroupName(conversation, currentUserId, userCache);
-        }
-
-        return JoinGroupPreviewResponse.builder()
-                .conversationId(conversation.getId())
-                .groupName(groupName)
-                .groupAvatar(conversation.getAvatar() != null ? baseUrl + conversation.getAvatar() : null)
-                .memberCount(activeMembers.size())
-                .createdByName(createdByName)
-                .memberPreviews(memberPreviews)
-                .isAlreadyMember(isAlreadyMember)
-                .build();
     }
 
     private Conversation findGroupConversation(String conversationId) {
