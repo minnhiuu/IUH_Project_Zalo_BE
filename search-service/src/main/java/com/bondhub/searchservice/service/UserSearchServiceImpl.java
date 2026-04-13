@@ -19,6 +19,8 @@ import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 @Service
@@ -128,5 +130,47 @@ public class UserSearchServiceImpl implements UserSearchService {
                 .avatar(userIndex.getAvatar())
                 .phoneNumber(isPhoneMatch ? userIndex.getPhoneNumber() : null)
                 .build();
+    }
+
+    @Override
+    public List<UserSummaryResponse> findUsersByPhones(List<String> phones) {
+        if (phones == null || phones.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        // ES terms query for exact match on phoneNumber keyword field
+        Query query = Query.of(q -> q.bool(b -> {
+            b.filter(f -> f.terms(t -> t
+                    .field("phoneNumber")
+                    .terms(tv -> tv.value(phones.stream()
+                            .map(co.elastic.clients.elasticsearch._types.FieldValue::of)
+                            .toList()))
+            ));
+            b.filter(f -> f.term(t -> t.field("role").value(Role.USER.name())));
+            return b;
+        }));
+
+        NativeQuery nativeQuery = NativeQuery.builder()
+                .withQuery(query)
+                .withPageable(PageRequest.of(0, phones.size()))
+                .build();
+
+        SearchHits<UserIndex> hits = esOps.search(
+                nativeQuery,
+                UserIndex.class,
+                IndexCoordinates.of(esProperties.getUserAlias())
+        );
+
+        List<UserSummaryResponse> results = new ArrayList<>();
+        for (SearchHit<UserIndex> hit : hits.getSearchHits()) {
+            UserIndex u = hit.getContent();
+            results.add(UserSummaryResponse.builder()
+                    .id(u.getId())
+                    .fullName(u.getFullName())
+                    .avatar(u.getAvatar())
+                    .phoneNumber(u.getPhoneNumber())
+                    .build());
+        }
+        return results;
     }
 }

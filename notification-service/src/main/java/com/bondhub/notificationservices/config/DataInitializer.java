@@ -139,6 +139,20 @@ public class DataInitializer {
         seedIfAbsent(NotificationType.DLQ_ALERT, NotificationChannel.FCM, "en",
                 "System Alert",
                 "{{totalEventCount}} new errors in {{referenceId}}. Total: {{unresolvedCount}}");
+
+        // CALL
+        seedIfAbsent(NotificationType.CALL, NotificationChannel.FCM, "vi",
+                "Cuộc gọi đến",
+                "{{actorName}} đang gọi cho bạn");
+        seedIfAbsent(NotificationType.CALL, NotificationChannel.FCM, "en",
+                "Incoming call",
+                "{{actorName}} is calling you");
+        seedIfAbsent(NotificationType.CALL, NotificationChannel.IN_APP, "vi",
+                "Cuộc gọi đến",
+                "<b>{{actorName}}</b> đang gọi cho bạn");
+        seedIfAbsent(NotificationType.CALL, NotificationChannel.IN_APP, "en",
+                "Incoming call",
+                "<b>{{actorName}}</b> is calling you");
     }
 
     private static final List<String> NAMES = List.of(

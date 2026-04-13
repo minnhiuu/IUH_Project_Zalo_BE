@@ -3,6 +3,7 @@ package com.bondhub.friendservice.service.contact;
 import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.common.dto.client.userservice.user.response.UserSummaryResponse;
 import com.bondhub.common.utils.SecurityUtil;
+import com.bondhub.friendservice.client.SearchServiceClient;
 import com.bondhub.friendservice.client.UserServiceClient;
 import com.bondhub.friendservice.dto.request.ContactImportRequest;
 import com.bondhub.friendservice.dto.response.ContactImportResponse;
@@ -23,6 +24,7 @@ import java.util.stream.Collectors;
 public class ContactServiceImpl implements ContactService {
 
     UserServiceClient userServiceClient;
+    SearchServiceClient searchServiceClient;
     GraphFriendService graphFriendService;
     SecurityUtil securityUtil;
 
@@ -59,7 +61,16 @@ public class ContactServiceImpl implements ContactService {
 
         if (!normalizedPhones.isEmpty()) {
             try {
-                ApiResponse<List<UserSummaryResponse>> phoneResponse = userServiceClient.findUsersByPhones(new ArrayList<>(normalizedPhones));
+                // Search with both E.164 (+84) and local (0xx) formats since DB stores raw format
+                Set<String> searchPhones = new LinkedHashSet<>(normalizedPhones);
+                for (String phone : normalizedPhones) {
+                    if (phone.startsWith("+84")) {
+                        searchPhones.add("0" + phone.substring(3)); // +84xxx -> 0xxx
+                    } else if (phone.startsWith("0")) {
+                        searchPhones.add("+84" + phone.substring(1)); // 0xxx -> +84xxx
+                    }
+                }
+                ApiResponse<List<UserSummaryResponse>> phoneResponse = searchServiceClient.findUsersByPhones(new ArrayList<>(searchPhones));
                 if (phoneResponse != null && phoneResponse.data() != null) {
                     for (UserSummaryResponse user : phoneResponse.data()) {
                         if (user.phoneNumber() != null) {

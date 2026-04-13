@@ -1,5 +1,5 @@
 package com.bondhub.common.enums;
 
 public enum MessageType {
-    CHAT, IMAGE, FILE, LINK, SYSTEM
+    CHAT, IMAGE, FILE, LINK, SYSTEM, CALL
 }

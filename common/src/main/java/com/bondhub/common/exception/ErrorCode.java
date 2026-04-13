@@ -132,6 +132,14 @@ public enum ErrorCode {
         STORY_BLOCKED(HttpStatus.FORBIDDEN, 2306, "error.block.story.blocked"),
         COMMUNICATION_BLOCKED(HttpStatus.FORBIDDEN, 2307, "error.block.communication.blocked"),
 
+        // Call errors (5xxx)
+        CALL_USER_BUSY(HttpStatus.CONFLICT, 5001, "error.call.user.busy"),
+        CALL_USER_NOT_FOUND(HttpStatus.NOT_FOUND, 5002, "error.call.user.not.found"),
+        CALL_SESSION_NOT_FOUND(HttpStatus.NOT_FOUND, 5003, "error.call.session.not.found"),
+        CALL_ALREADY_IN_PROGRESS(HttpStatus.CONFLICT, 5004, "error.call.already.in.progress"),
+        CALL_SELF_NOT_ALLOWED(HttpStatus.BAD_REQUEST, 5005, "error.call.self.not.allowed"),
+        CALL_TOKEN_GENERATION_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, 5006, "error.call.token.generation.failed"),
+
         ;
 
         private final HttpStatus httpStatus;

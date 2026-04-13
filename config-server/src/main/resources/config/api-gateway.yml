@@ -234,6 +234,17 @@ spring:
                     name: friendServiceCircuitBreaker
                     fallbackUri: forward:/fallback/friend-service
 
+            - id: friend-service-contacts
+              uri: lb://friend-service
+              predicates:
+                - Path=/api/contacts/**
+              filters:
+                - RewritePath=/api/(?<segment>.*), /${segment}
+                - name: CircuitBreaker
+                  args:
+                    name: friendServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/friend-service
+
             - id: ai-service
               uri: lb://ai-service
               predicates:
