@@ -40,15 +40,9 @@ public class FileServiceImpl implements FileService {
                         .build(),
                 RequestBody.fromBytes(file.getBytes()));
 
-        String url = S3Util.getS3BaseUrl(bucketName, region) + key;
-
         return FileUploadResponse.builder()
-                .key(key)
-                .url(url)
                 .fileName(fileName)
-                .originalFileName(file.getOriginalFilename())
-                .contentType(file.getContentType())
-                .size(file.getSize())
+                .key(key)
                 .build();
     }
 

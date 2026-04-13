@@ -1,7 +1,6 @@
 package com.bondhub.messageservice.dto.response;
 
 import com.bondhub.common.enums.Status;
-import com.bondhub.messageservice.model.GroupSettings;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.Builder;
 
@@ -22,7 +21,5 @@ public record ConversationResponse(
         boolean isDisbanded,
         Integer unreadCount,
         LastMessageResponse lastMessage,
-        List<ConversationMemberResponse> members,
-        GroupSettings settings,
-        String joinLinkToken) {
+        List<ConversationMemberResponse> members) {
 }

@@ -10,7 +10,6 @@ import com.bondhub.messageservice.model.Conversation;
 import com.bondhub.messageservice.model.ConversationMember;
 import com.bondhub.messageservice.model.LastMessageInfo;
 import com.bondhub.messageservice.model.Message;
-import com.bondhub.messageservice.model.AttachmentInfo;
 import com.bondhub.messageservice.model.ChatUser;
 import com.bondhub.common.enums.MessageStatus;
 import com.bondhub.common.enums.MessageType;
@@ -18,7 +17,6 @@ import com.bondhub.messageservice.repository.ConversationRepository;
 import com.bondhub.messageservice.repository.MessageRepository;
 import com.bondhub.messageservice.repository.ChatUserRepository;
 import com.bondhub.messageservice.service.conversation.ConversationService;
-import com.bondhub.common.dto.client.messageservice.AttachmentRequest;
 import com.bondhub.common.dto.client.messageservice.MessageSendRequest;
 import com.bondhub.common.event.ai.AiMessageSaveEvent;
 import com.bondhub.common.dto.client.socketservice.SocketEvent;
@@ -41,22 +39,14 @@ import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.data.mongodb.core.FindAndModifyOptions;
 
-import com.bondhub.messageservice.model.GroupSettings;
-import com.bondhub.messageservice.model.LinkPreview;
-import com.bondhub.messageservice.service.conversation.ConversationHelper;
-
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class MessageServiceImpl implements MessageService {
-
-    private static final Pattern JOIN_LINK_PATTERN = Pattern.compile("^https?://[^/]+/g/([a-zA-Z0-9_-]+)$");
 
     private final MessageRepository messageRepository;
     private final ConversationRepository conversationRepository;
@@ -66,7 +56,6 @@ public class MessageServiceImpl implements MessageService {
     private final MongoTemplate mongoTemplate;
     private final MessageMapper messageMapper;
     private final ConversationService conversationService;
-    private final ConversationHelper conversationHelper;
 
     @Value("${aws.s3.bucket.name}")
     private String bucketName;
@@ -119,42 +108,6 @@ public class MessageServiceImpl implements MessageService {
         return PageResponse.fromPageData(messagePage, dtos);
     }
 
-    @Override
-    public PageResponse<List<MessageResponse>> findMediaMessages(String conversationId, List<String> types, int page, int size) {
-        String currentUserId = securityUtil.getCurrentUserId();
-
-        Conversation room = conversationRepository.findById(conversationId)
-                .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
-        assertConversationMember(room, currentUserId);
-
-        LocalDateTime deletedBefore = (room.getDeletedBefore() != null)
-                ? room.getDeletedBefore().getOrDefault(currentUserId, LocalDateTime.of(1970, 1, 1, 0, 0))
-                : LocalDateTime.of(1970, 1, 1, 0, 0);
-
-        List<MessageType> messageTypes = types.stream()
-                .map(t -> {
-                    try { return MessageType.valueOf(t.toUpperCase()); }
-                    catch (IllegalArgumentException e) { return null; }
-                })
-                .filter(t -> t != null)
-                .collect(Collectors.toList());
-
-        if (messageTypes.isEmpty()) {
-            return PageResponse.fromPageData(Page.empty(), List.of());
-        }
-
-        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
-        Page<Message> messagePage = messageRepository.findByConversationIdAndTypesAndNotDeleted(
-                conversationId, currentUserId, messageTypes, deletedBefore, pageable);
-
-        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
-        List<MessageResponse> dtos = messagePage.getContent().stream()
-                .map(msg -> messageMapper.mapToMessageResponse(msg, baseUrl))
-                .collect(Collectors.toList());
-
-        return PageResponse.fromPageData(messagePage, dtos);
-    }
-
     // ─────────────────────────── Gửi tin nhắn ───────────────────────────
 
     @Override
@@ -175,28 +128,11 @@ public class MessageServiceImpl implements MessageService {
         }
 
         assertActiveMember(room, currentUserId);
-        conversationHelper.assertSettingAllowed(room, currentUserId, GroupSettings::isMemberCanSendMessages);
 
         // 2. Enrich sender info
         ChatUser sender = chatUserRepository.findById(currentUserId).orElse(null);
 
-        // 3. Validate request & resolve type
-        validateMessageRequest(request);
-        LinkPreview linkPreview = null;
-
-        // Kiểm tra join link nếu không có attachments
-        if (request.attachments() == null || request.attachments().isEmpty()) {
-            String trimmedContent = request.content() != null ? request.content().trim() : "";
-            Matcher joinLinkMatcher = JOIN_LINK_PATTERN.matcher(trimmedContent);
-            if (joinLinkMatcher.matches()) {
-                String token = joinLinkMatcher.group(1);
-                linkPreview = buildJoinLinkPreview(trimmedContent, token);
-            }
-        }
-
-        MessageType messageType = resolveMessageType(request, linkPreview);
-        List<AttachmentInfo> attachments = mapAttachments(request);
-
+        // 3. Lưu tin nhắn
         Message message = Message.builder()
                 .conversationId(room.getId())
                 .senderId(currentUserId)
@@ -206,14 +142,16 @@ public class MessageServiceImpl implements MessageService {
                 .clientMessageId(request.clientMessageId())
                 .replyTo(request.replyTo())
                 .isForwarded(request.isForwarded())
-                .type(messageType)
-                .attachments(attachments)
-                .linkPreview(linkPreview)
+                .type(MessageType.CHAT)
                 .build();
         messageRepository.save(message);
 
         // 4. Xây dựng last message preview
-        String previewContent = buildPreviewContent(message);
+        String previewContent = switch (message.getType() == null ? MessageType.CHAT : message.getType()) {
+            case IMAGE -> "[IMAGE]";
+            case FILE -> "[FILE]";
+            default -> message.getContent();
+        };
         LastMessageInfo lastInfo = LastMessageInfo.builder()
                 .messageId(message.getId())
                 .senderId(currentUserId)
@@ -299,57 +237,6 @@ public class MessageServiceImpl implements MessageService {
         Query query = new Query(Criteria.where("id").is(messageId));
         Update update = new Update().addToSet("deletedBy", currentUserId);
         mongoTemplate.updateFirst(query, update, Message.class);
-    }
-
-    @Override
-    public void toggleReaction(String messageId, String emoji) {
-        String currentUserId = securityUtil.getCurrentUserId();
-        Message message = messageRepository.findById(messageId)
-                .orElseThrow(() -> new AppException(ErrorCode.MESSAGE_NOT_FOUND));
-
-        
-        Conversation room = conversationRepository.findById(message.getConversationId())
-                .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
-        assertActiveMember(room, currentUserId);
-
-
-        Map<String, List<String>> reactions = message.getReactions();
-        if (reactions == null) {
-            reactions = new HashMap<>();
-        }
-
-        List<String> users = reactions.computeIfAbsent(emoji, k -> new ArrayList<>());
-        users.add(currentUserId);
-        message.setReactions(reactions);
-        messageRepository.save(message);
-
-        // Broadcast reaction update to all members
-        broadcastReactionUpdate(room, messageId, message.getReactions());
-    }
-
-    @Override
-    public void removeAllMyReactions(String messageId) {
-        String currentUserId = securityUtil.getCurrentUserId();
-        Message message = messageRepository.findById(messageId)
-                .orElseThrow(() -> new AppException(ErrorCode.MESSAGE_NOT_FOUND));
-
-        Conversation room = conversationRepository.findById(message.getConversationId())
-                .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
-        assertActiveMember(room, currentUserId);
-
-        Map<String, List<String>> reactions = message.getReactions();
-        if (reactions == null || reactions.isEmpty()) return;
-
-        // Remove ALL occurrences of current user from every emoji list
-        reactions.entrySet().removeIf(entry -> {
-            entry.getValue().removeAll(List.of(currentUserId));
-            return entry.getValue().isEmpty();
-        });
-
-        message.setReactions(reactions.isEmpty() ? null : reactions);
-        messageRepository.save(message);
-
-        broadcastReactionUpdate(room, messageId, message.getReactions());
     }
 
     // ─────────────────────────── Private helpers ───────────────────────────
@@ -466,114 +353,4 @@ public class MessageServiceImpl implements MessageService {
                             "/queue/status-updates", payload));
         }
     }
-
-    private void broadcastReactionUpdate(Conversation room, String messageId, Map<String, List<String>> reactions) {
-        for (ConversationMember member : room.getMembers()) {
-            if (!isActiveMember(member)) continue;
-            Map<String, Object> payload = new HashMap<>();
-            payload.put("type", "REACTION_UPDATE");
-            payload.put("conversationId", room.getId());
-            payload.put("messageId", messageId);
-            payload.put("reactions", reactions);
-
-            kafkaTemplate.send(socketEventsTopic,
-                    new SocketEvent(SocketEventType.MESSAGE, member.getUserId(),
-                            "/queue/reactions", payload));
-        }
-    }
-
-    private LinkPreview buildJoinLinkPreview(String url, String token) {
-        try {
-            Conversation target = conversationRepository.findByJoinLinkToken(token).orElse(null);
-            if (target == null || !target.isGroup()) return null;
-
-            GroupSettings settings = target.getSettings();
-            if (settings == null || !settings.isJoinByLinkEnabled()) return null;
-
-            Set<ConversationMember> activeMembers = target.getMembers().stream()
-                    .filter(m -> !Boolean.FALSE.equals(m.getActive()))
-                    .collect(Collectors.toSet());
-
-            Set<String> memberIds = activeMembers.stream()
-                    .map(ConversationMember::getUserId).collect(Collectors.toSet());
-            Map<String, ChatUser> userCache = chatUserRepository.findAllById(memberIds).stream()
-                    .collect(Collectors.toMap(ChatUser::getId, u -> u));
-
-            String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
-            List<LinkPreview.MemberSnapshot> previews = activeMembers.stream()
-                    .map(ConversationMember::getUserId)
-                    .limit(5)
-                    .map(userCache::get)
-                    .filter(Objects::nonNull)
-                    .map(u -> LinkPreview.MemberSnapshot.builder()
-                            .name(u.getFullName())
-                            .avatar(u.getAvatar() != null ? baseUrl + u.getAvatar() : null)
-                            .build())
-                    .toList();
-
-            String groupName = target.getName();
-            if (groupName == null || groupName.isBlank()) {
-                groupName = conversationHelper.getDynamicGroupName(target, null, userCache);
-            }
-
-            return LinkPreview.builder()
-                    .url(url)
-                    .token(token)
-                    .groupName(groupName)
-                    .groupAvatar(target.getAvatar() != null ? baseUrl + target.getAvatar() : null)
-                    .memberCount(activeMembers.size())
-                    .memberPreviews(previews)
-                    .build();
-        } catch (Exception e) {
-            log.warn("[Chat] Failed to build join link preview for token {}: {}", token, e.getMessage());
-            return null;
-        }
-    }
-
-    // ───────────── Attachment / Type helpers ─────────────
-
-    private void validateMessageRequest(MessageSendRequest request) {
-        boolean hasContent = request.content() != null && !request.content().isBlank();
-        boolean hasAttachments = request.attachments() != null && !request.attachments().isEmpty();
-        if (!hasContent && !hasAttachments) {
-            throw new AppException(ErrorCode.VALIDATION_ERROR);
-        }
-    }
-
-    private MessageType resolveMessageType(MessageSendRequest request, LinkPreview linkPreview) {
-        if (linkPreview != null) return MessageType.LINK;
-        if (request.attachments() == null || request.attachments().isEmpty()) return MessageType.CHAT;
-
-        String contentType = request.attachments().get(0).contentType();
-        if (contentType != null) {
-            if (contentType.startsWith("image/")) return MessageType.IMAGE;
-            if (contentType.startsWith("video/")) return MessageType.VIDEO;
-        }
-        return MessageType.FILE;
-    }
-
-    private List<AttachmentInfo> mapAttachments(MessageSendRequest request) {
-        if (request.attachments() == null || request.attachments().isEmpty()) return List.of();
-        return request.attachments().stream()
-                .map(a -> AttachmentInfo.builder()
-                        .key(a.key())
-                        .url(a.url())
-                        .fileName(a.fileName())
-                        .originalFileName(a.originalFileName())
-                        .contentType(a.contentType())
-                        .size(a.size())
-                        .build())
-                .toList();
-    }
-
-    private String buildPreviewContent(Message message) {
-        return switch (message.getType() == null ? MessageType.CHAT : message.getType()) {
-            case IMAGE -> "[Hình ảnh]";
-            case VIDEO -> "[Video]";
-            case FILE -> "[Tệp]";
-            case LINK -> "[Liên kết]";
-            default -> message.getContent();
-        };
-    }
-
 }

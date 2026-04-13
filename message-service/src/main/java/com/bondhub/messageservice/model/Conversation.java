@@ -58,9 +58,4 @@ public class Conversation extends BaseModel {
     @Indexed
     @Builder.Default
     boolean isDisbanded = false;
-
-    GroupSettings settings;
-
-    @Indexed(unique = true, sparse = true)
-    String joinLinkToken;
 }
