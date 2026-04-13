@@ -71,17 +71,18 @@ public class UserServiceImpl implements UserService {
         log.info("User created successfully with id: {}", user.getId());
 
         publishUserIndexEvent(user, request.phoneNumber(), request.role());
-        publishUserCreatedEvent(user, request.accountId());
-        publishUserProfileUpdatedEvent(user);
+        publishUserCreatedEvent(user, request.accountId(), request.phoneNumber());
+        publishUserProfileUpdatedEvent(user, request.phoneNumber());
 
         return userMapper.toUserResponse(user);
     }
 
-    private void publishUserCreatedEvent(User user, String accountId) {
+    private void publishUserCreatedEvent(User user, String accountId, String phoneNumber) {
         UserCreatedEvent event = UserCreatedEvent.builder()
                 .userId(user.getId())
                 .accountId(accountId)
                 .fullName(user.getFullName())
+                .phoneNumber(phoneNumber)
                 .timestamp(System.currentTimeMillis())
                 .build();
 
@@ -217,7 +218,7 @@ public class UserServiceImpl implements UserService {
         log.info("User profile updated successfully for account: {}", accountId);
 
         publishUserIndexEvent(user, accountResponse);
-        publishUserProfileUpdatedEvent(user);
+        publishUserProfileUpdatedEvent(user, accountResponse != null ? accountResponse.phoneNumber() : null);
 
         return getUserProfileResponseWithUrl(user, accountResponse);
     }
@@ -288,8 +289,18 @@ public class UserServiceImpl implements UserService {
 
             log.info("Avatar updated successfully for user: {}", accountId);
 
-            publishUserIndexEvent(user, null);
-            publishUserProfileUpdatedEvent(user);
+            AccountResponse accountResponse = null;
+            try {
+                ApiResponse<AccountResponse> accountApiResponse = authServiceClient.getAccountById(accountId);
+                if (accountApiResponse != null && accountApiResponse.data() != null) {
+                    accountResponse = accountApiResponse.data();
+                }
+            } catch (Exception e) {
+                log.warn("Failed to fetch account info for updated avatar: {}", accountId, e);
+            }
+
+            publishUserIndexEvent(user, accountResponse);
+            publishUserProfileUpdatedEvent(user, accountResponse != null ? accountResponse.phoneNumber() : null);
 
             String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
             return userMapper.toAvatarResponse(user, baseUrl);
@@ -382,16 +393,17 @@ public class UserServiceImpl implements UserService {
 
         log.info("Bio updated successfully for user: {}", accountId);
 
-        publishUserProfileUpdatedEvent(user);
+        publishUserProfileUpdatedEvent(user, accountResponse != null ? accountResponse.phoneNumber() : null);
 
         return getUserProfileResponseWithUrl(user, accountResponse);
     }
 
-    private void publishUserProfileUpdatedEvent(User user) {
+    private void publishUserProfileUpdatedEvent(User user, String phoneNumber) {
         UserProfileUpdatedEvent event = UserProfileUpdatedEvent.builder()
                 .userId(user.getId())
                 .fullName(user.getFullName())
                 .avatar(user.getAvatar())
+                .phoneNumber(phoneNumber)
                 .timestamp(System.currentTimeMillis())
                 .build();
 

@@ -4,7 +4,7 @@ import com.bondhub.common.utils.S3Util;
 import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
-import com.bondhub.messageservice.dto.response.ConversationResponse;
+import com.bondhub.messageservice.dto.response.*;
 import com.bondhub.messageservice.event.UserSyncEvent;
 import com.bondhub.messageservice.model.ChatUser;
 import com.bondhub.messageservice.model.Conversation;
@@ -13,13 +13,10 @@ import com.bondhub.messageservice.model.LastMessageInfo;
 import com.bondhub.messageservice.repository.ConversationRepository;
 import com.bondhub.messageservice.repository.ChatUserRepository;
 import com.bondhub.messageservice.client.FriendServiceClient;
-import com.bondhub.messageservice.dto.response.ConversationMemberResponse;
-import com.bondhub.messageservice.dto.response.ReadReceiptNotification;
 import com.bondhub.messageservice.model.enums.MemberRole;
-import com.bondhub.common.dto.ApiResponse;
-import com.bondhub.common.enums.MessageType;
 import com.bondhub.common.dto.client.socketservice.SocketEvent;
 import com.bondhub.common.enums.SocketEventType;
+import com.bondhub.common.dto.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -54,6 +51,7 @@ public class ConversationServiceImpl implements ConversationService {
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final MongoTemplate mongoTemplate;
     private final FriendServiceClient friendServiceClient;
+    private final ConversationHelper helper;
 
     @Value("${aws.s3.bucket.name}")
     private String bucketName;
@@ -107,8 +105,8 @@ public class ConversationServiceImpl implements ConversationService {
             }
         }
 
-        ChatUser partner = resolvePartner(partnerId, currentUserId, userCache);
-        boolean viewerCanSee = canViewerSeeStatus(currentUserId, userCache);
+        ChatUser partner = helper.resolvePartner(partnerId, currentUserId, userCache);
+        boolean viewerCanSee = helper.canViewerSeeStatus(currentUserId, userCache);
         String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
 
         String friendshipStatus = null;
@@ -121,7 +119,7 @@ public class ConversationServiceImpl implements ConversationService {
             log.error("Failed to fetch friendship status for user {}", partnerId, e);
         }
 
-        return buildConversationResponse(room, partner, currentUserId, userCache, baseUrl, viewerCanSee, friendshipStatus);
+        return helper.buildConversationResponse(room, partner, currentUserId, userCache, baseUrl, viewerCanSee, friendshipStatus);
     }
 
     // ─────────────────────────── Query: Danh sách phòng chat ───────────────────────────
@@ -137,12 +135,14 @@ public class ConversationServiceImpl implements ConversationService {
             return PageResponse.empty(pageable);
         }
 
-        // Gom tất cả userId cần fetch trong 1 lượt
         Set<String> allUserIds = new HashSet<>();
         allUserIds.add(currentUserId);
-        roomsPage.getContent().forEach(room ->
-                room.getMembers().forEach(m -> allUserIds.add(m.getUserId()))
-        );
+        roomsPage.getContent().forEach(room -> {
+            room.getMembers().forEach(m -> allUserIds.add(m.getUserId()));
+            if (room.getLastMessage() != null && room.getLastMessage().getSenderId() != null) {
+                allUserIds.add(room.getLastMessage().getSenderId());
+            }
+        });
 
         Map<String, ChatUser> userCache = chatUserRepository.findAllById(allUserIds).stream()
                 .collect(Collectors.toMap(ChatUser::getId, u -> u));
@@ -157,31 +157,30 @@ public class ConversationServiceImpl implements ConversationService {
         }
         final Map<String, String> friendshipStatusMap = tempMap;
 
-        boolean viewerCanSee = canViewerSeeStatus(currentUserId, userCache);
+        boolean viewerCanSee = helper.canViewerSeeStatus(currentUserId, userCache);
         String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
 
         return PageResponse.fromPage(roomsPage, room -> {
-            // Tìm partner = thành viên đầu tiên khác currentUser
             String partnerId = room.getMembers().stream()
+                    .filter(helper::isActiveMember)
                     .map(ConversationMember::getUserId)
                     .filter(uid -> !uid.equals(currentUserId))
                     .findFirst()
-                    .orElse(currentUserId); // trường hợp chat với chính mình (My Documents)
+                    .orElse(currentUserId);
 
             ChatUser cachedPartner = userCache.get(partnerId);
             boolean partnerMissingProfile = cachedPartner == null
                 || cachedPartner.getFullName() == null
                 || cachedPartner.getFullName().isBlank();
 
-            // Trigger sync nếu partner chưa có trong cache
             if (partnerMissingProfile && !partnerId.equals(currentUserId)
                     && !partnerId.equals("ai-assistant-001")) {
                 eventPublisher.publishEvent(new UserSyncEvent(partnerId));
             }
 
-            ChatUser partner = resolvePartner(partnerId, currentUserId, userCache);
+            ChatUser partner = helper.resolvePartner(partnerId, currentUserId, userCache);
             String friendshipStatus = friendshipStatusMap.get(partnerId);
-            return buildConversationResponse(room, partner, currentUserId, userCache, baseUrl, viewerCanSee, friendshipStatus);
+            return helper.buildConversationResponse(room, partner, currentUserId, userCache, baseUrl, viewerCanSee, friendshipStatus);
         });
     }
 
@@ -191,20 +190,17 @@ public class ConversationServiceImpl implements ConversationService {
     public void markAsRead(String conversationId) {
         String currentUserId = securityUtil.getCurrentUserId();
 
-        // 1. Tìm phòng bằng ObjectId
         Conversation room = conversationRepository.findById(conversationId)
                 .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
 
-        // 2. Kiểm tra quyền: currentUser phải là thành viên
         boolean isMember = room.getMembers().stream()
                 .anyMatch(m -> m.getUserId().equals(currentUserId));
         if (!isMember) {
-            throw new AppException(ErrorCode.UNAUTHORIZED);
+            throw new AppException(ErrorCode.CHAT_MEMBER_NOT_FOUND);
         }
 
         String finalReadId = room.getLastMessage() != null ? room.getLastMessage().getMessageId() : null;
 
-        // 3. Cập nhật unreadCount và lastReadMessageId
         Query query = new Query(Criteria.where("id").is(conversationId)
                 .and("members.userId").is(currentUserId));
         Update update = new Update().set("unreadCounts." + currentUserId, 0);
@@ -223,109 +219,40 @@ public class ConversationServiceImpl implements ConversationService {
         }
     }
 
+
+    @Override
+    public void deleteConversationForMe(String conversationId) {
+        String currentUserId = securityUtil.getCurrentUserId();
+
+        Conversation conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
+
+        conversation.getMembers().stream()
+                .filter(m -> m.getUserId().equals(currentUserId))
+                .findFirst()
+                .ifPresent(member -> {
+                    member.setActive(false);
+                    member.setRemovedAt(LocalDateTime.now());
+                });
+
+        if (conversation.getDeletedBefore() == null) {
+            conversation.setDeletedBefore(new HashMap<>());
+        }
+        conversation.getDeletedBefore().put(currentUserId, LocalDateTime.now());
+
+        if (conversation.getUnreadCounts() != null) {
+            conversation.getUnreadCounts().remove(currentUserId);
+        }
+
+        conversationRepository.save(conversation);
+        log.info("[Conversation] User {} deleted conversation {}", currentUserId, conversationId);
+    }
+
     // ─────────────────────────── Private helpers ───────────────────────────
 
-    /**
-     * Resolve đối tượng ChatUser cho partner,
-     * với logic đặc biệt cho "My Documents" (chat với chính mình).
-     */
-    private ChatUser resolvePartner(String partnerId, String currentUserId, Map<String, ChatUser> userCache) {
-        if (partnerId.equals(currentUserId)) {
-            return ChatUser.builder()
-                    .id(partnerId)
-                    .fullName("My Documents")
-                    .avatar("cloud.png")
-                    .showSeenStatus(false)
-                    .build();
-        }
-        return userCache.getOrDefault(partnerId,
-                ChatUser.builder().id(partnerId).fullName("Người dùng mới").build());
-    }
-
-    private boolean canViewerSeeStatus(String currentUserId, Map<String, ChatUser> userCache) {
-        ChatUser currentUser = userCache.get(currentUserId);
-        return currentUser != null && currentUser.isShowSeenStatus();
-    }
-
-    private ConversationResponse buildConversationResponse(
-            Conversation room, ChatUser partner, String currentUserId,
-            Map<String, ChatUser> userCache, String baseUrl, boolean viewerCanSee, String friendshipStatus) {
-
-        LastMessageInfo last = room.getLastMessage();
-        List<ConversationMemberResponse> members = buildMembersWithCache(
-                room, currentUserId, userCache, baseUrl, viewerCanSee);
-
-        // Với Group: name/avatar lấy từ Conversation entity
-        // Với 1-1: name/avatar lấy từ partner ChatUser
-        String partnerDisplayName = safeDisplayName(partner != null ? partner.getFullName() : null);
-        String displayName = room.isGroup() ? room.getName() : partnerDisplayName;
-        if (displayName == null || displayName.isBlank()) {
-            displayName = "Người dùng";
-        }
-        String displayAvatar = room.isGroup()
-                ? (room.getAvatar() != null ? baseUrl + room.getAvatar() : null)
-                : (partner.getAvatar() != null ? baseUrl + partner.getAvatar() : null);
-
-        boolean isFriend = "ACCEPTED".equals(friendshipStatus);
-        String lastMsgDisplay = last != null ? last.getContent() : "";
-
-        return ConversationResponse.builder()
-                .id(room.getId())
-                .recipientId(partner.getId())
-                .name(displayName)
-                .avatar(displayAvatar)
-                .status(isFriend ? (room.isGroup() ? null : partner.getStatus()) : null)
-                .lastSeenAt(isFriend ? (room.isGroup() ? null : partner.getLastUpdatedAt()) : null)
-                .friendshipStatus(friendshipStatus)
-                .isGroup(room.isGroup())
-                .lastMessage(lastMsgDisplay)
-                .lastMessageId(last != null ? last.getMessageId() : null)
-                .lastMessageTime(last != null ? last.getTimestamp() : null)
-                .isLastMessageFromMe(last != null && last.getSenderId() != null
-                        && last.getSenderId().equals(currentUserId))
-                .lastMessageType(last != null ? last.getType() : MessageType.CHAT)
-                .unreadCount(room.getUnreadCounts() != null
-                        ? room.getUnreadCounts().getOrDefault(currentUserId, 0) : 0)
-                .lastMessageStatus(last != null ? last.getStatus() : null)
-                .members(members)
-                .build();
-    }
-
-    private String safeDisplayName(String fullName) {
-        if (fullName == null || fullName.isBlank()) {
-            return "Người dùng";
-        }
-        return fullName;
-    }
-
-    private List<ConversationMemberResponse> buildMembersWithCache(
-            Conversation room, String currentUserId, Map<String, ChatUser> userCache,
-            String baseUrl, boolean viewerCanSee) {
-
-        return room.getMembers().stream()
-                .filter(m -> !m.getUserId().equals(currentUserId))
-                .map(m -> {
-                    ChatUser memberInfo = userCache.get(m.getUserId());
-                    boolean canSeeStatus = viewerCanSee && memberInfo != null
-                            && memberInfo.isShowSeenStatus();
-
-                    return ConversationMemberResponse.builder()
-                            .userId(m.getUserId())
-                            .fullName(memberInfo != null ? memberInfo.getFullName() : "Người dùng")
-                            .avatar(memberInfo != null && memberInfo.getAvatar() != null
-                                    ? baseUrl + memberInfo.getAvatar() : null)
-                            .lastReadMessageId(canSeeStatus ? m.getLastReadMessageId() : null)
-                            .role(m.getRole() != null ? m.getRole().name() : null)
-                            .build();
-                })
-                .collect(Collectors.toList());
-    }
-
-    /**
-     * Broadcast read receipt tới tất cả thành viên khác trong phòng.
-     */
     private void broadcastReadReceipt(Conversation room, String currentUserId, String lastReadMessageId) {
         room.getMembers().stream()
+                .filter(helper::isActiveMember)
                 .filter(m -> !m.getUserId().equals(currentUserId))
                 .forEach(m -> {
                     chatUserRepository.findById(m.getUserId()).ifPresent(partnerUser -> {

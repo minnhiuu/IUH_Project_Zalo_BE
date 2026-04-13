@@ -52,6 +52,9 @@ public class UserMirrorConsumer {
             chatUserRepository.findById(event.userId()).ifPresentOrElse(user -> {
                 LocalDateTime eventTime = new Timestamp(event.timestamp()).toLocalDateTime();
                 if (user.getLastUpdatedAt() == null || user.getLastUpdatedAt().isBefore(eventTime)) {
+                    user.setFullName(event.fullName());
+                    user.setAvatar(event.avatar());
+                    user.setPhoneNumber(event.phoneNumber());
                     if (StringUtils.hasText(event.fullName())) {
                         user.setFullName(event.fullName());
                     }
@@ -68,6 +71,9 @@ public class UserMirrorConsumer {
             }, () -> {
                 ChatUser newUser = ChatUser.builder()
                         .id(event.userId())
+                        .fullName(event.fullName())
+                        .avatar(event.avatar())
+                        .phoneNumber(event.phoneNumber())
                         .fullName(StringUtils.hasText(event.fullName()) ? event.fullName() : "Người dùng mới")
                     .avatar(StringUtils.hasText(event.avatar())
                         ? S3UrlUtil.extractStorageKey(event.avatar(), baseUrl)
@@ -103,6 +109,7 @@ public class UserMirrorConsumer {
                     conversationRepository.findAllByMembersUserId(event.userId(), recentChats)
                         .forEach(room ->
                             room.getMembers().stream()
+                                .filter(m -> !Boolean.FALSE.equals(m.getActive()))
                                 .map(m -> m.getUserId())
                                 .filter(uid -> !uid.equals(event.userId()))
                                 .forEach(this::publishSocketRefresh)

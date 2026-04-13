@@ -8,6 +8,7 @@ import com.bondhub.messageservice.model.ChatUser;
 import com.bondhub.messageservice.model.Conversation;
 import com.bondhub.messageservice.model.LastMessageInfo;
 import com.bondhub.messageservice.dto.response.ConversationResponse;
+import com.bondhub.messageservice.dto.response.LastMessageResponse;
 import com.bondhub.messageservice.repository.ChatUserRepository;
 import com.bondhub.messageservice.service.conversation.ConversationService;
 import com.bondhub.common.utils.S3Util;
@@ -22,6 +23,7 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 
+import java.time.ZoneOffset;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -82,7 +84,7 @@ public class FriendshipChangedConsumer {
                 "type", "FRIENDSHIP_UPDATED",
                 "targetUserId", event.userA(),
                 "payload", Map.of(
-                        "partnerId", event.userB(), 
+                        "partnerId", event.userB(),
                         "status", status,
                         "friendshipId", event.friendshipId() != null ? event.friendshipId() : "",
                         "requestedBy", event.userA(),
@@ -93,7 +95,7 @@ public class FriendshipChangedConsumer {
                 "type", "FRIENDSHIP_UPDATED",
                 "targetUserId", event.userB(),
                 "payload", Map.of(
-                        "partnerId", event.userA(), 
+                        "partnerId", event.userA(),
                         "status", status,
                         "friendshipId", event.friendshipId() != null ? event.friendshipId() : "",
                         "requestedBy", event.userA(),
@@ -123,11 +125,21 @@ public class FriendshipChangedConsumer {
                 .avatar(partner.getAvatar() != null ? baseUrl + partner.getAvatar() : null)
                 .status(partner.getStatus())
                 .isGroup(false)
-                .lastMessage(last != null ? last.getContent() : "")
-                .lastMessageTime(last != null ? last.getTimestamp() : null)
                 .friendshipStatus("ACCEPTED")
                 .unreadCount(room.getUnreadCounts() != null
                         ? room.getUnreadCounts().getOrDefault(viewerId, 0) : 0)
+                .lastMessage(last != null ? LastMessageResponse.builder()
+                        .id(last.getMessageId())
+                        .senderId(last.getSenderId())
+                        .senderName(last.getSenderId() != null
+                                ? userCache.getOrDefault(last.getSenderId(),
+                                        ChatUser.builder().fullName("").build()).getFullName() : null)
+                        .content(last.getContent())
+                        .timestamp(last.getTimestamp() != null ? last.getTimestamp().atOffset(ZoneOffset.ofHours(7)) : null)
+                        .type(last.getType())
+                        .status(last.getStatus())
+                        .isFromMe(last.getSenderId() != null && last.getSenderId().equals(viewerId))
+                        .build() : null)
                 .members(Collections.emptyList())
                 .build();
     }

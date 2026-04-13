@@ -39,13 +39,22 @@ import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.data.mongodb.core.FindAndModifyOptions;
 
+import com.bondhub.messageservice.model.GroupSettings;
+import com.bondhub.messageservice.model.LinkPreview;
+import com.bondhub.messageservice.service.conversation.ConversationHelper;
+
+import java.time.LocalDateTime;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class MessageServiceImpl implements MessageService {
+
+    private static final Pattern JOIN_LINK_PATTERN = Pattern.compile("^https?://[^/]+/g/([a-zA-Z0-9_-]+)$");
 
     private final MessageRepository messageRepository;
     private final ConversationRepository conversationRepository;
@@ -55,6 +64,7 @@ public class MessageServiceImpl implements MessageService {
     private final MongoTemplate mongoTemplate;
     private final MessageMapper messageMapper;
     private final ConversationService conversationService;
+    private final ConversationHelper conversationHelper;
 
     @Value("${aws.s3.bucket.name}")
     private String bucketName;
@@ -74,11 +84,29 @@ public class MessageServiceImpl implements MessageService {
         // Kiểm tra quyền: user phải là thành viên của phòng chat
         Conversation room = conversationRepository.findById(conversationId)
                 .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
-        assertMember(room, currentUserId);
+        assertConversationMember(room, currentUserId);
+        ConversationMember currentMember = room.getMembers().stream()
+            .filter(m -> m.getUserId().equals(currentUserId))
+            .findFirst().orElse(null);
+        boolean isActive = currentMember != null && isActiveMember(currentMember);
 
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
-        Page<Message> messagePage = messageRepository.findByConversationIdAndNotDeleted(
-                conversationId, currentUserId, pageable);
+
+        LocalDateTime memberJoinedAt = (currentMember != null && currentMember.getJoinedAt() != null)
+            ? currentMember.getJoinedAt()
+            : LocalDateTime.of(1970, 1, 1, 0, 0);
+        LocalDateTime deletedBefore = (room.getDeletedBefore() != null)
+            ? room.getDeletedBefore().getOrDefault(currentUserId, LocalDateTime.of(1970, 1, 1, 0, 0))
+            : LocalDateTime.of(1970, 1, 1, 0, 0);
+        Page<Message> messagePage = isActive
+            ? messageRepository.findByConversationIdAndNotDeleted(conversationId, currentUserId, memberJoinedAt, deletedBefore, pageable)
+            : messageRepository.findByConversationIdAndTypeAndNotDeleted(
+                conversationId,
+                currentUserId,
+                MessageType.SYSTEM,
+                deletedBefore,
+                PageRequest.of(0, 1, Sort.by(Sort.Direction.DESC, "createdAt"))
+            );
 
         String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
         List<MessageResponse> dtos = messagePage.getContent().stream()
@@ -92,14 +120,14 @@ public class MessageServiceImpl implements MessageService {
     // ─────────────────────────── Gửi tin nhắn ───────────────────────────
 
     @Override
-    public void sendMessage(MessageSendRequest request) {
+    public void sendMessage(String conversationId, MessageSendRequest request) {
         String currentUserId = securityUtil.getCurrentUserId();
 
         // 1. Tìm phòng chat bằng ObjectId hoặc lazy creation
         Conversation room;
 
-        if (request.conversationId() != null) {
-            room = conversationRepository.findById(request.conversationId())
+        if (conversationId != null) {
+            room = conversationRepository.findById(conversationId)
                     .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
         } else if (request.recipientId() != null) {
             // Luồng Lazy Creation cho người lạ/chat mới
@@ -108,12 +136,26 @@ public class MessageServiceImpl implements MessageService {
             throw new AppException(ErrorCode.VALIDATION_ERROR);
         }
 
-        assertMember(room, currentUserId);
+        assertActiveMember(room, currentUserId);
+        conversationHelper.assertSettingAllowed(room, currentUserId, GroupSettings::isMemberCanSendMessages);
 
         // 2. Enrich sender info
         ChatUser sender = chatUserRepository.findById(currentUserId).orElse(null);
 
         // 3. Lưu tin nhắn
+        MessageType messageType = MessageType.CHAT;
+        LinkPreview linkPreview = null;
+
+        String trimmedContent = request.content() != null ? request.content().trim() : "";
+        Matcher joinLinkMatcher = JOIN_LINK_PATTERN.matcher(trimmedContent);
+        if (joinLinkMatcher.matches()) {
+            String token = joinLinkMatcher.group(1);
+            linkPreview = buildJoinLinkPreview(trimmedContent, token);
+            if (linkPreview != null) {
+                messageType = MessageType.LINK;
+            }
+        }
+
         Message message = Message.builder()
                 .conversationId(room.getId())
                 .senderId(currentUserId)
@@ -123,7 +165,8 @@ public class MessageServiceImpl implements MessageService {
                 .clientMessageId(request.clientMessageId())
                 .replyTo(request.replyTo())
                 .isForwarded(request.isForwarded())
-                .type(MessageType.CHAT)
+                .type(messageType)
+                .linkPreview(linkPreview)
                 .build();
         messageRepository.save(message);
 
@@ -131,6 +174,7 @@ public class MessageServiceImpl implements MessageService {
         String previewContent = switch (message.getType() == null ? MessageType.CHAT : message.getType()) {
             case IMAGE -> "[IMAGE]";
             case FILE -> "[FILE]";
+            case LINK -> "[LINK]";
             default -> message.getContent();
         };
         LastMessageInfo lastInfo = LastMessageInfo.builder()
@@ -146,6 +190,7 @@ public class MessageServiceImpl implements MessageService {
         Query query = new Query(Criteria.where("id").is(room.getId()));
         Update update = new Update().set("lastMessage", lastInfo);
         room.getMembers().stream()
+            .filter(this::isActiveMember)
                 .filter(m -> !m.getUserId().equals(currentUserId))
                 .forEach(m -> update.inc("unreadCounts." + m.getUserId(), 1));
 
@@ -165,7 +210,9 @@ public class MessageServiceImpl implements MessageService {
         enrichNotifications(notifPrototypes);
         ChatNotification baseNotif = notifPrototypes.get(0);
 
-        finalRoom.getMembers().forEach(member -> {
+        finalRoom.getMembers().stream()
+            .filter(this::isActiveMember)
+            .forEach(member -> {
             boolean isFromMe = member.getUserId().equals(currentUserId);
             Integer unreadCount = finalRoom.getUnreadCounts().getOrDefault(member.getUserId(), 0);
 
@@ -177,7 +224,7 @@ public class MessageServiceImpl implements MessageService {
             kafkaTemplate.send(socketEventsTopic,
                     new SocketEvent(SocketEventType.MESSAGE, member.getUserId(),
                             "/queue/messages", personalNotif));
-        });
+                });
 
         // 7. Ingest vào AI system
         log.info("[Kafka] Sending user message to 'message-created' for AI ingestion.");
@@ -197,7 +244,7 @@ public class MessageServiceImpl implements MessageService {
                 .orElseThrow(() -> new AppException(ErrorCode.MESSAGE_NOT_FOUND));
 
         if (!message.getSenderId().equals(currentUserId)) {
-            throw new AppException(ErrorCode.UNAUTHORIZED);
+            throw new AppException(ErrorCode.CHAT_NOT_SENDER);
         }
 
         message.setStatus(MessageStatus.REVOKED);
@@ -223,12 +270,24 @@ public class MessageServiceImpl implements MessageService {
      * Kiểm tra user có trong members của conversation không.
      * Nếu không → throw UNAUTHORIZED (403).
      */
-    private void assertMember(Conversation room, String userId) {
+    private void assertConversationMember(Conversation room, String userId) {
         boolean isMember = room.getMembers().stream()
                 .anyMatch(m -> m.getUserId().equals(userId));
         if (!isMember) {
-            throw new AppException(ErrorCode.UNAUTHORIZED);
+            throw new AppException(ErrorCode.CHAT_MEMBER_NOT_FOUND);
         }
+    }
+
+    private void assertActiveMember(Conversation room, String userId) {
+        boolean isMember = room.getMembers().stream()
+                .anyMatch(m -> m.getUserId().equals(userId) && isActiveMember(m));
+        if (!isMember) {
+            throw new AppException(ErrorCode.CHAT_MEMBER_NOT_FOUND);
+        }
+    }
+
+    private boolean isActiveMember(ConversationMember member) {
+        return !Boolean.FALSE.equals(member.getActive());
     }
 
     private void enrichMessages(List<MessageResponse> dtos) {
@@ -317,6 +376,54 @@ public class MessageServiceImpl implements MessageService {
             kafkaTemplate.send(socketEventsTopic,
                     new SocketEvent(SocketEventType.MESSAGE, member.getUserId(),
                             "/queue/status-updates", payload));
+        }
+    }
+
+    private LinkPreview buildJoinLinkPreview(String url, String token) {
+        try {
+            Conversation target = conversationRepository.findByJoinLinkToken(token).orElse(null);
+            if (target == null || !target.isGroup()) return null;
+
+            GroupSettings settings = target.getSettings();
+            if (settings == null || !settings.isJoinByLinkEnabled()) return null;
+
+            Set<ConversationMember> activeMembers = target.getMembers().stream()
+                    .filter(m -> !Boolean.FALSE.equals(m.getActive()))
+                    .collect(Collectors.toSet());
+
+            Set<String> memberIds = activeMembers.stream()
+                    .map(ConversationMember::getUserId).collect(Collectors.toSet());
+            Map<String, ChatUser> userCache = chatUserRepository.findAllById(memberIds).stream()
+                    .collect(Collectors.toMap(ChatUser::getId, u -> u));
+
+            String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+            List<LinkPreview.MemberSnapshot> previews = activeMembers.stream()
+                    .map(ConversationMember::getUserId)
+                    .limit(5)
+                    .map(userCache::get)
+                    .filter(Objects::nonNull)
+                    .map(u -> LinkPreview.MemberSnapshot.builder()
+                            .name(u.getFullName())
+                            .avatar(u.getAvatar() != null ? baseUrl + u.getAvatar() : null)
+                            .build())
+                    .toList();
+
+            String groupName = target.getName();
+            if (groupName == null || groupName.isBlank()) {
+                groupName = conversationHelper.getDynamicGroupName(target, null, userCache);
+            }
+
+            return LinkPreview.builder()
+                    .url(url)
+                    .token(token)
+                    .groupName(groupName)
+                    .groupAvatar(target.getAvatar() != null ? baseUrl + target.getAvatar() : null)
+                    .memberCount(activeMembers.size())
+                    .memberPreviews(previews)
+                    .build();
+        } catch (Exception e) {
+            log.warn("[Chat] Failed to build join link preview for token {}: {}", token, e.getMessage());
+            return null;
         }
     }
 }

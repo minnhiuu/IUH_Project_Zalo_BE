@@ -5,7 +5,8 @@ import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.Builder;
 
 import com.bondhub.common.enums.MessageType;
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.util.Map;
 
 import lombok.With;
 
@@ -24,10 +25,13 @@ public record ChatNotification(
                 String content,
                 MessageType type,
                 String clientMessageId,
-                @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss.SSS") LocalDateTime timestamp,
+                @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss.SSSXXX", timezone = "GMT+7")
+                OffsetDateTime timestamp,
                 Integer unreadCount,
                 ReplyMetadataResponse replyTo,
                 boolean isForwarded,
                 boolean isFromMe,
-                MessageStatus status) {
+                MessageStatus status,
+                Map<String, Object> metadata,
+                LinkPreviewResponse linkPreview) {
 }

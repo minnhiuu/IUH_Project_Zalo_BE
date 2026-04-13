@@ -3,7 +3,7 @@ package com.bondhub.messageservice.service.message;
 import com.bondhub.common.dto.PageResponse;
 import com.bondhub.common.dto.client.messageservice.MessageSendRequest;
 import com.bondhub.messageservice.dto.response.MessageResponse;
-
+import com.bondhub.messageservice.model.Message;
 import java.util.List;
 
 public interface MessageService {
@@ -18,7 +18,7 @@ public interface MessageService {
      * Gửi tin nhắn vào phòng chat.
      * Kiểm tra currentUser có trong members không.
      */
-    void sendMessage(MessageSendRequest request);
+    void sendMessage(String conversationId, MessageSendRequest request);
 
     /**
      * Thu hồi tin nhắn (chỉ người gửi).
