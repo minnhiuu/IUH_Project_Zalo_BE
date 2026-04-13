@@ -123,6 +123,11 @@ public enum ErrorCode {
         STORY_BLOCKED(HttpStatus.FORBIDDEN, 2306, "error.block.story.blocked"),
         COMMUNICATION_BLOCKED(HttpStatus.FORBIDDEN, 2307, "error.block.communication.blocked"),
 
+        // Pin errors (44xx)
+        CHAT_MAX_PINNED_MESSAGES(HttpStatus.BAD_REQUEST, 4401, "error.chat.max.pinned.messages"),
+        CHAT_MESSAGE_NOT_PINNED(HttpStatus.BAD_REQUEST, 4402, "error.chat.message.not.pinned"),
+        CHAT_MESSAGE_ALREADY_PINNED(HttpStatus.BAD_REQUEST, 4403, "error.chat.message.already.pinned"),
+
         ;
 
         private final HttpStatus httpStatus;

@@ -269,4 +269,15 @@ public class ConversationServiceImpl implements ConversationService {
                     });
                 });
     }
+
+    @Override
+    public Set<String> getConversationMemberIds(String conversationId) {
+        return conversationRepository.findById(conversationId)
+                .map(conv -> conv.getMembers().stream()
+                        .filter(helper::isActiveMember)
+                        .map(m -> m.getUserId())
+                        .collect(java.util.stream.Collectors.toSet()))
+                .orElse(java.util.Collections.emptySet());
+    }
 }
+
