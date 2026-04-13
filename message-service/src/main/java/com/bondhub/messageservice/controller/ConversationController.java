@@ -9,10 +9,8 @@ import com.bondhub.messageservice.dto.response.ConversationResponse;
 import com.bondhub.messageservice.dto.response.GroupMemberListItemResponse;
 import com.bondhub.messageservice.dto.response.JoinGroupPreviewResponse;
 import com.bondhub.messageservice.dto.response.SearchMemberResponse;
-import com.bondhub.messageservice.model.PinnedMessageInfo;
 import com.bondhub.messageservice.service.conversation.ConversationService;
 import com.bondhub.messageservice.service.conversation.GroupConversationService;
-import com.bondhub.messageservice.service.message.PinService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -32,8 +30,7 @@ import java.util.Map;
 public class ConversationController {
 
     private final ConversationService conversationService;
-    private final GroupConversationService groupConversationService;
-    private final PinService pinService;
+        private final GroupConversationService groupConversationService;
 
     @GetMapping
     @Operation(summary = "Get conversations of current user (paginated)")
@@ -104,7 +101,7 @@ public class ConversationController {
     @DeleteMapping("/{conversationId}/groups")
     @Operation(summary = "Disband group conversation (Owner only)")
     public ResponseEntity<ApiResponse<Void>> disbandGroup(@PathVariable String conversationId) {
-        groupConversationService.disbandGroup(conversationId);
+                groupConversationService.disbandGroup(conversationId);
         return ResponseEntity.ok(ApiResponse.success(null));
     }
 
@@ -114,7 +111,7 @@ public class ConversationController {
             @PathVariable String conversationId,
             @RequestParam(defaultValue = "false") boolean silent,
             @RequestParam(required = false) String transferTo) {
-        groupConversationService.leaveGroup(conversationId, silent, transferTo);
+                groupConversationService.leaveGroup(conversationId, silent, transferTo);
         return ResponseEntity.ok(ApiResponse.success(null));
     }
 
@@ -125,6 +122,7 @@ public class ConversationController {
         return ResponseEntity.ok(ApiResponse.success(
                 groupConversationService.getFriendsDirectory(conversationId)));
     }
+
 
     @GetMapping("/search-members")
     @Operation(summary = "Search friends (by name) or strangers (by phone) to add to group")
@@ -181,7 +179,7 @@ public class ConversationController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         return ResponseEntity.ok(ApiResponse.success(
-                groupConversationService.getGroupMembers(conversationId, query, page, size)));
+                                groupConversationService.getGroupMembers(conversationId, query, page, size)));
     }
 
     @PostMapping("/{conversationId}/join-link")
@@ -210,28 +208,5 @@ public class ConversationController {
     public ResponseEntity<ApiResponse<ConversationResponse>> joinByLink(@PathVariable String token) {
         return ResponseEntity.ok(ApiResponse.success(
                 groupConversationService.joinByLink(token)));
-    }
-
-    @GetMapping("/{conversationId}/pins")
-    @Operation(summary = "Get pinned messages for a conversation")
-    public ResponseEntity<ApiResponse<List<PinnedMessageInfo>>> getPins(@PathVariable String conversationId) {
-        return ResponseEntity.ok(ApiResponse.success(pinService.getPins(conversationId)));
-    }
-
-    @PostMapping("/{conversationId}/messages/{messageId}/pin")
-    @Operation(summary = "Pin a message in a conversation (max 3)")
-    public ResponseEntity<ApiResponse<PinnedMessageInfo>> pinMessage(
-            @PathVariable String conversationId,
-            @PathVariable String messageId) {
-        return ResponseEntity.ok(ApiResponse.success(pinService.pinMessage(conversationId, messageId)));
-    }
-
-    @DeleteMapping("/{conversationId}/messages/{messageId}/pin")
-    @Operation(summary = "Unpin a message from a conversation")
-    public ResponseEntity<ApiResponse<Void>> unpinMessage(
-            @PathVariable String conversationId,
-            @PathVariable String messageId) {
-        pinService.unpinMessage(conversationId, messageId);
-        return ResponseEntity.ok(ApiResponse.success(null));
     }
 }

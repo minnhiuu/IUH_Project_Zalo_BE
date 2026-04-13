@@ -27,7 +27,7 @@ public class ChatUser {
     String avatar;
     LocalDateTime lastUpdatedAt;
 
-    @Indexed(unique = true, sparse = true)
+    @Indexed(unique = true)
     String phoneNumber;
 
     @Indexed

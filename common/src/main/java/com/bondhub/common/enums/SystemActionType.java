@@ -14,7 +14,5 @@ public enum SystemActionType {
     UPDATE_SETTINGS,
     JOIN_BY_LINK,
     GENERATE_JOIN_LINK,
-    REFRESH_JOIN_LINK,
-    PIN_MESSAGE,
-    UNPIN_MESSAGE
+    REFRESH_JOIN_LINK
 }
