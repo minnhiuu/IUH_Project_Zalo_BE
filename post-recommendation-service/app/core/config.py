@@ -3,7 +3,6 @@ from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.core.constants import (
-    DEFAULT_API_V1_PREFIX,
     DEFAULT_EUREKA_SERVER_URL,
     DEFAULT_PORT,
     DEFAULT_SERVICE_NAME,
@@ -23,7 +22,6 @@ class Settings(BaseSettings):
     app_env: str = "dev"
     debug: bool = True
 
-    api_v1_prefix: str = DEFAULT_API_V1_PREFIX
     host: str = "0.0.0.0"
     port: int = DEFAULT_PORT
     log_level: str = "INFO"
@@ -43,9 +41,9 @@ class Settings(BaseSettings):
     qdrant_timeout_seconds: float = 5.0
     qdrant_collection_name: str = "post_vectors"
     qdrant_user_collection_name: str = "user_vectors"
-    qdrant_vector_size: int = 384
+    qdrant_vector_size: int = 768
 
-    embedding_model_name: str = "sentence-transformers/all-MiniLM-L6-v2"
+    embedding_model_name: str = "BAAI/bge-base-en-v1.5"
     embedding_device: str = "cpu"
 
     kafka_enabled: bool = True
@@ -58,11 +56,17 @@ class Settings(BaseSettings):
     kafka_post_deleted_topic: str = "social-feed.post.deleted"
     kafka_user_created_topic: str = "user.created"
     kafka_user_interaction_topic: str = "user.interaction"
+    kafka_post_view_recorded_topic: str = "social-feed.post.view.recorded"
+    kafka_post_dislike_recorded_topic: str = "social-feed.post.dislike.recorded"
+    kafka_dislike_consumer_group_id: str = "post-recommendation-service-dislike-group"
 
     social_feed_service_url: str = "http://social-feed-service"
+    friend_service_url: str = "http://friend-service"
     user_vector_alpha: float = 0.7
     user_vector_interaction_limit: int = 20
     user_vector_decay_half_life_days: float = 7.0
+    negative_feedback_learning_rate: float = 0.05
+
 
     mongodb_uri: str = "mongodb://localhost:27018"
     mongodb_database: str = "post_recommendation"

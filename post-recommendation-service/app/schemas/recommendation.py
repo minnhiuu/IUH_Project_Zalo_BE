@@ -9,11 +9,14 @@ class FeedItem(BaseModel):
     post_id: str
     author_id: str | None = None
     group_id: str | None = None
-    title: str | None = None
+    post_type: str | None = None
     caption: str | None = None
-    description: str | None = None
     hashtags: list[str] = Field(default_factory=list)
     visibility: str | None = None
+    location_name: str | None = None
+    media_types: list[str] = Field(default_factory=list)
+    music_title: str | None = None
+    music_artist: str | None = None
     stats: dict = Field(default_factory=dict)
 
     # Ranking signals (exposed for transparency / debugging)

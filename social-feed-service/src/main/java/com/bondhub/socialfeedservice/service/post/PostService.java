@@ -25,4 +25,32 @@ public interface PostService {
     PostResponse updatePost(String postId, UpdatePostRequest request);
 
     void deletePost(String postId);
+
+    /**
+     * Fetch the most-recent posts authored by the supplied user IDs.
+     *
+     * <p>Used internally by the recommendation service to assemble the
+     * {@code friend_posts} and {@code peer_posts} candidate streams.
+     *
+     * @param authorIds List of author user IDs to query.
+     * @param postType  Optional PostType name filter (e.g. {@code "FEED"}, {@code "REEL"}).
+     *                  Pass {@code null} to return all active post types.
+     * @param limit     Maximum total posts to return (capped by caller before this method).
+     * @return Flat list of matching {@link PostResponse} objects, ordered most-recent first.
+     */
+    List<PostResponse> getPostsByAuthors(List<String> authorIds, String postType, int limit);
+
+    /**
+     * Hydrate an ordered list of post IDs into full {@link PostResponse} objects.
+     *
+     * <p>The returned list preserves the order of {@code postIds} so that
+     * recommendation ranking is not disturbed.  Post IDs that cannot be found
+     * (e.g. soft-deleted) are silently skipped.
+     *
+     * @param postIds       Ordered list of post IDs to fetch (recommendation rank order).
+     * @param currentUserId ID of the requesting user (used to resolve reaction state).
+     * @return Ordered list of {@link PostResponse} objects.
+     */
+    List<PostResponse> getPostsByIds(List<String> postIds, String currentUserId);
 }
+

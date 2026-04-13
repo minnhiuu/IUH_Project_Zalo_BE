@@ -39,6 +39,7 @@ Stage 4 · Ranking with Reciprocal Rank Fusion (RRF)
 import asyncio
 import logging
 import math
+import time
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 from pymongo.database import Database
@@ -48,6 +49,8 @@ from app.clients import social_feed_client
 from app.repositories import recommendation_repository
 from app.schemas.recommendation import FeedItem, FeedResponse
 
+from app.services.dynamic_vector_service import compute_global_centroid
+
 logger = logging.getLogger(__name__)
 
 # ── Constants ──────────────────────────────────────────────────────────────
@@ -55,6 +58,7 @@ logger = logging.getLogger(__name__)
 _RECALL_LIMIT: int = 100          # Stage 1: candidates fetched from Qdrant
 _PEER_LIMIT: int = 20             # Stage 3: number of interest peers
 _RRF_K: float = 60.0             # RRF smoothing constant (standard value)
+_VECTOR_NAME: str = "fast-bge-base-en-v1.5"  # Named vector in Qdrant collections
 
 _W_SEMANTIC: float = 0.6         # Stage 4 weight — semantic cosine similarity
 _W_SOCIAL: float = 0.3           # Stage 4 weight — social peer signal
@@ -87,17 +91,17 @@ def _popularity_score(stats: dict) -> float:
     Returns:
         A non-negative float.
     """
-    views = max(0, int(stats.get("viewCount") or stats.get("view_count") or 0))
-    reactions = max(0, int(stats.get("reactionCount") or stats.get("reaction_count") or 0))
+    views = max(0, int(stats.get("view_count") or 0))
+    reactions = max(0, int(stats.get("reaction_count") or 0))
     return math.log1p(views) + 0.5 * math.log1p(reactions)
 
 
-def _rrf_score(ranks: dict[str, int], weight: float) -> float:
+def _rrf_score(rank: int, weight: float) -> float:
     """
     Reciprocal Rank Fusion contribution for a single ranked list.
 
     Args:
-        ranks: Mapping of post_id → 0-based rank in this list.
+        rank: The 0-based rank in this list.
         weight: The list's contribution weight (must sum to 1.0 across all lists).
 
     Returns:
@@ -107,7 +111,7 @@ def _rrf_score(ranks: dict[str, int], weight: float) -> float:
         RRF(d) for a single list = weight / (rank(d) + K_rrf)
         Posts absent from a list receive rank = len(list) + 1 (last place).
     """
-    return weight / (ranks + _RRF_K)
+    return weight / (rank + _RRF_K)
 
 
 def _build_rrf_scores(
@@ -205,11 +209,17 @@ class RecommenderEngine:
             raise ValueError("user_id must not be blank")
 
         user_point_id = _to_qdrant_point_id(user_id)
+        t_start = time.perf_counter()
+        logger.info("[Pipeline] START user_id=%s page=%d page_size=%d", user_id, page, page_size)
 
         # ── Stage 1: Recall ───────────────────────────────────────────────
+        t1 = time.perf_counter()
         candidates, user_vector = await self._stage1_recall(user_point_id, user_id)
+        logger.info("[Pipeline] Stage1 done in %.0fms — %d candidates",
+                    (time.perf_counter() - t1) * 1000, len(candidates))
 
         if not candidates:
+            logger.warning("[Pipeline] Stage1 returned 0 candidates — returning empty feed for user_id=%s", user_id)
             return FeedResponse(
                 user_id=user_id,
                 items=[],
@@ -219,9 +229,13 @@ class RecommenderEngine:
             )
 
         # ── Stage 2: Filtering ────────────────────────────────────────────
+        t2 = time.perf_counter()
         candidates = await self._stage2_filter(candidates, user_id)
+        logger.info("[Pipeline] Stage2 done in %.0fms — %d candidates remaining",
+                    (time.perf_counter() - t2) * 1000, len(candidates))
 
         if not candidates:
+            logger.warning("[Pipeline] Stage2 filtered all candidates — returning empty feed for user_id=%s", user_id)
             return FeedResponse(
                 user_id=user_id,
                 items=[],
@@ -231,15 +245,27 @@ class RecommenderEngine:
             )
 
         # ── Stage 3: Social Signal ────────────────────────────────────────
+        t3 = time.perf_counter()
         social_post_counts = await self._stage3_social_signal(user_vector, user_id)
+        logger.info("[Pipeline] Stage3 done in %.0fms — %d posts with social signal",
+                    (time.perf_counter() - t3) * 1000, len(social_post_counts))
 
         # ── Stage 4: Ranking with RRF ─────────────────────────────────────
+        t4 = time.perf_counter()
         ranked = self._stage4_rank(candidates, social_post_counts)
+        logger.info("[Pipeline] Stage4 done in %.0fms — %d ranked items",
+                    (time.perf_counter() - t4) * 1000, len(ranked))
 
         # Paginate
         start = page * page_size
         end = start + page_size
         page_items = ranked[start:end]
+
+        logger.info(
+            "[Pipeline] DONE in %.0fms — returning %d/%d items (page=%d) for user_id=%s",
+            (time.perf_counter() - t_start) * 1000,
+            len(page_items), len(ranked), page, user_id,
+        )
 
         return FeedResponse(
             user_id=user_id,
@@ -261,45 +287,79 @@ class RecommenderEngine:
         collection and performs an approximate nearest-neighbour search over
         ``post_vectors`` to get the top-_RECALL_LIMIT semantic candidates.
 
+        Cold-start fallback: when the user has no vector, or has both no
+        initialInterests and no interactions with the system, the Global
+        Centroid (mean of all post vectors) is used as the query vector so
+        the user still receives "generally appealing" content.
+
         Args:
             user_point_id: Qdrant UUID for the user point.
             user_id: Human-readable user ID (for logging).
 
         Returns:
-            A tuple of (candidates_list, user_vector).
+            A tuple of (candidates_list, query_vector).
             Each candidate dict has keys: post_id, semantic_score, payload.
 
         Raises:
-            RuntimeError: If no user vector exists in Qdrant.
+            RuntimeError: If Qdrant is completely unreachable.
         """
         try:
             user_points = self._qdrant.retrieve(
                 collection_name=self._settings.qdrant_user_collection_name,
                 ids=[user_point_id],
-                with_vectors=True,
+                with_vectors=[_VECTOR_NAME],
+                with_payload=True,
             )
         except Exception as exc:
             logger.exception("Qdrant retrieve failed for user_id=%s", user_id)
             raise RuntimeError(f"Qdrant unavailable: {exc}") from exc
 
-        if not user_points or user_points[0].vector is None:
-            raise RuntimeError(
-                f"No vector found in Qdrant for user_id={user_id}. "
-                "The user may not have been indexed yet."
-            )
+        # Determine if user has a personalised vector with interests or interactions
+        user_vector: list[float] | None = None
+        has_initial_interests = False
+        has_interactions = False
 
-        raw_vec = user_points[0].vector
-        if isinstance(raw_vec, dict):
-            raw_vec = next(iter(raw_vec.values()))
-        user_vector: list[float] = raw_vec
+        if user_points and user_points[0].vector is not None:
+            raw_vec = user_points[0].vector
+            if isinstance(raw_vec, dict):
+                raw_vec = next(iter(raw_vec.values()))
+            user_vector = raw_vec
+
+            payload = user_points[0].payload or {}
+            initial_interests = payload.get("initial_interests") or []
+            has_initial_interests = len(initial_interests) > 0
+            has_interactions = (payload.get("vector_version") or 0) > 0
+
+        is_cold_start = user_vector is None or (not has_initial_interests and not has_interactions)
+
+        if is_cold_start:
+            logger.info(
+                "[Pipeline] Cold-start for user_id=%s (vector=%s, interests=%s, interactions=%s) — "
+                "falling back to global centroid",
+                user_id,
+                "present" if user_vector is not None else "missing",
+                "yes" if has_initial_interests else "no",
+                "yes" if has_interactions else "no",
+            )
+            centroid = compute_global_centroid()
+            if centroid is None:
+                logger.warning(
+                    "[Pipeline] Global centroid unavailable — returning empty for user_id=%s",
+                    user_id,
+                )
+                return [], []
+            # Use the centroid as the query vector
+            user_vector = centroid
 
         try:
-            results = self._qdrant.search(
+            response = self._qdrant.query_points(
                 collection_name=self._settings.qdrant_collection_name,
-                query_vector=user_vector,
+                query=user_vector,
+                using=_VECTOR_NAME,
                 limit=_RECALL_LIMIT,
                 with_payload=True,
             )
+            results = response.points
         except Exception as exc:
             logger.exception("Qdrant search failed for user_id=%s", user_id)
             raise RuntimeError(f"Qdrant search unavailable: {exc}") from exc
@@ -318,9 +378,15 @@ class RecommenderEngine:
                 }
             )
 
-        logger.info(
-            "Stage1 recall: %d candidates for user_id=%s", len(candidates), user_id
-        )
+        if candidates:
+            top = candidates[0]
+            logger.info(
+                "Stage1 recall: %d candidates for user_id=%s "
+                "(top post_id=%s score=%.4f)",
+                len(candidates), user_id, top["post_id"], top["semantic_score"],
+            )
+        else:
+            logger.warning("Stage1 recall: 0 candidates for user_id=%s", user_id)
         return candidates, user_vector
 
     async def _stage2_filter(
@@ -344,19 +410,22 @@ class RecommenderEngine:
             self._db, user_id
         )
 
+        before = len(candidates)
         filtered = [
             c
             for c in candidates
             if c["post_id"] not in seen_ids
             and c["payload"].get("author_id") != user_id
         ]
+        removed_seen = sum(1 for c in candidates if c["post_id"] in seen_ids)
+        removed_self = sum(1 for c in candidates
+                           if c["payload"].get("author_id") == user_id
+                           and c["post_id"] not in seen_ids)
 
         logger.info(
-            "Stage2 filter: %d → %d candidates (seen=%d) for user_id=%s",
-            len(candidates),
-            len(filtered),
-            len(seen_ids),
-            user_id,
+            "Stage2 filter: %d → %d candidates "
+            "(seen/hidden=%d, self-authored=%d) for user_id=%s",
+            before, len(filtered), removed_seen, removed_self, user_id,
         )
         return filtered
 
@@ -387,12 +456,14 @@ class RecommenderEngine:
         """
         # Find interest peers in Qdrant user collection
         try:
-            peer_results = self._qdrant.search(
+            response = self._qdrant.query_points(
                 collection_name=self._settings.qdrant_user_collection_name,
-                query_vector=user_vector,
+                query=user_vector,
+                using=_VECTOR_NAME,
                 limit=_PEER_LIMIT + 1,  # +1 to exclude self
                 with_payload=True,
             )
+            peer_results = response.points
         except Exception:
             logger.exception(
                 "Qdrant peer search failed for user_id=%s — skipping social stage",
@@ -435,11 +506,12 @@ class RecommenderEngine:
                     seen_in_this_peer.add(pid)
 
         logger.info(
-            "Stage3 social: %d peers, %d socially-boosted posts for user_id=%s",
-            len(peer_ids),
-            len(post_peer_count),
-            user_id,
+            "Stage3 social: %d peers found, %d posts with social signal for user_id=%s",
+            len(peer_ids), len(post_peer_count), user_id,
         )
+        if post_peer_count:
+            top_social = sorted(post_peer_count.items(), key=lambda x: x[1], reverse=True)[:3]
+            logger.debug("Stage3 social top posts: %s", top_social)
         return post_peer_count
 
     def _stage4_rank(
@@ -515,11 +587,14 @@ class RecommenderEngine:
                     post_id=e["post_id"],
                     author_id=payload.get("author_id"),
                     group_id=payload.get("group_id"),
-                    title=payload.get("title"),
+                    post_type=payload.get("post_type"),
                     caption=payload.get("caption"),
-                    description=payload.get("description"),
                     hashtags=payload.get("hashtags") or [],
                     visibility=payload.get("visibility"),
+                    location_name=payload.get("location_name"),
+                    media_types=payload.get("media_types") or [],
+                    music_title=payload.get("music_title"),
+                    music_artist=payload.get("music_artist"),
                     stats=payload.get("stats") or {},
                     semantic_score=e["semantic_score"],
                     social_score=e["social_score"],
@@ -527,5 +602,18 @@ class RecommenderEngine:
                     final_score=rrf_scores.get(e["post_id"], 0.0),
                 )
             )
+
+        logger.info(
+            "Stage4 RRF ranking: %d items ranked",
+            len(feed_items),
+        )
+        if feed_items:
+            top3 = feed_items[:3]
+            for rank, item in enumerate(top3, 1):
+                logger.debug(
+                    "Stage4 top-%d: post_id=%s rrf=%.5f sem=%.4f soc=%.1f pop=%.4f",
+                    rank, item.post_id, item.final_score,
+                    item.semantic_score, item.social_score, item.popularity_score,
+                )
 
         return feed_items

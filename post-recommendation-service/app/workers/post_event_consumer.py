@@ -128,9 +128,7 @@ class PostEventConsumerWorker:
             logger.info("Deleted post vector from Qdrant: post_id=%s", post_id)
             return
 
-        title = event.get("title")
         caption = event.get("caption")
-        description = event.get("description")
 
         hashtags = event.get("hashtags")
         if hashtags is None and isinstance(event.get("content"), dict):
@@ -138,11 +136,23 @@ class PostEventConsumerWorker:
         if hashtags is None:
             hashtags = []
 
+        location_name = event.get("location_name")
+        media_types = event.get("media_types") or []
+        music_title = event.get("music_title")
+        music_artist = event.get("music_artist")
+
+        reaction_count = int(event.get("reaction_count") or 0)
+        comment_count = int(event.get("comment_count") or 0)
+        share_count = int(event.get("share_count") or 0)
+        view_count = int(event.get("view_count") or 0)
+
         content = {
-            "title": title,
             "caption": caption,
-            "description": description,
             "hashtags": hashtags,
+            "location_name": location_name,
+            "media_types": media_types,
+            "music_title": music_title,
+            "music_artist": music_artist,
         }
         semantic_text = prepare_post_text(content)
         if not semantic_text:
@@ -153,12 +163,20 @@ class PostEventConsumerWorker:
             "author_id": event.get("author_id"),
             "group_id": event.get("group_id"),
             "post_type": event.get("post_type") or event.get("postType"),
-            "title": title,
             "caption": caption,
-            "description": description,
             "hashtags": hashtags,
             "visibility": event.get("visibility"),
-            "stats": event.get("stats", {}),
+            "location_name": location_name,
+            "media_types": media_types,
+            "music_title": music_title,
+            "music_artist": music_artist,
+            # Stats stored as a flat dict for compatibility with _popularity_score
+            "stats": {
+                "reaction_count": reaction_count,
+                "comment_count": comment_count,
+                "share_count": share_count,
+                "view_count": view_count,
+            },
             "uploaded_at": event.get("uploaded_at"),
             "updated_at": event.get("updated_at"),
             "indexed_at": datetime.now(UTC).isoformat(),
@@ -171,6 +189,7 @@ class PostEventConsumerWorker:
             ids=[qdrant_point_id],
         )
         logger.info("Upserted post vector in Qdrant: topic=%s, post_id=%s", topic, post_id)
+
 
     def _to_qdrant_point_id(self, post_id: str) -> str:
         try:

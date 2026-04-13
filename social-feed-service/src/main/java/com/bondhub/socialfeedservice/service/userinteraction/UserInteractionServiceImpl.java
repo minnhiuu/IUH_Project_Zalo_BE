@@ -5,6 +5,7 @@ import com.bondhub.common.event.socialfeed.InteractionType;
 import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.socialfeedservice.dto.response.interaction.UserInteractionResponse;
 import com.bondhub.socialfeedservice.model.UserInteraction;
+import com.bondhub.socialfeedservice.publisher.PostDislikeEventPublisher;
 import com.bondhub.socialfeedservice.publisher.PostViewEventPublisher;
 import com.bondhub.socialfeedservice.repository.UserInteractionRepository;
 import lombok.AccessLevel;
@@ -27,6 +28,7 @@ public class UserInteractionServiceImpl implements UserInteractionService {
 
     UserInteractionRepository userInteractionRepository;
     PostViewEventPublisher postViewEventPublisher;
+    PostDislikeEventPublisher postDislikeEventPublisher;
     SecurityUtil securityUtil;
 
     @Override
@@ -80,6 +82,32 @@ public class UserInteractionServiceImpl implements UserInteractionService {
 
         // Publish async event so the listener increments PostStats.viewCount
         postViewEventPublisher.publishPostViewed(postId, currentUserId);
+    }
+
+    @Override
+    public void recordDislike(String postId) {
+        String currentUserId = securityUtil.getCurrentUserId();
+
+        boolean alreadyDisliked = userInteractionRepository.existsByUserIdAndPostIdAndInteractionType(
+                currentUserId, postId, InteractionType.DISLIKE);
+
+        if (alreadyDisliked) {
+            log.debug("Dislike already recorded, skipping: userId={}, postId={}", currentUserId, postId);
+            return;
+        }
+
+        UserInteraction interaction = UserInteraction.builder()
+                .userId(currentUserId)
+                .postId(postId)
+                .interactionType(InteractionType.DISLIKE)
+                .weight(InteractionType.DISLIKE.getWeight())
+                .createdAt(Instant.now())
+                .build();
+
+        userInteractionRepository.save(interaction);
+        log.info("Recorded DISLIKE interaction: userId={}, postId={}", currentUserId, postId);
+
+        postDislikeEventPublisher.publishPostDisliked(postId, currentUserId);
     }
 
     private UserInteractionResponse toResponse(UserInteraction interaction) {

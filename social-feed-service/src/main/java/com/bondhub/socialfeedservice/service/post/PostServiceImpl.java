@@ -236,6 +236,68 @@ public class PostServiceImpl implements PostService {
         postEventPublisher.publishPostDeleted(deletedPost);
     }
 
+    @Override
+    public List<PostResponse> getPostsByAuthors(List<String> authorIds, String postType, int limit) {
+        if (authorIds == null || authorIds.isEmpty()) {
+            return List.of();
+        }
+
+        Pageable pageable = PageRequest.of(0, limit, Sort.by(Sort.Direction.DESC, "uploadedAt"));
+        String s3BaseUrl = getS3BaseUrl();
+
+        List<Post> posts;
+        if (postType != null && !postType.isBlank()) {
+            PostType type;
+            try {
+                type = PostType.valueOf(postType.toUpperCase());
+            } catch (IllegalArgumentException e) {
+                log.warn("getPostsByAuthors: unknown postType '{}', fetching all types", postType);
+                type = null;
+            }
+            posts = type != null
+                    ? postRepository.findByAuthorIdInAndPostTypeAndActiveTrueAndIsCurrentTrue(authorIds, type, pageable)
+                    : postRepository.findByAuthorIdInAndActiveTrueAndIsCurrentTrue(authorIds, pageable);
+        } else {
+            posts = postRepository.findByAuthorIdInAndActiveTrueAndIsCurrentTrue(authorIds, pageable);
+        }
+
+        List<String> allAuthorIds = posts.stream().map(Post::getAuthorId).distinct().toList();
+        Map<String, UserSummary> authorMap = userSummaryRepository.findAllById(allAuthorIds).stream()
+                .collect(Collectors.toMap(UserSummary::getId, s -> s));
+
+        return posts.stream()
+                .map(post -> postMapper.toPostResponse(post, s3BaseUrl, null, authorMap.get(post.getAuthorId())))
+                .toList();
+    }
+
+    @Override
+    public List<PostResponse> getPostsByIds(List<String> postIds, String currentUserId) {
+        if (postIds == null || postIds.isEmpty()) {
+            return List.of();
+        }
+
+        // Bulk-fetch all posts in a single query (unordered)
+        List<Post> posts = postRepository.findAllByIdInAndActiveTrueAndIsCurrentTrue(postIds);
+
+        // Build lookup maps for O(1) access
+        Map<String, Post> postMap = posts.stream()
+                .collect(Collectors.toMap(Post::getId, p -> p));
+
+        List<String> authorIds = posts.stream().map(Post::getAuthorId).distinct().toList();
+        Map<String, UserSummary> authorMap = userSummaryRepository.findAllById(authorIds).stream()
+                .collect(Collectors.toMap(UserSummary::getId, s -> s));
+
+        String s3BaseUrl = getS3BaseUrl();
+
+        // Re-stream in caller-supplied order to preserve recommendation ranking.
+        // IDs not present in postMap (soft-deleted, not found) are silently skipped.
+        return postIds.stream()
+                .map(postMap::get)
+                .filter(java.util.Objects::nonNull)
+                .map(post -> postMapper.toPostResponse(post, s3BaseUrl, null, authorMap.get(post.getAuthorId())))
+                .toList();
+    }
+
     private String getS3BaseUrl() {
         return S3Util.getS3BaseUrl(bucketName, region);
     }

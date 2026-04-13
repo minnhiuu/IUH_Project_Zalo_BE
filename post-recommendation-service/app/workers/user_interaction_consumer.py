@@ -1,8 +1,9 @@
 """
-Kafka consumer that triggers user vector updates on interaction events.
+Kafka consumer that triggers user vector updates on POST_VIEW_RECORDED events.
 
-Listens on `kafka_user_interaction_topic`. Each message is expected to carry
-at minimum a `userId` field.  Multiple messages from one poll cycle that share
+Listens on `kafka_post_view_recorded_topic` (``social-feed.post.view.recorded``).
+Each message is a ``UserInteractionEvent`` produced by the social-feed-service
+whenever a user views a post.  Multiple messages from one poll cycle that share
 the same userId are deduplicated so we only run the (relatively expensive)
 vector update once per user per batch.
 """
@@ -38,7 +39,7 @@ class UserInteractionConsumerWorker:
         self._task = asyncio.create_task(self._run(), name="user-interaction-consumer")
         logger.info(
             "Started UserInteractionConsumerWorker for topic: %s",
-            self._settings.kafka_user_interaction_topic,
+            self._settings.kafka_post_view_recorded_topic,
         )
 
     async def stop(self) -> None:
@@ -52,7 +53,7 @@ class UserInteractionConsumerWorker:
 
     async def _run(self) -> None:
         consumer = AIOKafkaConsumer(
-            self._settings.kafka_user_interaction_topic,
+            self._settings.kafka_post_view_recorded_topic,
             bootstrap_servers=self._settings.kafka_bootstrap_servers,
             group_id=self._settings.kafka_interaction_consumer_group_id,
             enable_auto_commit=True,

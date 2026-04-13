@@ -14,4 +14,6 @@ public interface UserInteractionService {
     List<UserInteractionResponse> getNewestInteractionsByUser(String userId, int limit);
 
     void recordView(String postId);
+
+    void recordDislike(String postId);
 }

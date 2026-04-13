@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 import py_eureka_client.eureka_client as eureka_client
 from fastapi import FastAPI
 
-from app.api.v1.router import api_router
+from app.api.router import api_router
 from app.core.config import get_settings
 from app.core.exception_handlers import register_exception_handlers
 from app.core.logging import setup_logging
@@ -14,6 +14,7 @@ from app.security.security_config import configure_security
 from app.workers.post_event_consumer import PostEventConsumerWorker
 from app.workers.user_event_consumer import UserEventConsumerWorker
 from app.workers.user_interaction_consumer import UserInteractionConsumerWorker
+from app.workers.post_dislike_consumer import PostDislikeConsumerWorker
 from app.clients.mongodb_client import get_mongodb_database
 from app.repositories import recommendation_repository
 
@@ -23,6 +24,7 @@ logger = logging.getLogger(__name__)
 post_event_consumer = PostEventConsumerWorker()
 user_event_consumer = UserEventConsumerWorker()
 user_interaction_consumer = UserInteractionConsumerWorker()
+post_dislike_consumer = PostDislikeConsumerWorker()
 
 
 def _instance_host() -> str:
@@ -86,10 +88,12 @@ async def lifespan(_: FastAPI):
     post_event_consumer.start()
     user_event_consumer.start()
     user_interaction_consumer.start()
+    post_dislike_consumer.start()
     yield
     await post_event_consumer.stop()
     await user_event_consumer.stop()
     await user_interaction_consumer.stop()
+    await post_dislike_consumer.stop()
     await _unregister_eureka()
 
 
@@ -101,4 +105,4 @@ app = FastAPI(
 )
 configure_security(app, settings)
 register_exception_handlers(app)
-app.include_router(api_router, prefix=settings.api_v1_prefix)
+app.include_router(api_router)

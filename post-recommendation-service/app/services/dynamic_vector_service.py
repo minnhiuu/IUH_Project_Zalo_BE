@@ -219,3 +219,196 @@ async def update_user_vector(user_id: str) -> bool:
         updated_payload["interaction_count_used"],
     )
     return True
+
+
+async def apply_negative_feedback(user_id: str, post_id: str) -> bool:
+    """
+    Push the user's interest vector away from a disliked post.
+
+    Implements the negative gradient step:
+
+        U_new = Normalize(U_old - η · I_disliked)
+
+    where η (learning rate) defaults to 0.05, ensuring a single dislike
+    nudges the vector without dramatically flipping preferences.
+
+    Returns True if the vector was updated, False on error or missing data.
+    """
+    settings = get_settings()
+    qdrant = get_qdrant_client()
+    eta = settings.negative_feedback_learning_rate
+
+    user_point_id = _to_qdrant_point_id(user_id)
+    post_point_id = _to_qdrant_point_id(post_id)
+
+    user_collection = settings.qdrant_user_collection_name
+    post_collection = settings.qdrant_collection_name
+
+    # ── 1. Retrieve current user vector ────────────────────────────────────
+    try:
+        user_points = qdrant.retrieve(
+            collection_name=user_collection,
+            ids=[user_point_id],
+            with_vectors=True,
+            with_payload=True,
+        )
+    except Exception:
+        logger.exception("Failed to retrieve user vector for negative feedback: user_id=%s", user_id)
+        return False
+
+    if not user_points or user_points[0].vector is None:
+        logger.warning("No user vector found for user_id=%s — cannot apply negative feedback", user_id)
+        return False
+
+    raw_user_vec = user_points[0].vector
+    if isinstance(raw_user_vec, dict):
+        raw_user_vec = next(iter(raw_user_vec.values()))
+    v_user = np.array(raw_user_vec, dtype=np.float32)
+    existing_payload: dict = user_points[0].payload or {}
+
+    # ── 2. Retrieve disliked post vector ───────────────────────────────────
+    try:
+        post_points = qdrant.retrieve(
+            collection_name=post_collection,
+            ids=[post_point_id],
+            with_vectors=True,
+        )
+    except Exception:
+        logger.exception("Failed to retrieve post vector for negative feedback: post_id=%s", post_id)
+        return False
+
+    if not post_points or post_points[0].vector is None:
+        logger.warning("No post vector found for post_id=%s — cannot apply negative feedback", post_id)
+        return False
+
+    raw_post_vec = post_points[0].vector
+    if isinstance(raw_post_vec, dict):
+        raw_post_vec = next(iter(raw_post_vec.values()))
+    v_disliked = np.array(raw_post_vec, dtype=np.float32)
+
+    # ── 3. Negative gradient step: U_new = Normalize(U_old - η · I_disliked) ──
+    v_new = v_user - eta * v_disliked
+    v_new = _l2_normalize(v_new)
+
+    # ── Log vector shift metrics ──────────────────────────────────────────
+    cosine_before = float(np.dot(v_user, v_disliked))
+    cosine_after = float(np.dot(v_new, v_disliked))
+    shift_magnitude = float(np.linalg.norm(v_new - v_user))
+    logger.info(
+        "Negative feedback vector shift: user_id=%s | post_id=%s | η=%.4f | "
+        "cosine(user,post) %.4f → %.4f (Δ=%.4f) | shift_magnitude=%.6f",
+        user_id,
+        post_id,
+        eta,
+        cosine_before,
+        cosine_after,
+        cosine_after - cosine_before,
+        shift_magnitude,
+    )
+
+    # ── 4. Upsert updated vector back to Qdrant ───────────────────────────
+    vector_version = int(existing_payload.get("vector_version") or _FALLBACK_VECTOR_VERSION) + 1
+
+    updated_payload = {
+        **existing_payload,
+        "updated_at": datetime.now(UTC).isoformat(),
+        "vector_version": vector_version,
+        "last_negative_feedback_post_id": post_id,
+    }
+
+    try:
+        collection_info = qdrant.get_collection(collection_name=user_collection)
+        vectors_config = collection_info.config.params.vectors
+
+        if isinstance(vectors_config, dict):
+            vector_name = next(iter(vectors_config))
+            vector_payload: dict | list = {vector_name: v_new.tolist()}
+        else:
+            vector_payload = v_new.tolist()
+
+        qdrant.upsert(
+            collection_name=user_collection,
+            points=[
+                PointStruct(
+                    id=user_point_id,
+                    vector=vector_payload,
+                    payload=updated_payload,
+                )
+            ],
+        )
+    except Exception:
+        logger.exception("Failed to upsert negative feedback vector for user_id=%s", user_id)
+        return False
+
+    logger.info(
+        "Applied negative feedback for user_id=%s | post_id=%s | η=%.3f | version=%d",
+        user_id,
+        post_id,
+        eta,
+        vector_version,
+    )
+    return True
+
+
+# ── Global Centroid (cold-start fallback) ──────────────────────────────────
+
+# How many points to sample when computing the centroid.  Scrolling the full
+# collection is expensive; a random sample large enough to be representative
+# (500-2000 points from a 768-dim space) converges quickly.
+_CENTROID_SAMPLE_LIMIT: int = 500
+
+
+def compute_global_centroid() -> list[float] | None:
+    """Compute the L2-normalised mean vector of all post vectors in Qdrant.
+
+    This "Global Centroid" represents the average content on the platform and
+    is used as a cold-start query vector for users who have no personalised
+    interest vector yet.  An ANN search with this centroid returns "generally
+    appealing" content.
+
+    Returns:
+        The centroid as a plain list of floats, or ``None`` if no vectors
+        could be sampled (empty collection / Qdrant error).
+    """
+    settings = get_settings()
+    qdrant = get_qdrant_client()
+    collection = settings.qdrant_collection_name
+
+    try:
+        scroll_result, _ = qdrant.scroll(
+            collection_name=collection,
+            limit=_CENTROID_SAMPLE_LIMIT,
+            with_vectors=True,
+            with_payload=False,
+        )
+    except Exception:
+        logger.exception("Failed to scroll post_vectors for global centroid computation")
+        return None
+
+    if not scroll_result:
+        logger.warning("No points found in '%s' — cannot compute global centroid", collection)
+        return None
+
+    vectors: list[np.ndarray] = []
+    for point in scroll_result:
+        raw = point.vector
+        if raw is None:
+            continue
+        if isinstance(raw, dict):
+            raw = next(iter(raw.values()))
+        vectors.append(np.array(raw, dtype=np.float32))
+
+    if not vectors:
+        logger.warning("All sampled points had None vectors — cannot compute centroid")
+        return None
+
+    centroid = np.mean(vectors, axis=0)
+    centroid = _l2_normalize(centroid)
+
+    logger.info(
+        "Computed global centroid from %d/%d sampled post vectors (collection='%s')",
+        len(vectors),
+        len(scroll_result),
+        collection,
+    )
+    return centroid.tolist()

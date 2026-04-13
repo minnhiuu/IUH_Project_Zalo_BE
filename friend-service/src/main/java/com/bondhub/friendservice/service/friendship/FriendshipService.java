@@ -30,4 +30,10 @@ public interface FriendshipService {
     MutualFriendsResponse getMutualFriends(String userId);
     
     Integer getMutualFriendsCount(String userId);
+
+    /**
+     * Internal: returns the IDs of all accepted friends of the given user.
+     * Used by service-to-service calls that do not have a user JWT in context.
+     */
+    List<String> getFriendIds(String userId, int size);
 }

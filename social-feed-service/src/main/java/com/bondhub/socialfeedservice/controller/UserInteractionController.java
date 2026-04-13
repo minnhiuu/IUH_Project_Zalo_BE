@@ -46,5 +46,12 @@ public class UserInteractionController {
         userInteractionService.recordView(postId);
         return ResponseEntity.ok(ApiResponse.success(null));
     }
+
+    @PostMapping("/posts/{postId}/dislike")
+    @Operation(summary = "Record a DISLIKE interaction for a post (idempotent — marks 'not interested')")
+    public ResponseEntity<ApiResponse<Void>> recordDislike(@PathVariable String postId) {
+        userInteractionService.recordDislike(postId);
+        return ResponseEntity.ok(ApiResponse.success(null));
+    }
 }
 

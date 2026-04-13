@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 
 # Collection names
 _SEEN_POSTS_COLLECTION = "seen_posts"
+_DISLIKED_POSTS_COLLECTION = "disliked_posts"
 
 
 # ── Seen / hidden posts ────────────────────────────────────────────────────
@@ -78,8 +79,57 @@ async def mark_post_seen(db: Database, user_id: str, post_id: str) -> None:
         )
 
 
+# ── Disliked posts ("not interested") ─────────────────────────────────────
+
+
+async def get_disliked_post_ids(db: Database, user_id: str) -> set[str]:
+    """
+    Return the set of post_ids the user has disliked ("not interested").
+
+    These are permanently excluded from all feed sources.
+
+    Args:
+        db: The pymongo Database instance.
+        user_id: The ID of the user.
+
+    Returns:
+        A set of post_id strings.
+    """
+    try:
+        cursor = db[_DISLIKED_POSTS_COLLECTION].find(
+            {"user_id": user_id},
+            {"post_id": 1, "_id": 0},
+        )
+        return {doc["post_id"] for doc in cursor}
+    except Exception:
+        logger.exception("Failed to fetch disliked posts for user_id=%s", user_id)
+        return set()
+
+
+async def mark_post_disliked(db: Database, user_id: str, post_id: str) -> None:
+    """
+    Upsert a disliked-post record for the user so it is permanently
+    excluded from future feeds.
+
+    Args:
+        db: The pymongo Database instance.
+        user_id: The user who disliked the post.
+        post_id: The post that was disliked.
+    """
+    try:
+        db[_DISLIKED_POSTS_COLLECTION].update_one(
+            {"user_id": user_id, "post_id": post_id},
+            {"$set": {"disliked_at": datetime.now(UTC)}},
+            upsert=True,
+        )
+    except Exception:
+        logger.exception(
+            "Failed to mark post as disliked: user_id=%s, post_id=%s", user_id, post_id
+        )
+
+
 def ensure_indexes(db: Database) -> None:
-    """Create indexes on the seen_posts collection (idempotent)."""
+    """Create indexes on the seen_posts and disliked_posts collections (idempotent)."""
     try:
         db[_SEEN_POSTS_COLLECTION].create_index(
             [("user_id", ASCENDING), ("seen_at", DESCENDING)],
@@ -89,6 +139,15 @@ def ensure_indexes(db: Database) -> None:
             [("user_id", ASCENDING), ("post_id", ASCENDING)],
             name="idx_user_post_unique",
             unique=True,
+        )
+        db[_DISLIKED_POSTS_COLLECTION].create_index(
+            [("user_id", ASCENDING), ("post_id", ASCENDING)],
+            name="idx_disliked_user_post_unique",
+            unique=True,
+        )
+        db[_DISLIKED_POSTS_COLLECTION].create_index(
+            [("user_id", ASCENDING), ("disliked_at", DESCENDING)],
+            name="idx_disliked_user_id_disliked_at",
         )
     except Exception:
         logger.exception("Failed to create recommendation repository indexes")

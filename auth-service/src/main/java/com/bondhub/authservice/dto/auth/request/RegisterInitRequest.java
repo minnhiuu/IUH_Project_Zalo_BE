@@ -11,15 +11,20 @@ import java.util.Set;
  * Server will validate, generate OTP, and send email
  */
 public record RegisterInitRequest(
-                @NotBlank(message = "{validation.email.required}") @Email(message = "{validation.email.invalid}") String email,
+                @NotBlank(message = "{validation.email.required}") @Email(message = "{validation.email.invalid}")
+                String email,
 
-                @NotBlank(message = "{validation.password.required}") @Size(min = 8, message = "{validation.password.size}") String password,
+                @NotBlank(message = "{validation.password.required}") @Size(min = 8, message = "{validation.password.size}")
+                String password,
 
-                @NotBlank(message = "{validation.confirmPassword.required}") String confirmPassword,
+                @NotBlank(message = "{validation.confirmPassword.required}")
+                String confirmPassword,
 
-                @NotBlank(message = "{validation.fullName.required}") String fullName,
+                @NotBlank(message = "{validation.fullName.required}")
+                String fullName,
 
-                @Pattern(regexp = "^[0-9]{10,15}$", message = "{validation.phoneNumber.pattern}") String phoneNumber,
+                @Pattern(regexp = "^[0-9]{10,15}$", message = "{validation.phoneNumber.pattern}")
+                String phoneNumber,
 
                 @Size(max = 10)
                 Set<@Pattern(regexp = "^#[A-Za-z0-9_]{1,50}$") String> initialInterests) {

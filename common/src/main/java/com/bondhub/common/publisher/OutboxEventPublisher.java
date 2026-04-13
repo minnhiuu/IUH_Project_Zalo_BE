@@ -144,6 +144,7 @@ public class OutboxEventPublisher {
             case POST_COMMENT_COUNT_PROJECTION_REQUESTED -> kafkaTopicProperties.getSocialFeedEvents().getPostCommentCountProjectionRequested();
             case USER_INTERACTION_RECORDED -> kafkaTopicProperties.getInteractionEvents().getUserInteraction();
             case POST_VIEW_RECORDED -> kafkaTopicProperties.getSocialFeedEvents().getPostViewRecorded();
+            case POST_DISLIKE_RECORDED -> kafkaTopicProperties.getSocialFeedEvents().getPostDislikeRecorded();
         };
     }
 
@@ -159,7 +160,7 @@ public class OutboxEventPublisher {
             case POST_CREATED, POST_UPDATED, POST_DELETED -> PostEvent.class;
             case REACTION_TOGGLE_COMMAND_REQUESTED -> ReactionToggleCommandEvent.class;
             case POST_COMMENT_COUNT_PROJECTION_REQUESTED -> PostCommentCountProjectionRequestedEvent.class;
-            case USER_INTERACTION_RECORDED, POST_VIEW_RECORDED -> UserInteractionEvent.class;
+            case USER_INTERACTION_RECORDED, POST_VIEW_RECORDED, POST_DISLIKE_RECORDED -> UserInteractionEvent.class;
         };
     }
 }
