@@ -7,6 +7,7 @@ import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
 import com.bondhub.common.dto.client.fileservice.FileUploadResponse;
 import com.bondhub.messageservice.dto.request.GroupConversationCreateRequest;
+import com.bondhub.messageservice.dto.request.LeaveGroupRequest;
 import com.bondhub.messageservice.dto.request.UpdateGroupSettingsRequest;
 import com.bondhub.messageservice.dto.response.AdminMemberResponse;
 import com.bondhub.messageservice.dto.response.ConversationResponse;
@@ -525,7 +526,11 @@ public class GroupConversationServiceImpl implements GroupConversationService {
     }
 
     @Override
-    public void leaveGroup(String conversationId, boolean silent, String transferTo, boolean blockReJoin) {
+    public void leaveGroup(String conversationId, LeaveGroupRequest request) {
+        boolean silent = request.silent();
+        String transferTo = request.transferTo();
+        boolean blockReJoin = request.blockReJoin();
+
         String currentUserId = helper.getSecurityUtil().getCurrentUserId();
         Conversation conversation = helper.findGroupConversation(conversationId);
         helper.assertMember(conversation, currentUserId);

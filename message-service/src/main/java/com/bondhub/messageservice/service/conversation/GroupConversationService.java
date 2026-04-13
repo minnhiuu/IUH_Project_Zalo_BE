@@ -3,6 +3,7 @@ package com.bondhub.messageservice.service.conversation;
 import com.bondhub.messageservice.dto.request.UpdateGroupSettingsRequest;
 import com.bondhub.common.dto.PageResponse;
 import com.bondhub.messageservice.dto.request.GroupConversationCreateRequest;
+import com.bondhub.messageservice.dto.request.LeaveGroupRequest;
 import com.bondhub.messageservice.dto.response.AdminMemberResponse;
 import com.bondhub.messageservice.dto.response.ConversationResponse;
 import com.bondhub.messageservice.dto.response.GroupMemberListItemResponse;
@@ -32,7 +33,7 @@ public interface GroupConversationService {
 
     void disbandGroup(String conversationId);
 
-    void leaveGroup(String conversationId, boolean silent, String transferTo, boolean blockReJoin);
+    void leaveGroup(String conversationId, LeaveGroupRequest request);
 
     PageResponse<List<SearchMemberResponse>> searchMembersToAdd(String conversationId, String query, int page, int size);
 

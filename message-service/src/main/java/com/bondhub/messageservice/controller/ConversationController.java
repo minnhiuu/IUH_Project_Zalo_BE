@@ -5,6 +5,7 @@ import com.bondhub.common.dto.PageResponse;
 import com.bondhub.messageservice.dto.request.AddMembersRequest;
 import com.bondhub.messageservice.dto.request.GroupConversationCreateRequest;
 import com.bondhub.messageservice.dto.request.JoinByLinkRequest;
+import com.bondhub.messageservice.dto.request.LeaveGroupRequest;
 import com.bondhub.messageservice.dto.request.UpdateGroupSettingsRequest;
 import com.bondhub.messageservice.dto.request.UpdateJoinQuestionRequest;
 import com.bondhub.messageservice.dto.response.AdminMemberResponse;
@@ -115,10 +116,9 @@ public class ConversationController {
     @Operation(summary = "Leave group conversation (Owner can pass transferTo to transfer ownership before leaving)")
     public ResponseEntity<ApiResponse<Void>> leaveGroup(
             @PathVariable String conversationId,
-            @RequestParam(defaultValue = "false") boolean silent,
-            @RequestParam(required = false) String transferTo,
-            @RequestParam(defaultValue = "false") boolean blockReJoin) {
-                groupConversationService.leaveGroup(conversationId, silent, transferTo, blockReJoin);
+            @RequestBody(required = false) LeaveGroupRequest request) {
+        LeaveGroupRequest req = request != null ? request : new LeaveGroupRequest(false, null, false);
+        groupConversationService.leaveGroup(conversationId, req);
         return ResponseEntity.ok(ApiResponse.success(null));
     }
 
