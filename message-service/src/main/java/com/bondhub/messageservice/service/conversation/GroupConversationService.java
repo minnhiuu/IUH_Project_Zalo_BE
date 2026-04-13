@@ -1,9 +1,11 @@
 package com.bondhub.messageservice.service.conversation;
 
+import com.bondhub.messageservice.dto.request.UpdateGroupSettingsRequest;
 import com.bondhub.common.dto.PageResponse;
 import com.bondhub.messageservice.dto.request.GroupConversationCreateRequest;
 import com.bondhub.messageservice.dto.response.ConversationResponse;
 import com.bondhub.messageservice.dto.response.GroupMemberListItemResponse;
+import com.bondhub.messageservice.dto.response.JoinGroupPreviewResponse;
 import com.bondhub.messageservice.dto.response.SearchMemberResponse;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -26,6 +28,8 @@ public interface GroupConversationService {
 
     ConversationResponse updateGroupAvatar(String conversationId, MultipartFile file);
 
+    ConversationResponse updateGroupSettings(String conversationId, UpdateGroupSettingsRequest request);
+
     void disbandGroup(String conversationId);
 
     void leaveGroup(String conversationId, boolean silent, String transferTo);
@@ -35,4 +39,12 @@ public interface GroupConversationService {
     Map<String, List<SearchMemberResponse>> getFriendsDirectory(String conversationId);
 
     PageResponse<List<GroupMemberListItemResponse>> getGroupMembers(String conversationId, String query, int page, int size);
+
+    String generateJoinLink(String conversationId);
+
+    String refreshJoinLink(String conversationId);
+
+    ConversationResponse joinByLink(String token);
+
+    JoinGroupPreviewResponse getJoinPreview(String token);
 }

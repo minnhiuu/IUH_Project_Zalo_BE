@@ -4,8 +4,10 @@ import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.common.dto.PageResponse;
 import com.bondhub.messageservice.dto.request.AddMembersRequest;
 import com.bondhub.messageservice.dto.request.GroupConversationCreateRequest;
+import com.bondhub.messageservice.dto.request.UpdateGroupSettingsRequest;
 import com.bondhub.messageservice.dto.response.ConversationResponse;
 import com.bondhub.messageservice.dto.response.GroupMemberListItemResponse;
+import com.bondhub.messageservice.dto.response.JoinGroupPreviewResponse;
 import com.bondhub.messageservice.dto.response.SearchMemberResponse;
 import com.bondhub.messageservice.service.conversation.ConversationService;
 import com.bondhub.messageservice.service.conversation.GroupConversationService;
@@ -78,6 +80,15 @@ public class ConversationController {
             @RequestPart("file") MultipartFile file) {
         return ResponseEntity.ok(ApiResponse.success(
                 groupConversationService.updateGroupAvatar(conversationId, file)));
+    }
+
+    @PatchMapping("/{conversationId}/settings")
+    @Operation(summary = "Update group settings (Owner/Admin only)")
+    public ResponseEntity<ApiResponse<ConversationResponse>> updateGroupSettings(
+            @PathVariable String conversationId,
+            @RequestBody UpdateGroupSettingsRequest request) {
+        return ResponseEntity.ok(ApiResponse.success(
+                groupConversationService.updateGroupSettings(conversationId, request)));
     }
 
     @DeleteMapping("/{conversationId}")
@@ -169,5 +180,33 @@ public class ConversationController {
             @RequestParam(defaultValue = "20") int size) {
         return ResponseEntity.ok(ApiResponse.success(
                                 groupConversationService.getGroupMembers(conversationId, query, page, size)));
+    }
+
+    @PostMapping("/{conversationId}/join-link")
+    @Operation(summary = "Generate group join link for the first time (Owner/Admin only)")
+    public ResponseEntity<ApiResponse<String>> generateJoinLink(@PathVariable String conversationId) {
+        return ResponseEntity.ok(ApiResponse.success(
+                groupConversationService.generateJoinLink(conversationId)));
+    }
+
+    @PostMapping("/{conversationId}/join-link/refresh")
+    @Operation(summary = "Refresh group join link — invalidates old link (Owner/Admin only)")
+    public ResponseEntity<ApiResponse<String>> refreshJoinLink(@PathVariable String conversationId) {
+        return ResponseEntity.ok(ApiResponse.success(
+                groupConversationService.refreshJoinLink(conversationId)));
+    }
+
+    @GetMapping("/join/{token}/preview")
+    @Operation(summary = "Get group preview info before joining via invite link")
+    public ResponseEntity<ApiResponse<JoinGroupPreviewResponse>> getJoinPreview(@PathVariable String token) {
+        return ResponseEntity.ok(ApiResponse.success(
+                groupConversationService.getJoinPreview(token)));
+    }
+
+    @PostMapping("/join/{token}")
+    @Operation(summary = "Join a group conversation using an invite link token")
+    public ResponseEntity<ApiResponse<ConversationResponse>> joinByLink(@PathVariable String token) {
+        return ResponseEntity.ok(ApiResponse.success(
+                groupConversationService.joinByLink(token)));
     }
 }

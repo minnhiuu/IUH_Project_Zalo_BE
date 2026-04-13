@@ -25,4 +25,6 @@ public interface ConversationRepository extends MongoRepository<Conversation, St
      */
     @Query("{ 'members': { '$elemMatch': { 'userId': ?0, 'active': { '$ne': false } } } }")
     Page<Conversation> findAllByMembersUserId(String userId, Pageable pageable);
+
+    Optional<Conversation> findByJoinLinkToken(String joinLinkToken);
 }
