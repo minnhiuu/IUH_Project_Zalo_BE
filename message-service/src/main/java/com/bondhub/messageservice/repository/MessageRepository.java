@@ -9,6 +9,7 @@ import org.springframework.data.mongodb.repository.Query;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Repository
 public interface MessageRepository extends MongoRepository<Message, String> {
@@ -25,6 +26,15 @@ public interface MessageRepository extends MongoRepository<Message, String> {
             String conversationId,
             String userId,
             MessageType type,
+            LocalDateTime deletedBefore,
+            Pageable pageable
+    );
+
+    @Query("{ 'conversationId': ?0, 'deletedBy': { $ne: ?1 }, 'type': { $in: ?2 }, 'status': { $ne: 'REVOKED' }, 'createdAt': { $gt: ?3 } }")
+    Page<Message> findByConversationIdAndTypesAndNotDeleted(
+            String conversationId,
+            String userId,
+            List<MessageType> types,
             LocalDateTime deletedBefore,
             Pageable pageable
     );

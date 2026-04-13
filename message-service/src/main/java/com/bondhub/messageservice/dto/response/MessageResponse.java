@@ -6,7 +6,9 @@ import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.Builder;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import lombok.With;
 
@@ -29,5 +31,7 @@ public record MessageResponse(
                 boolean isForwarded,
                 MessageStatus status,
                 Map<String, Object> metadata,
-                LinkPreviewResponse linkPreview) {
+                List<AttachmentInfoResponse> attachments,
+                LinkPreviewResponse linkPreview,
+                Map<String, List<String>> reactions) {
 }
