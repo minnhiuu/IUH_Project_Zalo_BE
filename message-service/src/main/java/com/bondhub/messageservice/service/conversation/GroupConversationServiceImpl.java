@@ -34,8 +34,12 @@ import org.springframework.data.mongodb.core.aggregation.AggregationResults;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+
+import com.bondhub.common.dto.client.messageservice.MessageSendRequest;
+import com.bondhub.messageservice.service.message.MessageService;
 
 import java.text.Normalizer;
 import java.time.LocalDateTime;
@@ -55,6 +59,11 @@ public class GroupConversationServiceImpl implements GroupConversationService {
     private final SystemMessageService systemMessageService;
     private final FileServiceClient fileServiceClient;
     private final ConversationHelper helper;
+    private final MessageService messageService;
+    private final ConversationService conversationService;
+
+    @Value("${bondhub.frontend-url:http://localhost:5173}")
+    private String frontendUrl;
 
     @Override
     public ConversationResponse createGroupConversation(GroupConversationCreateRequest request) {
@@ -152,6 +161,42 @@ public class GroupConversationServiceImpl implements GroupConversationService {
                 if (requestedIds.isEmpty()) return helper.buildConversationResponseForCurrentUser(conversation, currentUserId);
             }
         }
+
+        // Check self-blocked users (left group with blockReJoin)
+        Set<String> selfBlockedIds = conversation.getSelfBlockedUserIds() != null ? conversation.getSelfBlockedUserIds() : Collections.emptySet();
+        Set<String> selfBlockedInRequest = requestedIds.stream().filter(selfBlockedIds::contains).collect(Collectors.toSet());
+        if (!selfBlockedInRequest.isEmpty()) {
+            var actorInfoForSelfBlocked = helper.fetchActorInfo(currentUserId);
+            GroupSettings settings = conversation.getSettings();
+            boolean joinLinkEnabled = settings != null && settings.isJoinByLinkEnabled()
+                    && conversation.getJoinLinkToken() != null;
+
+            for (String selfBlockedUserId : selfBlockedInRequest) {
+                var targetInfo = helper.fetchActorInfo(selfBlockedUserId);
+
+                // Send system message visible only to actor
+                systemMessageService.sendSystemMessage(conversationId, currentUserId,
+                        actorInfoForSelfBlocked.name(), actorInfoForSelfBlocked.avatar(),
+                        SystemActionType.SELF_BLOCKED_FROM_JOINING,
+                        Map.of("targetIds", List.of(selfBlockedUserId),
+                                "payload", Map.of(
+                                        "targetName", targetInfo.name(),
+                                        "targetAvatar", targetInfo.avatar() != null ? targetInfo.avatar() : "",
+                                        "joinLinkEnabled", joinLinkEnabled)),
+                        Set.of(currentUserId));
+
+                // If join link is enabled, send join link as a regular message in the direct conversation
+                if (joinLinkEnabled) {
+                    String joinLinkToken = conversation.getJoinLinkToken();
+                    String joinLinkUrl = frontendUrl + "/g/" + joinLinkToken;
+                    Conversation directConv = conversationService.getOrCreateDirectConversation(currentUserId, selfBlockedUserId);
+                    messageService.sendMessage(directConv.getId(),
+                            new MessageSendRequest(directConv.getId(), null, joinLinkUrl, UUID.randomUUID().toString(), null, false));
+                }
+            }
+            requestedIds.removeAll(selfBlockedInRequest);
+        }
+        if (requestedIds.isEmpty()) return helper.buildConversationResponseForCurrentUser(conversation, currentUserId);
 
         Map<String, ConversationMember> existingMembersById = conversation.getMembers().stream()
                 .collect(Collectors.toMap(ConversationMember::getUserId, m -> m, (a, b) -> a));
@@ -511,8 +556,8 @@ public class GroupConversationServiceImpl implements GroupConversationService {
         conversation.getDeletedBefore().put(currentUserId, LocalDateTime.now());
 
         if (blockReJoin) {
-            if (conversation.getBlockedUserIds() == null) conversation.setBlockedUserIds(new HashSet<>());
-            conversation.getBlockedUserIds().add(currentUserId);
+            if (conversation.getSelfBlockedUserIds() == null) conversation.setSelfBlockedUserIds(new HashSet<>());
+            conversation.getSelfBlockedUserIds().add(currentUserId);
         }
 
         conversationRepository.save(conversation);

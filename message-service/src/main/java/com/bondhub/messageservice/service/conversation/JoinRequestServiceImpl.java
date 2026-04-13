@@ -336,6 +336,12 @@ public class JoinRequestServiceImpl implements JoinRequestService {
 
     private ConversationResponse directJoinByLink(Conversation conversation, String currentUserId) {
         LocalDateTime now = LocalDateTime.now();
+
+        // Clear self-block on voluntary rejoin
+        if (conversation.getSelfBlockedUserIds() != null) {
+            conversation.getSelfBlockedUserIds().remove(currentUserId);
+        }
+
         ConversationMember existingMember = conversation.getMembers().stream()
                 .filter(m -> m.getUserId().equals(currentUserId))
                 .findFirst().orElse(null);
@@ -374,6 +380,12 @@ public class JoinRequestServiceImpl implements JoinRequestService {
 
     private ConversationResponse addMemberToConversation(Conversation conversation, String userId) {
         LocalDateTime now = LocalDateTime.now();
+
+        // Clear self-block if approved via join request
+        if (conversation.getSelfBlockedUserIds() != null) {
+            conversation.getSelfBlockedUserIds().remove(userId);
+        }
+
         ConversationMember existingMember = conversation.getMembers().stream()
                 .filter(m -> m.getUserId().equals(userId))
                 .findFirst().orElse(null);
