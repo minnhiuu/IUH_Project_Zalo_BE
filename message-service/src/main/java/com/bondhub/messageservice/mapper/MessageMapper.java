@@ -1,9 +1,11 @@
 package com.bondhub.messageservice.mapper;
 
+import com.bondhub.messageservice.dto.response.AttachmentInfoResponse;
 import com.bondhub.messageservice.dto.response.ChatNotification;
 import com.bondhub.messageservice.dto.response.LinkPreviewResponse;
 import com.bondhub.messageservice.dto.response.MessageResponse;
 import com.bondhub.messageservice.dto.response.ReplyMetadataResponse;
+import com.bondhub.messageservice.model.AttachmentInfo;
 import com.bondhub.messageservice.model.LinkPreview;
 import com.bondhub.messageservice.model.Message;
 import com.bondhub.messageservice.model.LastMessageInfo;
@@ -27,7 +29,9 @@ public interface MessageMapper {
     @Mapping(target = "senderAvatar", expression = "java(msg.getSenderAvatar() != null ? baseUrl + msg.getSenderAvatar() : null)")
     @Mapping(target = "replyTo", source = "msg.replyTo")
     @Mapping(target = "metadata", source = "msg.metadata")
+    @Mapping(target = "attachments", source = "msg.attachments")
     @Mapping(target = "linkPreview", source = "msg.linkPreview")
+    @Mapping(target = "reactions", source = "msg.reactions")
     MessageResponse mapToMessageResponse(Message msg, String baseUrl);
 
     @Mapping(target = "senderAvatar", expression = "java(msg.getSenderAvatar() != null ? baseUrl + msg.getSenderAvatar() : null)")
@@ -35,10 +39,14 @@ public interface MessageMapper {
     @Mapping(target = "replyTo", source = "msg.replyTo")
     @Mapping(target = "unreadCount", source = "unreadCount")
     @Mapping(target = "metadata", source = "msg.metadata")
+    @Mapping(target = "attachments", source = "msg.attachments")
     @Mapping(target = "linkPreview", source = "msg.linkPreview")
+    @Mapping(target = "reactions", source = "msg.reactions")
     ChatNotification mapToChatNotification(Message msg, String baseUrl, Integer unreadCount);
 
     ReplyMetadataResponse mapToReplyMetadataResponse(ReplyMetadata metadata);
+
+    AttachmentInfoResponse mapToAttachmentInfoResponse(AttachmentInfo info);
 
     LinkPreviewResponse mapToLinkPreviewResponse(LinkPreview linkPreview);
 

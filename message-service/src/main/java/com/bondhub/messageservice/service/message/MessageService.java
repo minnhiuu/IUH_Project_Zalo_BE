@@ -15,6 +15,11 @@ public interface MessageService {
     PageResponse<List<MessageResponse>> findChatMessages(String conversationId, int page, int size);
 
     /**
+     * Lấy tin nhắn lọc theo loại (IMAGE, VIDEO, FILE, LINK).
+     */
+    PageResponse<List<MessageResponse>> findMediaMessages(String conversationId, List<String> types, int page, int size);
+
+    /**
      * Gửi tin nhắn vào phòng chat.
      * Kiểm tra currentUser có trong members không.
      */
@@ -29,4 +34,14 @@ public interface MessageService {
      * Xóa tin nhắn chỉ phía mình.
      */
     void deleteMessageForMe(String messageId);
+
+    /**
+     * Toggle reaction (thêm nếu chưa có, xóa nếu đã có).
+     */
+    void toggleReaction(String messageId, String emoji);
+
+    /**
+     * Xóa toàn bộ reaction của current user khỏi tin nhắn.
+     */
+    void removeAllMyReactions(String messageId);
 }
