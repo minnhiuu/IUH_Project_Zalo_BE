@@ -192,7 +192,7 @@ public class GroupConversationServiceImpl implements GroupConversationService {
                     String joinLinkUrl = frontendUrl + "/g/" + joinLinkToken;
                     Conversation directConv = conversationService.getOrCreateDirectConversation(currentUserId, selfBlockedUserId);
                     messageService.sendMessage(directConv.getId(),
-                            new MessageSendRequest(directConv.getId(), null, joinLinkUrl, UUID.randomUUID().toString(), null, false));
+                            new MessageSendRequest(directConv.getId(), null, joinLinkUrl, UUID.randomUUID().toString(), null, false, null));
                 }
             }
             requestedIds.removeAll(selfBlockedInRequest);
