@@ -118,6 +118,18 @@ public enum ErrorCode {
         CHAT_JOIN_LINK_DISABLED(HttpStatus.BAD_REQUEST, 4020, "error.chat.join.link.disabled"),
         CHAT_JOIN_LINK_INVALID(HttpStatus.NOT_FOUND, 4021, "error.chat.join.link.invalid"),
         CHAT_ALREADY_MEMBER(HttpStatus.BAD_REQUEST, 4022, "error.chat.already.member"),
+        CHAT_JOIN_REQUEST_NOT_FOUND(HttpStatus.NOT_FOUND, 4023, "error.chat.join.request.not.found"),
+        CHAT_JOIN_REQUEST_ALREADY_PENDING(HttpStatus.CONFLICT, 4024, "error.chat.join.request.already.pending"),
+        CHAT_JOIN_REQUEST_ALREADY_PROCESSED(HttpStatus.BAD_REQUEST, 4025, "error.chat.join.request.already.processed"),
+        CHAT_JOIN_QUESTION_REQUIRED(HttpStatus.BAD_REQUEST, 4026, "error.chat.join.question.required"),
+        CHAT_APPROVAL_NOT_ENABLED(HttpStatus.BAD_REQUEST, 4027, "error.chat.approval.not.enabled"),
+        CHAT_USER_BLOCKED_FROM_GROUP(HttpStatus.FORBIDDEN, 4028, "error.chat.user.blocked.from.group"),
+        CHAT_USER_ALREADY_BLOCKED_FROM_GROUP(HttpStatus.CONFLICT, 4029, "error.chat.user.already.blocked.from.group"),
+        CHAT_USER_NOT_BLOCKED_FROM_GROUP(HttpStatus.BAD_REQUEST, 4030, "error.chat.user.not.blocked.from.group"),
+        CHAT_CANNOT_BLOCK_OWNER(HttpStatus.FORBIDDEN, 4031, "error.chat.cannot.block.owner"),
+        CHAT_BLOCKED_FROM_ADDING(HttpStatus.FORBIDDEN, 4032, "error.chat.blocked.from.adding"),
+        CHAT_GROUP_ADD_ALREADY_BLOCKED(HttpStatus.CONFLICT, 4033, "error.chat.group.add.already.blocked"),
+        CHAT_GROUP_ADD_NOT_BLOCKED(HttpStatus.BAD_REQUEST, 4034, "error.chat.group.add.not.blocked"),
 
         //  NOTIFICATION_TEMPLATE (23xx)
         NOTIFICATION_TEMPLATE_NOT_FOUND(HttpStatus.NOT_FOUND, 2300, "error.notification.template.not.found"),
@@ -131,6 +143,11 @@ public enum ErrorCode {
         CALL_BLOCKED(HttpStatus.FORBIDDEN, 2305, "error.block.call.blocked"),
         STORY_BLOCKED(HttpStatus.FORBIDDEN, 2306, "error.block.story.blocked"),
         COMMUNICATION_BLOCKED(HttpStatus.FORBIDDEN, 2307, "error.block.communication.blocked"),
+
+        // Pin errors (44xx)
+        CHAT_MAX_PINNED_MESSAGES(HttpStatus.BAD_REQUEST, 4401, "error.chat.max.pinned.messages"),
+        CHAT_MESSAGE_NOT_PINNED(HttpStatus.BAD_REQUEST, 4402, "error.chat.message.not.pinned"),
+        CHAT_MESSAGE_ALREADY_PINNED(HttpStatus.BAD_REQUEST, 4403, "error.chat.message.already.pinned"),
 
         // Call errors (5xxx)
         CALL_USER_BUSY(HttpStatus.CONFLICT, 5001, "error.call.user.busy"),

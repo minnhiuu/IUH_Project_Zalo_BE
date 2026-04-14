@@ -19,11 +19,14 @@ public interface ConversationRepository extends MongoRepository<Conversation, St
     @Query("{ 'isGroup': false, 'members': { '$size': 2, '$all': [ { '$elemMatch': { 'userId': ?0, 'active': { '$ne': false } } }, { '$elemMatch': { 'userId': ?1, 'active': { '$ne': false } } } ] } }")
     Optional<Conversation> findDirectConversation(String userA, String userB);
 
-    /**
-     * Lấy tất cả các phòng chat mà user là thành viên,
-     * sắp xếp theo lastMessage.timestamp DESC (xử lý bởi Pageable).
-     */
-    @Query("{ 'members': { '$elemMatch': { 'userId': ?0, 'active': { '$ne': false } } } }")
+    @Query("{ '$or': ["
+            + "  { 'members': { '$elemMatch': { 'userId': ?0, 'active': { '$ne': false } } } },"
+            + "  { '$and': ["
+            + "    { 'isGroup': true },"
+            + "    { 'members': { '$elemMatch': { 'userId': ?0, 'active': false } } },"
+            + "    { 'deletedBefore.?0': { '$exists': false } }"
+            + "  ] }"
+            + "] }")
     Page<Conversation> findAllByMembersUserId(String userId, Pageable pageable);
 
     Optional<Conversation> findByJoinLinkToken(String joinLinkToken);

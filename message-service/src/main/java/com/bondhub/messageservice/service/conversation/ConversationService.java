@@ -5,6 +5,7 @@ import com.bondhub.messageservice.dto.response.ConversationResponse;
 import com.bondhub.messageservice.model.Conversation;
 
 import java.util.List;
+import java.util.Set;
 
 public interface ConversationService {
 
@@ -17,4 +18,6 @@ public interface ConversationService {
     void markAsRead(String conversationId);
 
     void deleteConversationForMe(String conversationId);
+
+    Set<String> getConversationMemberIds(String conversationId);
 }

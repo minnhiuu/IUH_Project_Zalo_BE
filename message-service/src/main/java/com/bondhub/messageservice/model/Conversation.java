@@ -11,8 +11,10 @@ import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -61,6 +63,15 @@ public class Conversation extends BaseModel {
 
     GroupSettings settings;
 
+    @Builder.Default
+    List<PinnedMessageInfo> pinnedMessages = new ArrayList<>();
+
     @Indexed(unique = true, sparse = true)
     String joinLinkToken;
+
+    @Builder.Default
+    Set<String> blockedUserIds = new HashSet<>();
+
+    @Builder.Default
+    Set<String> selfBlockedUserIds = new HashSet<>();
 }

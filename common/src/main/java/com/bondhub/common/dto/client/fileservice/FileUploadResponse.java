@@ -4,6 +4,10 @@ import lombok.Builder;
 
 @Builder
 public record FileUploadResponse(
+    String key,
+    String url,
     String fileName,
-    String key
+    String originalFileName,
+    String contentType,
+    Long size
 ) {}
