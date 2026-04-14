@@ -14,8 +14,10 @@ import com.bondhub.messageservice.dto.response.GroupMemberListItemResponse;
 import com.bondhub.messageservice.dto.response.JoinGroupPreviewResponse;
 import com.bondhub.messageservice.dto.response.JoinRequestResponse;
 import com.bondhub.messageservice.dto.response.SearchMemberResponse;
+import com.bondhub.messageservice.model.PinnedMessageInfo;
 import com.bondhub.messageservice.service.conversation.ConversationService;
 import com.bondhub.messageservice.service.conversation.GroupConversationService;
+import com.bondhub.messageservice.service.message.PinService;
 import com.bondhub.messageservice.service.conversation.JoinRequestService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -36,7 +38,8 @@ import java.util.Map;
 public class ConversationController {
 
     private final ConversationService conversationService;
-        private final GroupConversationService groupConversationService;
+    private final GroupConversationService groupConversationService;
+    private final PinService pinService;
     private final JoinRequestService joinRequestService;
 
     @GetMapping
@@ -108,7 +111,7 @@ public class ConversationController {
     @DeleteMapping("/{conversationId}/groups")
     @Operation(summary = "Disband group conversation (Owner only)")
     public ResponseEntity<ApiResponse<Void>> disbandGroup(@PathVariable String conversationId) {
-                groupConversationService.disbandGroup(conversationId);
+        groupConversationService.disbandGroup(conversationId);
         return ResponseEntity.ok(ApiResponse.success(null));
     }
 
@@ -129,7 +132,6 @@ public class ConversationController {
         return ResponseEntity.ok(ApiResponse.success(
                 groupConversationService.getFriendsDirectory(conversationId)));
     }
-
 
     @GetMapping("/search-members")
     @Operation(summary = "Search friends (by name) or strangers (by phone) to add to group")
@@ -186,37 +188,7 @@ public class ConversationController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         return ResponseEntity.ok(ApiResponse.success(
-                                groupConversationService.getGroupMembers(conversationId, query, page, size)));
-    }
-
-    @GetMapping("/{conversationId}/group-admins")
-    @Operation(summary = "Get group owner and admins (owner first, admins sorted by name ASC)")
-    public ResponseEntity<ApiResponse<PageResponse<List<AdminMemberResponse>>>> getGroupAdmins(
-            @PathVariable String conversationId,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(ApiResponse.success(
-                groupConversationService.getGroupAdmins(conversationId, page, size)));
-    }
-
-    @GetMapping("/{conversationId}/admin-candidates")
-    @Operation(summary = "Get non-owner members for admin management (admins first then members, sorted by name ASC). Owner only.")
-    public ResponseEntity<ApiResponse<PageResponse<List<AdminMemberResponse>>>> getAdminCandidates(
-            @PathVariable String conversationId,
-            @RequestParam(required = false) String query,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(ApiResponse.success(
-                groupConversationService.getAdminCandidates(conversationId, query, page, size)));
-    }
-
-    @PatchMapping("/{conversationId}/transfer-owner/{targetUserId}")
-    @Operation(summary = "Transfer group ownership to another member (Owner only)")
-    public ResponseEntity<ApiResponse<ConversationResponse>> transferOwnership(
-            @PathVariable String conversationId,
-            @PathVariable String targetUserId) {
-        return ResponseEntity.ok(ApiResponse.success(
-                groupConversationService.transferOwnership(conversationId, targetUserId)));
+                groupConversationService.getGroupMembers(conversationId, query, page, size)));
     }
 
     @PostMapping("/{conversationId}/join-link")
@@ -331,5 +303,28 @@ public class ConversationController {
             @RequestParam(defaultValue = "20") int size) {
         return ResponseEntity.ok(ApiResponse.success(
                 groupConversationService.getBlockCandidates(conversationId, query, page, size)));
+    }
+
+    @GetMapping("/{conversationId}/pins")
+    @Operation(summary = "Get pinned messages for a conversation")
+    public ResponseEntity<ApiResponse<List<PinnedMessageInfo>>> getPins(@PathVariable String conversationId) {
+        return ResponseEntity.ok(ApiResponse.success(pinService.getPins(conversationId)));
+    }
+
+    @PostMapping("/{conversationId}/messages/{messageId}/pin")
+    @Operation(summary = "Pin a message in a conversation (max 3)")
+    public ResponseEntity<ApiResponse<PinnedMessageInfo>> pinMessage(
+            @PathVariable String conversationId,
+            @PathVariable String messageId) {
+        return ResponseEntity.ok(ApiResponse.success(pinService.pinMessage(conversationId, messageId)));
+    }
+
+    @DeleteMapping("/{conversationId}/messages/{messageId}/pin")
+    @Operation(summary = "Unpin a message from a conversation")
+    public ResponseEntity<ApiResponse<Void>> unpinMessage(
+            @PathVariable String conversationId,
+            @PathVariable String messageId) {
+        pinService.unpinMessage(conversationId, messageId);
+        return ResponseEntity.ok(ApiResponse.success(null));
     }
 }
