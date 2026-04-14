@@ -3,9 +3,10 @@ package com.bondhub.messageservice.service.conversation;
 import com.bondhub.messageservice.dto.request.UpdateGroupSettingsRequest;
 import com.bondhub.common.dto.PageResponse;
 import com.bondhub.messageservice.dto.request.GroupConversationCreateRequest;
+import com.bondhub.messageservice.dto.request.LeaveGroupRequest;
+import com.bondhub.messageservice.dto.response.AdminMemberResponse;
 import com.bondhub.messageservice.dto.response.ConversationResponse;
 import com.bondhub.messageservice.dto.response.GroupMemberListItemResponse;
-import com.bondhub.messageservice.dto.response.JoinGroupPreviewResponse;
 import com.bondhub.messageservice.dto.response.SearchMemberResponse;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -32,7 +33,7 @@ public interface GroupConversationService {
 
     void disbandGroup(String conversationId);
 
-    void leaveGroup(String conversationId, boolean silent, String transferTo);
+    void leaveGroup(String conversationId, LeaveGroupRequest request);
 
     PageResponse<List<SearchMemberResponse>> searchMembersToAdd(String conversationId, String query, int page, int size);
 
@@ -40,11 +41,22 @@ public interface GroupConversationService {
 
     PageResponse<List<GroupMemberListItemResponse>> getGroupMembers(String conversationId, String query, int page, int size);
 
+    PageResponse<List<AdminMemberResponse>> getGroupAdmins(String conversationId, int page, int size);
+
+    PageResponse<List<AdminMemberResponse>> getAdminCandidates(String conversationId, String query, int page, int size);
+
+    ConversationResponse transferOwnership(String conversationId, String targetUserId);
+
     String generateJoinLink(String conversationId);
 
     String refreshJoinLink(String conversationId);
 
-    ConversationResponse joinByLink(String token);
+    ConversationResponse blockMemberFromGroup(String conversationId, String targetUserId);
 
-    JoinGroupPreviewResponse getJoinPreview(String token);
+    ConversationResponse unblockMemberFromGroup(String conversationId, String targetUserId);
+
+    PageResponse<List<SearchMemberResponse>> getBlockedMembers(String conversationId, int page, int size);
+
+    PageResponse<List<SearchMemberResponse>> getBlockCandidates(String conversationId, String query, int page, int size);
+
 }
