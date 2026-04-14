@@ -3,8 +3,11 @@ package com.bondhub.messageservice.service.conversation;
 import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.common.dto.PageResponse;
 import com.bondhub.common.enums.SystemActionType;
+import com.bondhub.common.event.group.GroupMemberChangedEvent;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
+import com.bondhub.common.model.kafka.EventType;
+import com.bondhub.common.publisher.OutboxEventPublisher;
 import com.bondhub.common.dto.client.fileservice.FileUploadResponse;
 import com.bondhub.messageservice.dto.request.GroupConversationCreateRequest;
 import com.bondhub.messageservice.dto.request.LeaveGroupRequest;
@@ -65,6 +68,7 @@ public class GroupConversationServiceImpl implements GroupConversationService {
 
     @Value("${bondhub.frontend-url:http://localhost:5173}")
     private String frontendUrl;
+    private final OutboxEventPublisher outboxEventPublisher;
 
     @Override
     public ConversationResponse createGroupConversation(GroupConversationCreateRequest request) {
@@ -123,6 +127,13 @@ public class GroupConversationServiceImpl implements GroupConversationService {
                         "payload", Map.of("targetNames", createTargetNames, "targetAvatars", createTargetAvatars)));
 
         log.info("[Group] Created group {} by user {} with {} members", saved.getId(), currentUserId, saved.getMembers().size());
+
+        // Publish GroupMemberChangedEvent for all members (including creator)
+        publishGroupMemberEvent(saved.getId(), currentUserId, GroupMemberChangedEvent.GroupMemberAction.JOINED);
+        for (String memberId : memberIds) {
+            publishGroupMemberEvent(saved.getId(), memberId, GroupMemberChangedEvent.GroupMemberAction.JOINED);
+        }
+
         return helper.broadcastAndRespond(saved, currentUserId);
     }
 
@@ -256,6 +267,11 @@ public class GroupConversationServiceImpl implements GroupConversationService {
                 Map.of("targetIds", addedTargetIds,
                         "payload", Map.of("targetNames", addedTargetNames, "targetAvatars", addedTargetAvatars)));
 
+        // Publish GroupMemberChangedEvent for each added member
+        for (String memberId : requestedIds) {
+            publishGroupMemberEvent(conversationId, memberId, GroupMemberChangedEvent.GroupMemberAction.JOINED);
+        }
+
         return helper.broadcastAndRespond(saved, currentUserId);
     }
 
@@ -292,6 +308,9 @@ public class GroupConversationServiceImpl implements GroupConversationService {
                 SystemActionType.REMOVE_MEMBER,
                 Map.of("targetIds", List.of(targetUserId),
                         "payload", Map.of("targetName", targetInfo.name(), "targetAvatar", targetInfo.avatar() != null ? targetInfo.avatar() : "")));
+
+        // Publish GroupMemberChangedEvent for removed member
+        publishGroupMemberEvent(conversationId, targetUserId, GroupMemberChangedEvent.GroupMemberAction.LEFT);
 
         return helper.broadcastAndRespond(saved, currentUserId);
     }
@@ -517,6 +536,12 @@ public class GroupConversationServiceImpl implements GroupConversationService {
         conversationRepository.save(conversation);
         messageRepository.deleteByConversationId(conversationId);
 
+        // Publish LEFT events for all active members
+        conversation.getMembers().stream()
+                .filter(helper::isActiveMember)
+                .map(ConversationMember::getUserId)
+                .forEach(memberId -> publishGroupMemberEvent(conversationId, memberId, GroupMemberChangedEvent.GroupMemberAction.LEFT));
+
         var actorInfo = helper.fetchActorInfo(currentUserId);
         systemMessageService.sendSystemMessage(conversationId, currentUserId, actorInfo.name(), actorInfo.avatar(),
                 SystemActionType.DISBAND_GROUP, Map.of());
@@ -591,6 +616,9 @@ public class GroupConversationServiceImpl implements GroupConversationService {
                     SystemActionType.TRANSFER_OWNER,
                     Map.of("targetIds", List.of(transferTo), "payload", Map.of("targetName", transferTargetInfo.name())));
         }
+
+        // Publish GroupMemberChangedEvent for user leaving
+        publishGroupMemberEvent(conversationId, currentUserId, GroupMemberChangedEvent.GroupMemberAction.LEFT);
 
         helper.broadcastConversationUpdate(conversation);
         log.info("[Group] User {} left group {} (silent={})", currentUserId, conversationId, silent);
@@ -1185,6 +1213,21 @@ public class GroupConversationServiceImpl implements GroupConversationService {
                 .data(pageData).page(pageable.getPageNumber())
                 .totalPages(totalItems == 0 ? 0 : (int) Math.ceil((double) totalItems / pageable.getPageSize()))
                 .limit(pageable.getPageSize()).totalItems(totalItems).build();
+    }
+
+    private void publishGroupMemberEvent(String groupId, String userId, GroupMemberChangedEvent.GroupMemberAction action) {
+        try {
+            GroupMemberChangedEvent event = GroupMemberChangedEvent.builder()
+                    .groupId(groupId)
+                    .userId(userId)
+                    .action(action)
+                    .timestamp(System.currentTimeMillis())
+                    .build();
+            outboxEventPublisher.saveAndPublish(groupId, "Group", EventType.GROUP_MEMBER_CHANGED, event);
+        } catch (Exception e) {
+            log.error("[Group] Failed to publish GroupMemberChangedEvent: groupId={}, userId={}, action={}",
+                    groupId, userId, action, e);
+        }
     }
 
     private String normalizeForSort(String name) {

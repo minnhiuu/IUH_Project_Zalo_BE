@@ -73,6 +73,15 @@ public enum ErrorCode {
         NOT_AUTHORIZED_TO_CANCEL(HttpStatus.FORBIDDEN, 3008, "error.friend.not.authorized.to.cancel"),
         FRIEND_REQUEST_NOT_PENDING(HttpStatus.BAD_REQUEST, 3009, "error.friend.request.not.pending"),
 
+        // Contact errors (34xx)
+        CONTACT_IMPORT_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, 3401, "error.contact.import.failed"),
+        CONTACT_NO_VALID_PHONES(HttpStatus.BAD_REQUEST, 3402, "error.contact.no.valid.phones"),
+        CONTACT_TOO_MANY(HttpStatus.BAD_REQUEST, 3403, "error.contact.too.many"),
+
+        // Graph errors (35xx)
+        GRAPH_SYNC_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, 3501, "error.graph.sync.failed"),
+        GRAPH_QUERY_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, 3502, "error.graph.query.failed"),
+
         // Admin / ban errors
         CANNOT_BAN_YOURSELF(HttpStatus.BAD_REQUEST, 2208, "error.cannot.ban.yourself"),
         CANNOT_BAN_ADMIN(HttpStatus.FORBIDDEN, 2209, "error.cannot.ban.admin"),
@@ -139,6 +148,14 @@ public enum ErrorCode {
         CHAT_MAX_PINNED_MESSAGES(HttpStatus.BAD_REQUEST, 4401, "error.chat.max.pinned.messages"),
         CHAT_MESSAGE_NOT_PINNED(HttpStatus.BAD_REQUEST, 4402, "error.chat.message.not.pinned"),
         CHAT_MESSAGE_ALREADY_PINNED(HttpStatus.BAD_REQUEST, 4403, "error.chat.message.already.pinned"),
+
+        // Call errors (5xxx)
+        CALL_USER_BUSY(HttpStatus.CONFLICT, 5001, "error.call.user.busy"),
+        CALL_USER_NOT_FOUND(HttpStatus.NOT_FOUND, 5002, "error.call.user.not.found"),
+        CALL_SESSION_NOT_FOUND(HttpStatus.NOT_FOUND, 5003, "error.call.session.not.found"),
+        CALL_ALREADY_IN_PROGRESS(HttpStatus.CONFLICT, 5004, "error.call.already.in.progress"),
+        CALL_SELF_NOT_ALLOWED(HttpStatus.BAD_REQUEST, 5005, "error.call.self.not.allowed"),
+        CALL_TOKEN_GENERATION_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, 5006, "error.call.token.generation.failed"),
 
         ;
 
