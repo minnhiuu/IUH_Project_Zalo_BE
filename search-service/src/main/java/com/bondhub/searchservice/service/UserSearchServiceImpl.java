@@ -5,13 +5,16 @@ import co.elastic.clients.elasticsearch._types.query_dsl.TextQueryType;
 import com.bondhub.common.dto.PageResponse;
 import com.bondhub.common.dto.client.userservice.user.response.UserSummaryResponse;
 import com.bondhub.common.enums.Role;
+import com.bondhub.common.utils.S3Util;
 import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.searchservice.config.ElasticsearchProperties;
 import com.bondhub.searchservice.model.elasticsearch.UserIndex;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
+import lombok.experimental.NonFinal;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.*;
 import org.springframework.data.elasticsearch.client.elc.NativeQuery;
 import org.springframework.data.elasticsearch.core.*;
@@ -30,6 +33,15 @@ public class UserSearchServiceImpl implements UserSearchService {
     ElasticsearchOperations esOps;
     SecurityUtil securityUtil;
     ElasticsearchProperties esProperties;
+
+    @NonFinal
+    @Value("${aws.s3.bucket.name}")
+    String bucketName;
+
+    @NonFinal
+    @Value("${cloud.aws.region.static}")
+    String region;
+
 
     @Override
     public PageResponse<List<UserSummaryResponse>> searchUsers(String keyword, Pageable pageable) {
@@ -122,10 +134,11 @@ public class UserSearchServiceImpl implements UserSearchService {
 
     private UserSummaryResponse toUserSummaryResponse(UserIndex userIndex, String searchTerm) {
         boolean isPhoneMatch = searchTerm.equals(userIndex.getPhoneNumber());
+        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
         return UserSummaryResponse.builder()
                 .id(userIndex.getId())
                 .fullName(userIndex.getFullName())
-                .avatar(userIndex.getAvatar())
+                .avatar(userIndex.getAvatar() != null ? baseUrl + userIndex.getAvatar() : null)
                 .phoneNumber(isPhoneMatch ? userIndex.getPhoneNumber() : null)
                 .build();
     }
