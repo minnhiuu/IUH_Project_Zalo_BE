@@ -4,15 +4,21 @@ import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.common.dto.PageResponse;
 import com.bondhub.messageservice.dto.request.AddMembersRequest;
 import com.bondhub.messageservice.dto.request.GroupConversationCreateRequest;
+import com.bondhub.messageservice.dto.request.JoinByLinkRequest;
+import com.bondhub.messageservice.dto.request.LeaveGroupRequest;
 import com.bondhub.messageservice.dto.request.UpdateGroupSettingsRequest;
+import com.bondhub.messageservice.dto.request.UpdateJoinQuestionRequest;
+import com.bondhub.messageservice.dto.response.AdminMemberResponse;
 import com.bondhub.messageservice.dto.response.ConversationResponse;
 import com.bondhub.messageservice.dto.response.GroupMemberListItemResponse;
 import com.bondhub.messageservice.dto.response.JoinGroupPreviewResponse;
+import com.bondhub.messageservice.dto.response.JoinRequestResponse;
 import com.bondhub.messageservice.dto.response.SearchMemberResponse;
 import com.bondhub.messageservice.model.PinnedMessageInfo;
 import com.bondhub.messageservice.service.conversation.ConversationService;
 import com.bondhub.messageservice.service.conversation.GroupConversationService;
 import com.bondhub.messageservice.service.message.PinService;
+import com.bondhub.messageservice.service.conversation.JoinRequestService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -34,6 +40,7 @@ public class ConversationController {
     private final ConversationService conversationService;
     private final GroupConversationService groupConversationService;
     private final PinService pinService;
+    private final JoinRequestService joinRequestService;
 
     @GetMapping
     @Operation(summary = "Get conversations of current user (paginated)")
@@ -112,9 +119,9 @@ public class ConversationController {
     @Operation(summary = "Leave group conversation (Owner can pass transferTo to transfer ownership before leaving)")
     public ResponseEntity<ApiResponse<Void>> leaveGroup(
             @PathVariable String conversationId,
-            @RequestParam(defaultValue = "false") boolean silent,
-            @RequestParam(required = false) String transferTo) {
-        groupConversationService.leaveGroup(conversationId, silent, transferTo);
+            @RequestBody(required = false) LeaveGroupRequest request) {
+        LeaveGroupRequest req = request != null ? request : new LeaveGroupRequest(false, null, false);
+        groupConversationService.leaveGroup(conversationId, req);
         return ResponseEntity.ok(ApiResponse.success(null));
     }
 
@@ -202,14 +209,100 @@ public class ConversationController {
     @Operation(summary = "Get group preview info before joining via invite link")
     public ResponseEntity<ApiResponse<JoinGroupPreviewResponse>> getJoinPreview(@PathVariable String token) {
         return ResponseEntity.ok(ApiResponse.success(
-                groupConversationService.getJoinPreview(token)));
+                joinRequestService.getJoinPreview(token)));
     }
 
     @PostMapping("/join/{token}")
-    @Operation(summary = "Join a group conversation using an invite link token")
-    public ResponseEntity<ApiResponse<ConversationResponse>> joinByLink(@PathVariable String token) {
+    @Operation(summary = "Join a group conversation using an invite link token (creates pending request if approval is enabled)")
+    public ResponseEntity<ApiResponse<ConversationResponse>> joinByLink(
+            @PathVariable String token,
+            @RequestBody(required = false) JoinByLinkRequest request) {
         return ResponseEntity.ok(ApiResponse.success(
-                groupConversationService.joinByLink(token)));
+                joinRequestService.joinByLink(token, request)));
+    }
+
+    @PutMapping("/{conversationId}/join-question")
+    @Operation(summary = "Set/update the join question for a group (Owner/Admin only, requires membershipApprovalEnabled)")
+    public ResponseEntity<ApiResponse<Void>> updateJoinQuestion(
+            @PathVariable String conversationId,
+            @RequestBody @Valid UpdateJoinQuestionRequest request) {
+        joinRequestService.updateJoinQuestion(conversationId, request.question());
+        return ResponseEntity.ok(ApiResponse.success(null));
+    }
+
+
+    @GetMapping("/{conversationId}/join-requests")
+    @Operation(summary = "Get pending join requests for a group (Owner/Admin only)")
+    public ResponseEntity<ApiResponse<PageResponse<List<JoinRequestResponse>>>> getJoinRequests(
+            @PathVariable String conversationId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(ApiResponse.success(
+                joinRequestService.getJoinRequests(conversationId, page, size)));
+    }
+
+    @PostMapping("/{conversationId}/join-requests/{requestId}/approve")
+    @Operation(summary = "Approve a pending join request (Owner/Admin only)")
+    public ResponseEntity<ApiResponse<ConversationResponse>> approveJoinRequest(
+            @PathVariable String conversationId,
+            @PathVariable String requestId) {
+        return ResponseEntity.ok(ApiResponse.success(
+                joinRequestService.approveJoinRequest(conversationId, requestId)));
+    }
+
+    @PostMapping("/{conversationId}/join-requests/{requestId}/reject")
+    @Operation(summary = "Reject a pending join request (Owner/Admin only)")
+    public ResponseEntity<ApiResponse<Void>> rejectJoinRequest(
+            @PathVariable String conversationId,
+            @PathVariable String requestId) {
+        joinRequestService.rejectJoinRequest(conversationId, requestId);
+        return ResponseEntity.ok(ApiResponse.success(null));
+    }
+
+    @DeleteMapping("/{conversationId}/join-requests/me")
+    @Operation(summary = "Cancel my pending join request")
+    public ResponseEntity<ApiResponse<Void>> cancelMyJoinRequest(@PathVariable String conversationId) {
+        joinRequestService.cancelMyJoinRequest(conversationId);
+        return ResponseEntity.ok(ApiResponse.success(null));
+    }
+
+    @PostMapping("/{conversationId}/block/{targetUserId}")
+    @Operation(summary = "Block a member from group — removes them and prevents rejoin via link or being added (Owner/Admin with role constraints)")
+    public ResponseEntity<ApiResponse<ConversationResponse>> blockMemberFromGroup(
+            @PathVariable String conversationId,
+            @PathVariable String targetUserId) {
+        return ResponseEntity.ok(ApiResponse.success(
+                groupConversationService.blockMemberFromGroup(conversationId, targetUserId)));
+    }
+
+    @DeleteMapping("/{conversationId}/block/{targetUserId}")
+    @Operation(summary = "Unblock a member from group (Owner only)")
+    public ResponseEntity<ApiResponse<ConversationResponse>> unblockMemberFromGroup(
+            @PathVariable String conversationId,
+            @PathVariable String targetUserId) {
+        return ResponseEntity.ok(ApiResponse.success(
+                groupConversationService.unblockMemberFromGroup(conversationId, targetUserId)));
+    }
+
+    @GetMapping("/{conversationId}/blocked-members")
+    @Operation(summary = "Get blocked members list for a group (Owner/Admin only)")
+    public ResponseEntity<ApiResponse<PageResponse<List<SearchMemberResponse>>>> getBlockedMembers(
+            @PathVariable String conversationId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(ApiResponse.success(
+                groupConversationService.getBlockedMembers(conversationId, page, size)));
+    }
+
+    @GetMapping("/{conversationId}/block-candidates")
+    @Operation(summary = "Get active members with MEMBER role eligible for blocking (Owner/Admin only)")
+    public ResponseEntity<ApiResponse<PageResponse<List<SearchMemberResponse>>>> getBlockCandidates(
+            @PathVariable String conversationId,
+            @RequestParam(required = false) String query,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(ApiResponse.success(
+                groupConversationService.getBlockCandidates(conversationId, query, page, size)));
     }
 
     @GetMapping("/{conversationId}/pins")

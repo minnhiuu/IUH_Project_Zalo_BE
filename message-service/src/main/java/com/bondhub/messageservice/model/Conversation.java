@@ -68,4 +68,10 @@ public class Conversation extends BaseModel {
 
     @Indexed(unique = true, sparse = true)
     String joinLinkToken;
+
+    @Builder.Default
+    Set<String> blockedUserIds = new HashSet<>();
+
+    @Builder.Default
+    Set<String> selfBlockedUserIds = new HashSet<>();
 }
