@@ -9,6 +9,7 @@ import com.bondhub.common.exception.ErrorCode;
 import com.bondhub.common.model.kafka.EventType;
 import com.bondhub.common.publisher.OutboxEventPublisher;
 import com.bondhub.common.dto.client.fileservice.FileUploadResponse;
+import com.bondhub.common.utils.PhoneUtil;
 import com.bondhub.messageservice.dto.request.GroupConversationCreateRequest;
 import com.bondhub.messageservice.dto.request.LeaveGroupRequest;
 import com.bondhub.messageservice.dto.request.UpdateGroupSettingsRequest;
@@ -42,7 +43,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
-import com.bondhub.common.dto.client.messageservice.MessageSendRequest;
 import com.bondhub.messageservice.service.message.MessageService;
 
 import java.text.Normalizer;
@@ -63,11 +63,8 @@ public class GroupConversationServiceImpl implements GroupConversationService {
     private final SystemMessageService systemMessageService;
     private final FileServiceClient fileServiceClient;
     private final ConversationHelper helper;
-    private final MessageService messageService;
-    private final ConversationService conversationService;
+    private final GroupInviteAsyncService groupInviteAsyncService;
 
-    @Value("${bondhub.frontend-url:http://localhost:5173}")
-    private String frontendUrl;
     private final OutboxEventPublisher outboxEventPublisher;
 
     @Override
@@ -89,21 +86,54 @@ public class GroupConversationServiceImpl implements GroupConversationService {
             throw new AppException(ErrorCode.USER_NOT_FOUND);
         }
 
+        // Check for duplicate group: same name and same active members → return existing group
+        if (groupName != null) {
+            Set<String> allMemberIds = new LinkedHashSet<>(memberIds);
+            allMemberIds.add(currentUserId);
+            Optional<Conversation> existingGroup = findDuplicateGroup(groupName, allMemberIds);
+            if (existingGroup.isPresent()) {
+                log.info("[Group] Duplicate group '{}' detected, returning existing group {}", groupName, existingGroup.get().getId());
+                return helper.buildConversationResponseForCurrentUser(existingGroup.get(), currentUserId);
+            }
+        }
+
+        // Separate friends and non-friends
+        ChatUser currentUser = chatUserRepository.findById(currentUserId).orElse(null);
+        Set<String> friendIds = (currentUser != null && currentUser.getFriendIds() != null)
+                ? currentUser.getFriendIds() : Collections.emptySet();
+        Set<String> friendMemberIds = memberIds.stream().filter(friendIds::contains).collect(Collectors.toCollection(LinkedHashSet::new));
+
+        if (friendMemberIds.isEmpty()) {
+            throw new AppException(ErrorCode.CHAT_NEED_AT_LEAST_ONE_FRIEND);
+        }
+
+        Set<String> nonFriendMemberIds = memberIds.stream().filter(id -> !friendIds.contains(id)).collect(Collectors.toCollection(LinkedHashSet::new));
+
         LocalDateTime now = LocalDateTime.now();
 
+        // Only add friends as direct members; non-friends will receive invite links
         Set<ConversationMember> members = new HashSet<>();
         members.add(ConversationMember.builder()
                 .userId(currentUserId).role(MemberRole.OWNER).joinedAt(now).build());
-        memberIds.forEach(id -> members.add(
+        friendMemberIds.forEach(id -> members.add(
                 ConversationMember.builder().userId(id).role(MemberRole.MEMBER).joinedAt(now).build()));
 
         Map<String, Integer> unreadCounts = new HashMap<>();
         members.forEach(m -> unreadCounts.put(m.getUserId(), 0));
 
+        // If there are non-friend members, enable join link
+        boolean hasNonFriends = !nonFriendMemberIds.isEmpty();
+        GroupSettings settings = GroupSettings.builder()
+                .joinByLinkEnabled(hasNonFriends)
+                .build();
+        String joinLinkToken = hasNonFriends ? UUID.randomUUID().toString().replace("-", "") : null;
+
         Conversation conversation = Conversation.builder()
                 .name(groupName).avatar(avatarUrl).isGroup(true)
                 .members(members).unreadCounts(unreadCounts)
-                .settings(GroupSettings.builder().build())
+                .settings(settings)
+                .joinLinkToken(joinLinkToken)
+                .invitedUserIds(hasNonFriends ? new HashSet<>(nonFriendMemberIds) : new HashSet<>())
                 .lastMessage(LastMessageInfo.builder().timestamp(now).build())
                 .build();
 
@@ -115,7 +145,7 @@ public class GroupConversationServiceImpl implements GroupConversationService {
         Map<String, String> userAvatarMap = users.stream()
                 .filter(u -> u.getAvatar() != null)
                 .collect(Collectors.toMap(ChatUser::getId, ChatUser::getAvatar));
-        List<String> createTargetIds = new ArrayList<>(memberIds);
+        List<String> createTargetIds = new ArrayList<>(friendMemberIds);
         List<String> createTargetNames = createTargetIds.stream()
                 .map(id -> userNameMap.getOrDefault(id, "Người dùng")).toList();
         List<String> createTargetAvatars = createTargetIds.stream()
@@ -126,14 +156,13 @@ public class GroupConversationServiceImpl implements GroupConversationService {
                 Map.of("targetIds", createTargetIds,
                         "payload", Map.of("targetNames", createTargetNames, "targetAvatars", createTargetAvatars)));
 
-        log.info("[Group] Created group {} by user {} with {} members", saved.getId(), currentUserId, saved.getMembers().size());
-
-        // Publish GroupMemberChangedEvent for all members (including creator)
-        publishGroupMemberEvent(saved.getId(), currentUserId, GroupMemberChangedEvent.GroupMemberAction.JOINED);
-        for (String memberId : memberIds) {
-            publishGroupMemberEvent(saved.getId(), memberId, GroupMemberChangedEvent.GroupMemberAction.JOINED);
+        // Send join link invites to non-friend members asynchronously (avoid blocking the HTTP response)
+        if (hasNonFriends) {
+            groupInviteAsyncService.sendJoinLinkInvites(saved, currentUserId, new LinkedHashSet<>(nonFriendMemberIds));
         }
 
+        log.info("[Group] Created group {} by user {} with {} members, {} non-friend invites sent",
+                saved.getId(), currentUserId, saved.getMembers().size(), nonFriendMemberIds.size());
         return helper.broadcastAndRespond(saved, currentUserId);
     }
 
@@ -199,11 +228,7 @@ public class GroupConversationServiceImpl implements GroupConversationService {
 
                 // If join link is enabled, send join link as a regular message in the direct conversation
                 if (joinLinkEnabled) {
-                    String joinLinkToken = conversation.getJoinLinkToken();
-                    String joinLinkUrl = frontendUrl + "/g/" + joinLinkToken;
-                    Conversation directConv = conversationService.getOrCreateDirectConversation(currentUserId, selfBlockedUserId);
-                    messageService.sendMessage(directConv.getId(),
-                            new MessageSendRequest(directConv.getId(), null, joinLinkUrl, UUID.randomUUID().toString(), null, false, null));
+                    groupInviteAsyncService.sendJoinLinkInvite(conversation, currentUserId, selfBlockedUserId);
                 }
             }
             requestedIds.removeAll(selfBlockedInRequest);
@@ -653,28 +678,56 @@ public class GroupConversationServiceImpl implements GroupConversationService {
 
         final Set<String> memberIds = getActiveMemberIds(conversationId);
 
-        Page<ChatUser> candidatesPage;
-        if (helper.isPhoneNumber(query)) {
-            Optional<ChatUser> userOpt = chatUserRepository.findByPhoneNumber(query.trim())
-                    .filter(u -> !u.getId().equals(currentUserId));
-            List<ChatUser> list = userOpt.map(Collections::singletonList).orElse(Collections.emptyList());
-            candidatesPage = new PageImpl<>(list, pageable, list.size());
-        } else {
+        Set<ChatUser> candidates = new LinkedHashSet<>();
+        String[] tokens = query.trim().split("\\s+");
+        List<String> phoneTokens = new ArrayList<>();
+        StringBuilder nameQueryBuilder = new StringBuilder();
+
+        for (String token : tokens) {
+            Optional<String> normalizedPhone = PhoneUtil.normalizeVnPhone(token);
+            if (normalizedPhone.isPresent()) {
+                phoneTokens.add(normalizedPhone.get());
+            } else {
+                if (!nameQueryBuilder.isEmpty()) nameQueryBuilder.append(" ");
+                nameQueryBuilder.append(token);
+            }
+        }
+
+        if (!phoneTokens.isEmpty()) {
+            candidates.addAll(chatUserRepository.findAllByPhoneNumberIn(phoneTokens).stream()
+                    .filter(u -> !u.getId().equals(currentUserId))
+                    .toList());
+        }
+
+        String nameQuery = nameQueryBuilder.toString();
+        if (!nameQuery.isBlank()) {
             ChatUser currentUser = chatUserRepository.findById(currentUserId).orElse(null);
             if (currentUser != null && !currentUser.getFriendIds().isEmpty()) {
                 Set<String> friendIds = new HashSet<>(currentUser.getFriendIds());
                 friendIds.remove(currentUserId);
-                candidatesPage = chatUserRepository.findByIdInAndFullNameContainingIgnoreCase(friendIds, query.trim(), pageable);
-            } else {
-                candidatesPage = Page.empty(pageable);
+                // For simplicity in pagination with combined results, we'll fetch a reasonable amount of name matches
+                // In a production app, you might want more complex cross-index pagination
+                candidates.addAll(chatUserRepository.findByIdInAndFullNameContainingIgnoreCase(friendIds, nameQuery, pageable).getContent());
             }
         }
 
+        List<ChatUser> candidateList = new ArrayList<>(candidates);
+        int start = (int) pageable.getOffset();
+        int end = Math.min((start + pageable.getPageSize()), candidateList.size());
+        List<ChatUser> pagedCandidates = (start < candidateList.size()) ? candidateList.subList(start, end) : Collections.emptyList();
+        Page<ChatUser> candidatesPage = new PageImpl<>(pagedCandidates, pageable, candidateList.size());
+
         String baseUrl = helper.getBaseUrl();
-        return PageResponse.fromPage(candidatesPage, u -> SearchMemberResponse.builder()
+        return PageResponse.fromPage(candidatesPage, u -> {
+            String phoneNumber = (u.getPhoneNumber() != null && phoneTokens.contains(u.getPhoneNumber())) 
+                    ? u.getPhoneNumber() : null;
+            
+            return SearchMemberResponse.builder()
                 .userId(u.getId()).fullName(u.getFullName())
                 .avatar(u.getAvatar() != null ? baseUrl + u.getAvatar() : null)
-                .isAlreadyMember(memberIds.contains(u.getId())).build());
+                .phoneNumber(phoneNumber)
+                .isAlreadyMember(memberIds.contains(u.getId())).build();
+        });
     }
 
     @Override
@@ -1010,6 +1063,33 @@ public class GroupConversationServiceImpl implements GroupConversationService {
         helper.broadcastConversationUpdate(conversation);
         log.info("[Group] Join link {} for conversation {} by user {}", logVerb, conversationId, currentUserId);
         return token;
+    }
+
+    private Optional<Conversation> findDuplicateGroup(String groupName, Set<String> allMemberIds) {
+        Criteria criteria = Criteria.where("isGroup").is(true)
+                .and("isDisbanded").is(false)
+                .and("name").is(groupName);
+
+        // Each member must be an active member in the group
+        List<Criteria> memberCriteria = allMemberIds.stream()
+                .map(id -> Criteria.where("members")
+                        .elemMatch(Criteria.where("userId").is(id).and("active").ne(false)))
+                .toList();
+        criteria = criteria.andOperator(memberCriteria.toArray(new Criteria[0]));
+
+        Query query = Query.query(criteria);
+        List<Conversation> candidates = mongoTemplate.find(query, Conversation.class);
+
+        // Filter to exact member set match (not superset)
+        return candidates.stream()
+                .filter(c -> {
+                    Set<String> activeMemberIds = c.getMembers().stream()
+                            .filter(helper::isActiveMember)
+                            .map(ConversationMember::getUserId)
+                            .collect(Collectors.toSet());
+                    return activeMemberIds.equals(allMemberIds);
+                })
+                .findFirst();
     }
 
     private Set<String> getActiveMemberIds(String conversationId) {
