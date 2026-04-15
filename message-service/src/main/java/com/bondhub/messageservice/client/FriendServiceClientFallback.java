@@ -16,4 +16,10 @@ public class FriendServiceClientFallback implements FriendServiceClient {
         log.warn("Fallback triggered: Unable to fetch friend IDs for user {}", userId);
         return ApiResponse.success(Collections.emptySet());
     }
+
+    @Override
+    public ApiResponse<java.util.Map<String, String>> getFriendshipStatuses(java.util.List<String> userIds) {
+        log.warn("Fallback triggered: Unable to fetch batch friendship statuses");
+        return ApiResponse.success(Collections.emptyMap());
+    }
 }

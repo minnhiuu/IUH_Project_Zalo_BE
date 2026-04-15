@@ -73,6 +73,15 @@ public enum ErrorCode {
         NOT_AUTHORIZED_TO_CANCEL(HttpStatus.FORBIDDEN, 3008, "error.friend.not.authorized.to.cancel"),
         FRIEND_REQUEST_NOT_PENDING(HttpStatus.BAD_REQUEST, 3009, "error.friend.request.not.pending"),
 
+        // Contact errors (34xx)
+        CONTACT_IMPORT_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, 3401, "error.contact.import.failed"),
+        CONTACT_NO_VALID_PHONES(HttpStatus.BAD_REQUEST, 3402, "error.contact.no.valid.phones"),
+        CONTACT_TOO_MANY(HttpStatus.BAD_REQUEST, 3403, "error.contact.too.many"),
+
+        // Graph errors (35xx)
+        GRAPH_SYNC_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, 3501, "error.graph.sync.failed"),
+        GRAPH_QUERY_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, 3502, "error.graph.query.failed"),
+
         // Admin / ban errors
         CANNOT_BAN_YOURSELF(HttpStatus.BAD_REQUEST, 2208, "error.cannot.ban.yourself"),
         CANNOT_BAN_ADMIN(HttpStatus.FORBIDDEN, 2209, "error.cannot.ban.admin"),
@@ -91,6 +100,36 @@ public enum ErrorCode {
         CHAT_ROOM_NOT_FOUND(HttpStatus.NOT_FOUND, 4001, "error.chat.room.not.found"),
         MESSAGE_NOT_FOUND(HttpStatus.NOT_FOUND, 4002, "error.message.not.found"),
         UNAUTHORIZED(HttpStatus.FORBIDDEN, 4003, "error.unauthorized"),
+        CHAT_INVALID_MEMBER_COUNT(HttpStatus.BAD_REQUEST, 4005, "error.chat.group.member.count.invalid"),
+        CHAT_NOT_A_GROUP(HttpStatus.BAD_REQUEST, 4006, "error.chat.not.a.group"),
+        CHAT_NOT_OWNER(HttpStatus.FORBIDDEN, 4007, "error.chat.not.owner"),
+        CHAT_MEMBER_NOT_FOUND(HttpStatus.FORBIDDEN, 4008, "error.chat.member.not.found"),
+        CHAT_NOT_SENDER(HttpStatus.FORBIDDEN, 4009, "error.chat.not.sender"),
+        CHAT_NOT_GROUP_MANAGER(HttpStatus.FORBIDDEN, 4010, "error.chat.not.group.manager"),
+        CHAT_CANNOT_REMOVE_OWNER(HttpStatus.FORBIDDEN, 4011, "error.chat.cannot.remove.owner"),
+        CHAT_ADMIN_CAN_ONLY_REMOVE_MEMBER(HttpStatus.FORBIDDEN, 4012, "error.chat.admin.only.remove.member"),
+        CHAT_CANNOT_REMOVE_YOURSELF(HttpStatus.BAD_REQUEST, 4013, "error.chat.cannot.remove.yourself"),
+        CHAT_CANNOT_PROMOTE_OWNER(HttpStatus.BAD_REQUEST, 4014, "error.chat.cannot.promote.owner"),
+        CHAT_TARGET_ALREADY_ADMIN(HttpStatus.BAD_REQUEST, 4015, "error.chat.target.already.admin"),
+        CHAT_TARGET_NOT_ADMIN(HttpStatus.BAD_REQUEST, 4016, "error.chat.target.not.admin"),
+        CHAT_TARGET_NOT_MEMBER(HttpStatus.BAD_REQUEST, 4017, "error.chat.target.not.member"),
+        CHAT_CANNOT_TRANSFER_TO_SELF(HttpStatus.BAD_REQUEST, 4018, "error.chat.cannot.transfer.to.self"),
+        CHAT_SETTING_RESTRICTED(HttpStatus.FORBIDDEN, 4019, "error.chat.setting.restricted"),
+        CHAT_JOIN_LINK_DISABLED(HttpStatus.BAD_REQUEST, 4020, "error.chat.join.link.disabled"),
+        CHAT_JOIN_LINK_INVALID(HttpStatus.NOT_FOUND, 4021, "error.chat.join.link.invalid"),
+        CHAT_ALREADY_MEMBER(HttpStatus.BAD_REQUEST, 4022, "error.chat.already.member"),
+        CHAT_JOIN_REQUEST_NOT_FOUND(HttpStatus.NOT_FOUND, 4023, "error.chat.join.request.not.found"),
+        CHAT_JOIN_REQUEST_ALREADY_PENDING(HttpStatus.CONFLICT, 4024, "error.chat.join.request.already.pending"),
+        CHAT_JOIN_REQUEST_ALREADY_PROCESSED(HttpStatus.BAD_REQUEST, 4025, "error.chat.join.request.already.processed"),
+        CHAT_JOIN_QUESTION_REQUIRED(HttpStatus.BAD_REQUEST, 4026, "error.chat.join.question.required"),
+        CHAT_APPROVAL_NOT_ENABLED(HttpStatus.BAD_REQUEST, 4027, "error.chat.approval.not.enabled"),
+        CHAT_USER_BLOCKED_FROM_GROUP(HttpStatus.FORBIDDEN, 4028, "error.chat.user.blocked.from.group"),
+        CHAT_USER_ALREADY_BLOCKED_FROM_GROUP(HttpStatus.CONFLICT, 4029, "error.chat.user.already.blocked.from.group"),
+        CHAT_USER_NOT_BLOCKED_FROM_GROUP(HttpStatus.BAD_REQUEST, 4030, "error.chat.user.not.blocked.from.group"),
+        CHAT_CANNOT_BLOCK_OWNER(HttpStatus.FORBIDDEN, 4031, "error.chat.cannot.block.owner"),
+        CHAT_BLOCKED_FROM_ADDING(HttpStatus.FORBIDDEN, 4032, "error.chat.blocked.from.adding"),
+        CHAT_GROUP_ADD_ALREADY_BLOCKED(HttpStatus.CONFLICT, 4033, "error.chat.group.add.already.blocked"),
+        CHAT_GROUP_ADD_NOT_BLOCKED(HttpStatus.BAD_REQUEST, 4034, "error.chat.group.add.not.blocked"),
 
         //  NOTIFICATION_TEMPLATE (23xx)
         NOTIFICATION_TEMPLATE_NOT_FOUND(HttpStatus.NOT_FOUND, 2300, "error.notification.template.not.found"),
@@ -103,7 +142,20 @@ public enum ErrorCode {
         MESSAGE_BLOCKED(HttpStatus.FORBIDDEN, 2304, "error.block.message.blocked"),
         CALL_BLOCKED(HttpStatus.FORBIDDEN, 2305, "error.block.call.blocked"),
         STORY_BLOCKED(HttpStatus.FORBIDDEN, 2306, "error.block.story.blocked"),
-        COMMUNICATION_BLOCKED(HttpStatus.FORBIDDEN, 2307, "error.block.communication.blocked")
+        COMMUNICATION_BLOCKED(HttpStatus.FORBIDDEN, 2307, "error.block.communication.blocked"),
+
+        // Pin errors (44xx)
+        CHAT_MAX_PINNED_MESSAGES(HttpStatus.BAD_REQUEST, 4401, "error.chat.max.pinned.messages"),
+        CHAT_MESSAGE_NOT_PINNED(HttpStatus.BAD_REQUEST, 4402, "error.chat.message.not.pinned"),
+        CHAT_MESSAGE_ALREADY_PINNED(HttpStatus.BAD_REQUEST, 4403, "error.chat.message.already.pinned"),
+
+        // Call errors (5xxx)
+        CALL_USER_BUSY(HttpStatus.CONFLICT, 5001, "error.call.user.busy"),
+        CALL_USER_NOT_FOUND(HttpStatus.NOT_FOUND, 5002, "error.call.user.not.found"),
+        CALL_SESSION_NOT_FOUND(HttpStatus.NOT_FOUND, 5003, "error.call.session.not.found"),
+        CALL_ALREADY_IN_PROGRESS(HttpStatus.CONFLICT, 5004, "error.call.already.in.progress"),
+        CALL_SELF_NOT_ALLOWED(HttpStatus.BAD_REQUEST, 5005, "error.call.self.not.allowed"),
+        CALL_TOKEN_GENERATION_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, 5006, "error.call.token.generation.failed"),
 
         ;
 

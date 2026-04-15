@@ -5,6 +5,10 @@ import com.bondhub.common.dto.client.fileservice.FileUploadResponse;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.bondhub.userservice.config.FeignConfig;
@@ -16,8 +20,9 @@ public interface FileServiceClient {
     ApiResponse<FileUploadResponse> uploadFile(
             @RequestHeader("X-Account-Id") String accountId,
             @RequestHeader("X-User-Email") String email,
-            @RequestPart("file") MultipartFile file);
+            @RequestPart("file") MultipartFile file,
+            @RequestParam("folder") String folder);
 
-    @DeleteMapping("/files/{key}")
-    ApiResponse<Void> deleteFile(@PathVariable("key") String key);
+    @DeleteMapping("/files")
+    ApiResponse<Void> deleteFile(@RequestParam("key") String key);
 }

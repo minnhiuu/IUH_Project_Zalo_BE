@@ -1,5 +1,7 @@
 package com.bondhub.common.dto.client.messageservice;
 
+import java.util.List;
+
 /**
  * Request DTO for sending a chat message.
  * Shared between message-service and ai-service.
@@ -7,9 +9,11 @@ package com.bondhub.common.dto.client.messageservice;
  */
 public record MessageSendRequest(
         String conversationId, // ObjectId of the target Conversation
+        String recipientId,    // Used for the first message (1-1) when conversation is not yet created
         String content,
         String clientMessageId,
         ReplyMetadata replyTo,
-        boolean isForwarded
+        boolean isForwarded,
+        List<AttachmentRequest> attachments // file metadata from file-service upload
 ) {
 }

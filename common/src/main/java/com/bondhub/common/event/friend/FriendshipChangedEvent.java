@@ -7,6 +7,7 @@ import lombok.Builder;
 public record FriendshipChangedEvent(
     String userA,
     String userB,
+    String friendshipId,
     FriendshipAction action,
     Long timestamp
 ) {}

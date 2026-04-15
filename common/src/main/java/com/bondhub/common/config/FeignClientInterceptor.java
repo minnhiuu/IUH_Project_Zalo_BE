@@ -11,7 +11,6 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import java.util.Enumeration;
 
 @Component
-@ConditionalOnMissingBean(RequestInterceptor.class)
 public class FeignClientInterceptor implements RequestInterceptor {
 
     @Override

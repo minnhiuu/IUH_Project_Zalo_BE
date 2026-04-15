@@ -12,6 +12,8 @@ import org.springframework.data.mongodb.core.index.CompoundIndex;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 @Data
@@ -39,6 +41,15 @@ public class Message extends BaseModel {
     @Builder.Default
     MessageStatus status = MessageStatus.NORMAL;
 
+    Map<String, Object> metadata; // system message action data
+    List<AttachmentInfo> attachments;
+
+    LinkPreview linkPreview;
+
+    Map<String, List<String>> reactions; // emoji → list of userIds (allows multiple reactions per user)
+
     @Builder.Default
     Set<String> deletedBy = new HashSet<>();
+
+    Set<String> visibleTo;
 }

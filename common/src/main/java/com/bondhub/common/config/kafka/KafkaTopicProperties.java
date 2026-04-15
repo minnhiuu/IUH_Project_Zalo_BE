@@ -16,6 +16,13 @@ public class KafkaTopicProperties {
     private MessageEvents messageEvents = new MessageEvents();
     private NotificationEvents notificationEvents = new NotificationEvents();
     private FriendEvents friendEvents = new FriendEvents();
+    private GroupEvents groupEvents = new GroupEvents();
+
+    @Getter
+    @Setter
+    public static class GroupEvents {
+        private String memberChanged = "group.member.changed";
+    }
 
     @Getter
     @Setter

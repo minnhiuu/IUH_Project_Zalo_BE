@@ -7,5 +7,6 @@ public record UserProfileUpdatedEvent(
     String userId,
     String fullName,
     String avatar,
+    String phoneNumber,
     Long timestamp
 ) {}

@@ -27,6 +27,9 @@ public class ChatUser {
     String avatar;
     LocalDateTime lastUpdatedAt;
 
+    @Indexed(unique = true, sparse = true)
+    String phoneNumber;
+
     @Indexed
     @Builder.Default
     Set<String> friendIds = new HashSet<>();
