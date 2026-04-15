@@ -203,6 +203,36 @@ public class ConversationController {
                 groupConversationService.getGroupMembers(conversationId, query, page, size)));
     }
 
+    @GetMapping("/{conversationId}/group-admins")
+    @Operation(summary = "Get group owner and admins (owner first, admins sorted by name ASC)")
+    public ResponseEntity<ApiResponse<PageResponse<List<AdminMemberResponse>>>> getGroupAdmins(
+            @PathVariable String conversationId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(ApiResponse.success(
+                groupConversationService.getGroupAdmins(conversationId, page, size)));
+    }
+
+    @GetMapping("/{conversationId}/admin-candidates")
+    @Operation(summary = "Get non-owner members for admin management (admins first then members, sorted by name ASC). Owner only.")
+    public ResponseEntity<ApiResponse<PageResponse<List<AdminMemberResponse>>>> getAdminCandidates(
+            @PathVariable String conversationId,
+            @RequestParam(required = false) String query,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(ApiResponse.success(
+                groupConversationService.getAdminCandidates(conversationId, query, page, size)));
+    }
+
+    @PatchMapping("/{conversationId}/transfer-owner/{targetUserId}")
+    @Operation(summary = "Transfer group ownership to another member (Owner only)")
+    public ResponseEntity<ApiResponse<ConversationResponse>> transferOwnership(
+            @PathVariable String conversationId,
+            @PathVariable String targetUserId) {
+        return ResponseEntity.ok(ApiResponse.success(
+                groupConversationService.transferOwnership(conversationId, targetUserId)));
+    }
+
     @PostMapping("/{conversationId}/join-link")
     @Operation(summary = "Generate group join link for the first time (Owner/Admin only)")
     public ResponseEntity<ApiResponse<String>> generateJoinLink(@PathVariable String conversationId) {
