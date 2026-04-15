@@ -1,6 +1,7 @@
 package com.bondhub.friendservice.listener;
 
 import com.bondhub.common.event.user.UserDeletedEvent;
+import com.bondhub.friendservice.graph.service.GraphFriendService;
 import com.bondhub.friendservice.repository.FriendShipRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -18,6 +19,7 @@ import org.springframework.stereotype.Component;
 public class UserDeletedListener {
 
     private final FriendShipRepository friendShipRepository;
+    private final GraphFriendService graphFriendService;
     
     @Value("${kafka.topics.user-deleted:user.deleted}")
     private String userDeletedTopic;
@@ -46,6 +48,15 @@ public class UserDeletedListener {
                 log.info("✅ Deleted {} friendships for userId: {}", friendships.size(), event.getUserId());
             } else {
                 log.info("ℹ️ No friendships found for userId: {}", event.getUserId());
+            }
+
+            // Delete Neo4j user node and all relationships
+            try {
+                graphFriendService.deleteUserNode(event.getUserId());
+                log.info("✅ Deleted Neo4j user node and relationships for userId: {}", event.getUserId());
+            } catch (Exception neo4jEx) {
+                log.error("⚠️ Failed to delete Neo4j data for userId: {}, error: {}",
+                        event.getUserId(), neo4jEx.getMessage(), neo4jEx);
             }
 
             // Manual acknowledgment

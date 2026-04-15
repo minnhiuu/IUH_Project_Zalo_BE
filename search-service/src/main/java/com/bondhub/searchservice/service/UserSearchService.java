@@ -8,4 +8,6 @@ import java.util.List;
 
 public interface UserSearchService {
     PageResponse<List<UserSummaryResponse>> searchUsers(String keyword, Pageable pageable);
+
+    List<UserSummaryResponse> findUsersByPhones(List<String> phones);
 }
