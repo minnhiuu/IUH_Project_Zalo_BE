@@ -13,6 +13,5 @@ public class UserCreatedEvent {
     private String userId;
     private String accountId;
     private String fullName;
-    private String phoneNumber;
     private Long timestamp;
 }

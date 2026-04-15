@@ -4,20 +4,16 @@ import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.common.dto.client.fileservice.FileUploadResponse;
 import com.bondhub.common.dto.client.userservice.user.response.UserSummaryResponse;
 import com.bondhub.common.enums.Role;
-import com.bondhub.common.event.user.UserCreatedEvent;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
 import com.bondhub.common.utils.S3Util;
 import com.bondhub.common.utils.SecurityUtil;
-import com.bondhub.common.event.user.UserProfileUpdatedEvent;
-import com.bondhub.common.model.kafka.EventType;
-import com.bondhub.common.publisher.OutboxEventPublisher;
 import com.bondhub.userservice.client.AuthServiceClient;
 import com.bondhub.userservice.client.FileServiceClient;
 import com.bondhub.userservice.dto.request.BioUpdateRequest;
 import com.bondhub.userservice.dto.request.elasticsearch.UserIndexRequest;
 import com.bondhub.userservice.dto.request.user.UserCreateRequest;
-import com.bondhub.common.dto.client.userservice.user.request.UserUpdateRequest;
+import com.bondhub.userservice.dto.request.user.UserUpdateRequest;
 import com.bondhub.userservice.dto.request.user.AvatarUpdateRequest;
 import com.bondhub.userservice.dto.request.user.BackgroundUpdateRequest;
 import com.bondhub.userservice.dto.response.user.AccountResponse;
@@ -35,12 +31,13 @@ import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
+import java.util.Optional;
 import java.util.stream.Collectors;
+
 
 @Service
 @Slf4j
@@ -54,7 +51,6 @@ public class UserServiceImpl implements UserService {
     final UserProfileMapper userProfileMapper;
     final FileServiceClient fileServiceClient;
     final UserIndexEventPublisher userIndexEventPublisher;
-    final OutboxEventPublisher outboxEventPublisher;
 
     @Value("${aws.s3.bucket.name}")
     String bucketName;
@@ -63,7 +59,6 @@ public class UserServiceImpl implements UserService {
     String region;
 
     @Override
-    @Transactional
     public UserResponse createUser(UserCreateRequest request) {
         log.info("Creating user with accountId: {}", request.accountId());
         User user = userMapper.toUser(request);
@@ -71,23 +66,8 @@ public class UserServiceImpl implements UserService {
         log.info("User created successfully with id: {}", user.getId());
 
         publishUserIndexEvent(user, request.phoneNumber(), request.role());
-        publishUserCreatedEvent(user, request.accountId(), request.phoneNumber());
-        publishUserProfileUpdatedEvent(user, request.phoneNumber());
 
         return userMapper.toUserResponse(user);
-    }
-
-    private void publishUserCreatedEvent(User user, String accountId, String phoneNumber) {
-        UserCreatedEvent event = UserCreatedEvent.builder()
-                .userId(user.getId())
-                .accountId(accountId)
-                .fullName(user.getFullName())
-                .phoneNumber(phoneNumber)
-                .timestamp(System.currentTimeMillis())
-                .build();
-
-        outboxEventPublisher.saveAndPublish(user.getId(), "User", EventType.USER_CREATED, event);
-        log.info("Published USER_CREATED event via outbox for user: {}", user.getId());
     }
 
     private void publishUserIndexEvent(User user, String phoneNumber, String role) {
@@ -146,7 +126,6 @@ public class UserServiceImpl implements UserService {
 
         return getUserResponseWithUrl(user, accountResponse);
     }
-
     @Override
     public UserProfileResponse getMyUserWithAccountInfo() {
         String accountId = securityUtil.getCurrentAccountId();
@@ -194,7 +173,6 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
-    @Transactional
     public UserProfileResponse updateUser(UserUpdateRequest request) {
         String accountId = securityUtil.getCurrentAccountId();
         log.info("Updating user profile for account: {}", accountId);
@@ -218,7 +196,6 @@ public class UserServiceImpl implements UserService {
         log.info("User profile updated successfully for account: {}", accountId);
 
         publishUserIndexEvent(user, accountResponse);
-        publishUserProfileUpdatedEvent(user, accountResponse != null ? accountResponse.phoneNumber() : null);
 
         return getUserProfileResponseWithUrl(user, accountResponse);
     }
@@ -259,7 +236,6 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
-    @Transactional
     public UserImageResponse updateAvatar(AvatarUpdateRequest request) {
         String accountId = securityUtil.getCurrentAccountId();
         log.info("Updating avatar for user: {}", accountId);
@@ -269,10 +245,8 @@ public class UserServiceImpl implements UserService {
 
         String oldAvatarKey = user.getAvatar();
 
-        String email = securityUtil.getCurrentEmail();
-
         ApiResponse<FileUploadResponse> response = fileServiceClient
-                .uploadFile(accountId, email, request.file(), "avatars");
+                .uploadFile(request.file());
         if (response != null && response.data() != null) {
             String key = response.data().key();
             user.setAvatar(key);
@@ -289,18 +263,7 @@ public class UserServiceImpl implements UserService {
 
             log.info("Avatar updated successfully for user: {}", accountId);
 
-            AccountResponse accountResponse = null;
-            try {
-                ApiResponse<AccountResponse> accountApiResponse = authServiceClient.getAccountById(accountId);
-                if (accountApiResponse != null && accountApiResponse.data() != null) {
-                    accountResponse = accountApiResponse.data();
-                }
-            } catch (Exception e) {
-                log.warn("Failed to fetch account info for updated avatar: {}", accountId, e);
-            }
-
-            publishUserIndexEvent(user, accountResponse);
-            publishUserProfileUpdatedEvent(user, accountResponse != null ? accountResponse.phoneNumber() : null);
+            publishUserIndexEvent(user, null);
 
             String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
             return userMapper.toAvatarResponse(user, baseUrl);
@@ -319,10 +282,8 @@ public class UserServiceImpl implements UserService {
 
         String oldBackgroundKey = user.getBackground();
 
-        String email = securityUtil.getCurrentEmail();
-
         ApiResponse<FileUploadResponse> response = fileServiceClient
-                .uploadFile(accountId, email, request.file(), "backgrounds");
+                .uploadFile(request.file());
         if (response != null && response.data() != null) {
             String key = response.data().key();
             user.setBackground(key);
@@ -370,7 +331,6 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
-    @Transactional
     public UserProfileResponse updateBio(BioUpdateRequest request) {
         String accountId = securityUtil.getCurrentAccountId();
         log.info("Updating bio for user: {}", accountId);
@@ -393,22 +353,7 @@ public class UserServiceImpl implements UserService {
 
         log.info("Bio updated successfully for user: {}", accountId);
 
-        publishUserProfileUpdatedEvent(user, accountResponse != null ? accountResponse.phoneNumber() : null);
-
         return getUserProfileResponseWithUrl(user, accountResponse);
-    }
-
-    private void publishUserProfileUpdatedEvent(User user, String phoneNumber) {
-        UserProfileUpdatedEvent event = UserProfileUpdatedEvent.builder()
-                .userId(user.getId())
-                .fullName(user.getFullName())
-                .avatar(user.getAvatar())
-                .phoneNumber(phoneNumber)
-                .timestamp(System.currentTimeMillis())
-                .build();
-
-        outboxEventPublisher.saveAndPublish(user.getId(), "User", EventType.USER_UPDATED, event);
-        log.info("Published USER_UPDATED event via outbox for user: {}", user.getId());
     }
 
     @Override
@@ -443,6 +388,7 @@ public class UserServiceImpl implements UserService {
                         .id(user.getId())
                         .fullName(user.getFullName())
                         .avatar(user.getAvatar() != null ? baseUrl + user.getAvatar() : null)
-                        .build()));
+                        .build()
+        ));
     }
 }

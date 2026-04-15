@@ -15,9 +15,5 @@ public enum EventType {
     USER_DELETED,
 
     USER_INDEX_REQUESTED,
-    USER_INDEX_DELETED,
-    USER_PRIVACY_CHANGED,
-
-    // Friend Events (friend-service)
-    FRIENDSHIP_CHANGED
+    USER_INDEX_DELETED
 }

@@ -2,14 +2,15 @@ package com.bondhub.userservice.mapper;
 
 import com.bondhub.common.dto.client.userservice.user.response.UserSummaryResponse;
 import com.bondhub.userservice.dto.request.user.UserCreateRequest;
-import com.bondhub.common.dto.client.userservice.user.request.UserUpdateRequest;
+import com.bondhub.userservice.dto.request.user.UserUpdateRequest;
 import com.bondhub.userservice.dto.response.user.UserResponse;
 import com.bondhub.userservice.dto.response.user.UserImageResponse;
 import com.bondhub.userservice.model.User;
-import org.mapstruct.*;
+import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
+import org.mapstruct.MappingTarget;
 
-@Mapper(componentModel = "spring",
-        nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
+@Mapper(componentModel = "spring")
 public interface UserMapper {
     User toUser(UserCreateRequest request);
 
@@ -27,6 +28,7 @@ public interface UserMapper {
     @Mapping(target = "y", source = "user.backgroundY")
     UserImageResponse toBackgroundResponse(User user, String baseUrl);
 
-    @BeanMapping(nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
+//    UserIndex toUserIndex(User user);
+
     void updateUserFromRequest(@MappingTarget User user, UserUpdateRequest request);
 }
