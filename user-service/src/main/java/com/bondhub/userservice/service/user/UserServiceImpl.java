@@ -20,6 +20,7 @@ import com.bondhub.userservice.dto.request.user.UserCreateRequest;
 import com.bondhub.common.dto.client.userservice.user.request.UserUpdateRequest;
 import com.bondhub.userservice.dto.request.user.AvatarUpdateRequest;
 import com.bondhub.userservice.dto.request.user.BackgroundUpdateRequest;
+import com.bondhub.userservice.dto.request.auth.AccountUpdateRequest;
 import com.bondhub.userservice.dto.response.user.AccountResponse;
 import com.bondhub.userservice.dto.response.user.UserImageResponse;
 import com.bondhub.userservice.dto.response.user.UserProfileResponse;
@@ -202,9 +203,6 @@ public class UserServiceImpl implements UserService {
         User user = userRepository.findByAccountId(accountId)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
 
-        userMapper.updateUserFromRequest(user, request);
-        user = userRepository.save(user);
-
         AccountResponse accountResponse = null;
         try {
             ApiResponse<AccountResponse> accountApiResponse = authServiceClient.getAccountById(accountId);
@@ -212,8 +210,37 @@ public class UserServiceImpl implements UserService {
                 accountResponse = accountApiResponse.data();
             }
         } catch (Exception e) {
-            log.warn("Failed to fetch account info for updated user: {}", accountId, e);
+            log.warn("Failed to fetch current account info for user: {}", accountId, e);
         }
+
+        // Handle phone number update
+        if (request.phoneNumber() != null && !request.phoneNumber().isEmpty()) {
+            if (accountResponse == null) {
+                throw new AppException(ErrorCode.ACC_ACCOUNT_NOT_FOUND);
+            }
+
+            if (!request.phoneNumber().equals(accountResponse.phoneNumber())) {
+                log.info("Updating phone number from {} to {}", accountResponse.phoneNumber(), request.phoneNumber());
+                
+                // Check if new phone number is already used
+                ApiResponse<Boolean> existsResponse = authServiceClient.existsByPhoneNumber(request.phoneNumber());
+                if (existsResponse != null && Boolean.TRUE.equals(existsResponse.data())) {
+                    throw new AppException(ErrorCode.ACC_PHONE_NUMBER_ALREADY_USED);
+                }
+
+                // Update phone number in auth-service
+                AccountUpdateRequest authUpdateRequest = AccountUpdateRequest.builder()
+                        .phoneNumber(request.phoneNumber())
+                        .build();
+                ApiResponse<AccountResponse> updateAuthResponse = authServiceClient.updateAccount(accountId, authUpdateRequest);
+                if (updateAuthResponse != null && updateAuthResponse.data() != null) {
+                    accountResponse = updateAuthResponse.data();
+                }
+            }
+        }
+
+        userMapper.updateUserFromRequest(user, request);
+        user = userRepository.save(user);
 
         log.info("User profile updated successfully for account: {}", accountId);
 
