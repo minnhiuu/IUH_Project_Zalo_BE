@@ -148,6 +148,7 @@ public enum ErrorCode {
         CHAT_MAX_PINNED_MESSAGES(HttpStatus.BAD_REQUEST, 4401, "error.chat.max.pinned.messages"),
         CHAT_MESSAGE_NOT_PINNED(HttpStatus.BAD_REQUEST, 4402, "error.chat.message.not.pinned"),
         CHAT_MESSAGE_ALREADY_PINNED(HttpStatus.BAD_REQUEST, 4403, "error.chat.message.already.pinned"),
+        MESSAGE_REVOKE_TIME_EXCEEDED(HttpStatus.BAD_REQUEST, 4035, "error.message.revoke.time.exceeded"),
 
         // Call errors (5xxx)
         CALL_USER_BUSY(HttpStatus.CONFLICT, 5001, "error.call.user.busy"),
