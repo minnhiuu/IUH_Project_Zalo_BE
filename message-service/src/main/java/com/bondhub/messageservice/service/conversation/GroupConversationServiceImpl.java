@@ -156,12 +156,7 @@ public class GroupConversationServiceImpl implements GroupConversationService {
                 Map.of("targetIds", createTargetIds,
                         "payload", Map.of("targetNames", createTargetNames, "targetAvatars", createTargetAvatars)));
 
-        // Send join link invites to non-friend members asynchronously (avoid blocking the HTTP response)
-        if (hasNonFriends) {
-            groupInviteAsyncService.sendJoinLinkInvites(saved, currentUserId, new LinkedHashSet<>(nonFriendMemberIds));
-        }
-
-        log.info("[Group] Created group {} by user {} with {} members, {} non-friend invites sent",
+        log.info("[Group] Created group {} by user {} with {} direct members and {} pending invite(s)",
                 saved.getId(), currentUserId, saved.getMembers().size(), nonFriendMemberIds.size());
         return helper.broadcastAndRespond(saved, currentUserId);
     }

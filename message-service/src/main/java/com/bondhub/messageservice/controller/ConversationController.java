@@ -15,8 +15,10 @@ import com.bondhub.messageservice.dto.response.JoinGroupPreviewResponse;
 import com.bondhub.messageservice.dto.response.JoinRequestResponse;
 import com.bondhub.messageservice.dto.response.SearchMemberResponse;
 import com.bondhub.messageservice.model.PinnedMessageInfo;
+import com.bondhub.messageservice.dto.request.GroupInviteSendRequest;
 import com.bondhub.messageservice.service.conversation.ConversationService;
 import com.bondhub.messageservice.service.conversation.GroupConversationService;
+import com.bondhub.messageservice.service.conversation.GroupInviteService;
 import com.bondhub.messageservice.service.message.PinService;
 import com.bondhub.messageservice.service.conversation.JoinRequestService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -39,6 +41,7 @@ public class ConversationController {
 
     private final ConversationService conversationService;
     private final GroupConversationService groupConversationService;
+    private final GroupInviteService groupInviteService;
     private final PinService pinService;
     private final JoinRequestService joinRequestService;
 
@@ -72,6 +75,15 @@ public class ConversationController {
             @RequestBody @Valid GroupConversationCreateRequest request) {
         return ResponseEntity.ok(ApiResponse.success(
                 groupConversationService.createGroupConversation(request)));
+    }
+
+    @PostMapping("/groups/{conversationId}/invites")
+    @Operation(summary = "Send group invites to non-friend users")
+    public ResponseEntity<ApiResponse<Void>> sendGroupInvites(
+            @PathVariable String conversationId,
+            @RequestBody @Valid GroupInviteSendRequest request) {
+        groupInviteService.sendInvites(conversationId, request);
+        return ResponseEntity.ok(ApiResponse.success(null));
     }
 
     @PatchMapping("/{conversationId}/name")

@@ -245,6 +245,9 @@ public class ConversationHelper {
                                 && room.getSettings().isMembershipApprovalEnabled()
                                 ? joinRequestRepository.countByConversationIdAndStatus(room.getId(), JoinRequestStatus.PENDING)
                                 : null))
+                .invitedUserIds(room.isGroup() && room.getInvitedUserIds() != null
+                        ? new ArrayList<>(room.getInvitedUserIds())
+                        : null)
                 .build();
     }
 
