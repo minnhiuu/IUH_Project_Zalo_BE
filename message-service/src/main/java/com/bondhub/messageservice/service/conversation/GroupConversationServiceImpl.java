@@ -22,6 +22,7 @@ import com.bondhub.messageservice.model.Conversation;
 import com.bondhub.messageservice.model.ConversationMember;
 import com.bondhub.messageservice.model.GroupSettings;
 import com.bondhub.messageservice.model.LastMessageInfo;
+import com.bondhub.messageservice.model.enums.JoinMethod;
 import com.bondhub.messageservice.model.enums.MemberRole;
 import com.bondhub.messageservice.repository.ChatUserRepository;
 import com.bondhub.messageservice.repository.ConversationRepository;
@@ -114,9 +115,11 @@ public class GroupConversationServiceImpl implements GroupConversationService {
         // Only add friends as direct members; non-friends will receive invite links
         Set<ConversationMember> members = new HashSet<>();
         members.add(ConversationMember.builder()
-                .userId(currentUserId).role(MemberRole.OWNER).joinedAt(now).build());
+                .userId(currentUserId).role(MemberRole.OWNER).joinedAt(now)
+                .joinMethod(JoinMethod.ADDED_BY_MEMBER).addedBy(currentUserId).build());
         friendMemberIds.forEach(id -> members.add(
-                ConversationMember.builder().userId(id).role(MemberRole.MEMBER).joinedAt(now).build()));
+                ConversationMember.builder().userId(id).role(MemberRole.MEMBER).joinedAt(now)
+                .joinMethod(JoinMethod.ADDED_BY_MEMBER).addedBy(currentUserId).build()));
 
         Map<String, Integer> unreadCounts = new HashMap<>();
         members.forEach(m -> unreadCounts.put(m.getUserId(), 0));
@@ -237,6 +240,36 @@ public class GroupConversationServiceImpl implements GroupConversationService {
         requestedIds.removeAll(existingActiveMemberIds);
         if (requestedIds.isEmpty()) return helper.buildConversationResponseForCurrentUser(conversation, currentUserId);
 
+        // Check friend list — only friends can be added directly
+        ChatUser currentUser = chatUserRepository.findById(currentUserId).orElse(null);
+        Set<String> friendIds = (currentUser != null && currentUser.getFriendIds() != null)
+                ? currentUser.getFriendIds() : Collections.emptySet();
+        Set<String> nonFriendIds = requestedIds.stream().filter(id -> !friendIds.contains(id)).collect(Collectors.toCollection(LinkedHashSet::new));
+        if (!nonFriendIds.isEmpty()) {
+            var actorInfoForNonFriend = helper.fetchActorInfo(currentUserId);
+            List<String> nonFriendTargetIds = new ArrayList<>(nonFriendIds);
+            List<ChatUser> nonFriendUsers = chatUserRepository.findAllById(nonFriendIds);
+            Map<String, String> nonFriendNameMap = nonFriendUsers.stream()
+                    .collect(Collectors.toMap(ChatUser::getId, ChatUser::getFullName));
+            Map<String, String> nonFriendAvatarMap = nonFriendUsers.stream()
+                    .filter(u -> u.getAvatar() != null)
+                    .collect(Collectors.toMap(ChatUser::getId, ChatUser::getAvatar));
+            List<String> nonFriendNames = nonFriendTargetIds.stream()
+                    .map(id -> nonFriendNameMap.getOrDefault(id, "Người dùng")).toList();
+            List<String> nonFriendAvatars = nonFriendTargetIds.stream()
+                    .map(id -> nonFriendAvatarMap.getOrDefault(id, "")).toList();
+
+            systemMessageService.sendSystemMessage(conversationId, currentUserId,
+                    actorInfoForNonFriend.name(), actorInfoForNonFriend.avatar(),
+                    SystemActionType.ADD_MEMBERS_FAILED,
+                    Map.of("targetIds", nonFriendTargetIds,
+                            "payload", Map.of("targetNames", nonFriendNames, "targetAvatars", nonFriendAvatars,
+                                    "failedCount", nonFriendIds.size())),
+                    Set.of(currentUserId));
+            requestedIds.removeAll(nonFriendIds);
+        }
+        if (requestedIds.isEmpty()) return helper.buildConversationResponseForCurrentUser(conversation, currentUserId);
+
         List<ChatUser> users = chatUserRepository.findAllById(requestedIds);
         if (users.size() != requestedIds.size()) throw new AppException(ErrorCode.USER_NOT_FOUND);
 
@@ -249,10 +282,13 @@ public class GroupConversationServiceImpl implements GroupConversationService {
                 existingMember.setRemovedBy(null);
                 existingMember.setRole(MemberRole.MEMBER);
                 existingMember.setJoinedAt(now.minusSeconds(1));
+                existingMember.setJoinMethod(JoinMethod.ADDED_BY_MEMBER);
+                existingMember.setAddedBy(currentUserId);
                 return;
             }
             conversation.getMembers().add(
-                    ConversationMember.builder().userId(id).role(MemberRole.MEMBER).joinedAt(now).build());
+                    ConversationMember.builder().userId(id).role(MemberRole.MEMBER).joinedAt(now)
+                    .joinMethod(JoinMethod.ADDED_BY_MEMBER).addedBy(currentUserId).build());
         });
 
         if (conversation.getUnreadCounts() == null) conversation.setUnreadCounts(new HashMap<>());
@@ -778,7 +814,8 @@ public class GroupConversationServiceImpl implements GroupConversationService {
                 .append("_id", 0).append("userId", "$members.userId")
                 .append("fullName", new Document("$ifNull", List.of("$user.fullName", "Người dùng")))
                 .append("avatar", "$user.avatar").append("phoneNumber", "$user.phoneNumber")
-                .append("role", "$members.role").append("joinedAt", "$members.joinedAt");
+                .append("role", "$members.role").append("joinedAt", "$members.joinedAt")
+                .append("joinMethod", "$members.joinMethod").append("addedBy", "$members.addedBy");
 
         Document facetDoc = new Document("$facet", new Document()
                 .append("metadata", List.of(new Document("$count", "totalItems")))
@@ -800,6 +837,13 @@ public class GroupConversationServiceImpl implements GroupConversationService {
         List<Document> dataDocs = extractDocumentList(root != null ? root.get("data") : null);
         int totalItems = !metadata.isEmpty() ? metadata.getFirst().getInteger("totalItems", 0) : 0;
 
+        // Build a map of userId -> fullName for addedBy lookup
+        Set<String> addedByIds = dataDocs.stream()
+                .map(doc -> doc.getString("addedBy")).filter(Objects::nonNull).collect(Collectors.toSet());
+        Map<String, String> addedByNameMap = addedByIds.isEmpty() ? Collections.emptyMap()
+                : chatUserRepository.findAllById(addedByIds).stream()
+                    .collect(Collectors.toMap(ChatUser::getId, ChatUser::getFullName));
+
         List<GroupMemberListItemResponse> pageData = dataDocs.stream().map(doc -> {
             String userId = doc.getString("userId");
             String fullName = doc.getString("fullName") != null ? doc.getString("fullName") : "Người dùng";
@@ -809,13 +853,17 @@ public class GroupConversationServiceImpl implements GroupConversationService {
             MemberRole role = roleRaw != null ? MemberRole.valueOf(roleRaw) : MemberRole.MEMBER;
             boolean isCurrentUser = currentUserId.equals(userId);
             boolean isFriend = friendIds.contains(userId);
+            String joinMethod = doc.getString("joinMethod");
+            String addedById = doc.getString("addedBy");
+            String addedByName = addedById != null ? addedByNameMap.get(addedById) : null;
 
             return GroupMemberListItemResponse.builder()
                     .userId(userId).fullName(fullName)
                     .avatar(avatar != null ? baseUrl + avatar : null)
                     .phoneNumber(phoneNumber).role(role)
                     .joinedAt(helper.toOffsetFromMongo(doc.get("joinedAt")))
-                    .isCurrentUser(isCurrentUser).isFriend(isFriend).build();
+                    .isCurrentUser(isCurrentUser).isFriend(isFriend)
+                    .joinMethod(joinMethod).addedBy(addedById).addedByName(addedByName).build();
         }).toList();
 
         return PageResponse.<List<GroupMemberListItemResponse>>builder()
