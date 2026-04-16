@@ -144,6 +144,28 @@ spring:
                     fallbackUri: forward:/fallback/user-service
 
             # Admin Routes (Protected - ADMIN role required)
+            - id: social-feed-service-admin-reports-root
+              uri: lb://social-feed-service
+              predicates:
+                - Path=/api/admin/reports
+              filters:
+                - SetPath=/admin/reports
+                - name: CircuitBreaker
+                  args:
+                    name: socialFeedServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/general
+
+            - id: social-feed-service-admin-reports
+              uri: lb://social-feed-service
+              predicates:
+                - Path=/api/admin/reports/**
+              filters:
+                - RewritePath=/api/admin/reports/(?<segment>.*), /admin/reports/${segment}
+                - name: CircuitBreaker
+                  args:
+                    name: socialFeedServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/general
+
             - id: user-service-admin
               uri: lb://user-service
               predicates:
@@ -308,6 +330,28 @@ spring:
                 - Path=/api/interactions/**
               filters:
                 - RewritePath=/api/interactions/(?<segment>.*), /interactions/${segment}
+                - name: CircuitBreaker
+                  args:
+                    name: socialFeedServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/general
+
+            - id: social-feed-service-reports-root
+              uri: lb://social-feed-service
+              predicates:
+                - Path=/api/reports
+              filters:
+                - SetPath=/reports
+                - name: CircuitBreaker
+                  args:
+                    name: socialFeedServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/general
+
+            - id: social-feed-service-reports
+              uri: lb://social-feed-service
+              predicates:
+                - Path=/api/reports/**
+              filters:
+                - RewritePath=/api/reports/(?<segment>.*), /reports/${segment}
                 - name: CircuitBreaker
                   args:
                     name: socialFeedServiceCircuitBreaker

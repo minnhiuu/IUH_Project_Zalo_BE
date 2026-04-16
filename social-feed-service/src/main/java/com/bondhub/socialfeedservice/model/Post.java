@@ -88,4 +88,7 @@ public class Post extends BaseModel {
 
     @Builder.Default
     boolean isEdited = false;
+
+    @Builder.Default
+    boolean hidden = false;
 }

@@ -79,6 +79,13 @@ public enum ErrorCode {
         REACTION_NOT_FOUND(HttpStatus.NOT_FOUND, 4003, "error.reaction.not.found"),
         POST_INVALID_VISIBILITY(HttpStatus.BAD_REQUEST, 4004, "error.post.invalid.visibility"),
 
+        // Report & Moderation errors (5xxx)
+        REPORT_NOT_FOUND(HttpStatus.NOT_FOUND, 5001, "error.report.not.found"),
+        REPORT_ALREADY_PENDING(HttpStatus.CONFLICT, 5002, "error.report.already.pending"),
+        REPORT_SELF_CONTENT(HttpStatus.BAD_REQUEST, 5003, "error.report.self.content"),
+        REPORT_TARGET_NOT_FOUND(HttpStatus.NOT_FOUND, 5004, "error.report.target.not.found"),
+        REPORT_ALREADY_PROCESSED(HttpStatus.CONFLICT, 5005, "error.report.already.processed"),
+
         // Admin / ban errors
         CANNOT_BAN_YOURSELF(HttpStatus.BAD_REQUEST, 2208, "error.cannot.ban.yourself"),
         CANNOT_BAN_ADMIN(HttpStatus.FORBIDDEN, 2209, "error.cannot.ban.admin"),
