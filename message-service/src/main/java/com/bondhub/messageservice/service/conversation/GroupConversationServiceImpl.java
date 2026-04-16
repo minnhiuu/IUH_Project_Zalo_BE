@@ -40,11 +40,9 @@ import org.springframework.data.mongodb.core.aggregation.AggregationResults;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
-import com.bondhub.messageservice.service.message.MessageService;
 
 import java.text.Normalizer;
 import java.time.LocalDateTime;
@@ -1336,6 +1334,63 @@ public class GroupConversationServiceImpl implements GroupConversationService {
                 .data(pageData).page(pageable.getPageNumber())
                 .totalPages(totalItems == 0 ? 0 : (int) Math.ceil((double) totalItems / pageable.getPageSize()))
                 .limit(pageable.getPageSize()).totalItems(totalItems).build();
+    }
+
+    @Override
+    public PageResponse<List<ConversationResponse>> getMyGroupConversations(String query, String sort, String filter, int page, int size) {
+        String currentUserId = helper.getSecurityUtil().getCurrentUserId();
+
+        Criteria memberMatch = Criteria.where("userId").is(currentUserId).and("active").ne(false);
+        if ("owner".equals(filter)) {
+            memberMatch = memberMatch.and("role").is("OWNER");
+        }
+        Criteria criteria = Criteria.where("isGroup").is(true)
+                .and("isDisbanded").ne(true)
+                .and("members").elemMatch(memberMatch);
+
+        if (query != null && !query.isBlank()) {
+            criteria = criteria.and("name").regex(Pattern.quote(query.trim()), "i");
+        }
+
+        Sort sortObj = switch (sort == null ? "" : sort) {
+            case "name_asc" -> Sort.by(Sort.Direction.ASC, "name");
+            case "name_desc" -> Sort.by(Sort.Direction.DESC, "name");
+            case "activity_oldest" -> Sort.by(Sort.Direction.ASC, "lastMessage.timestamp");
+            default -> Sort.by(Sort.Direction.DESC, "lastMessage.timestamp");
+        };
+
+        Pageable pageable = PageRequest.of(Math.max(page, 0), Math.max(size, 1), sortObj);
+        Query mongoQuery = new Query(criteria).with(pageable);
+        long total = mongoTemplate.count(new Query(criteria), Conversation.class);
+        List<Conversation> conversations = mongoTemplate.find(mongoQuery, Conversation.class);
+
+        if (conversations.isEmpty()) {
+            return PageResponse.<List<ConversationResponse>>builder()
+                    .data(Collections.emptyList()).page(pageable.getPageNumber())
+                    .totalPages(0).limit(pageable.getPageSize()).totalItems(0).build();
+        }
+
+        Set<String> allUserIds = new HashSet<>();
+        conversations.forEach(room -> {
+            room.getMembers().forEach(m -> allUserIds.add(m.getUserId()));
+            if (room.getLastMessage() != null && room.getLastMessage().getSenderId() != null) {
+                allUserIds.add(room.getLastMessage().getSenderId());
+            }
+        });
+
+        Map<String, ChatUser> userCache = chatUserRepository.findAllById(allUserIds).stream()
+                .collect(Collectors.toMap(ChatUser::getId, u -> u));
+        String baseUrl = helper.getBaseUrl();
+        boolean viewerCanSee = helper.canViewerSeeStatus(currentUserId, userCache);
+
+        List<ConversationResponse> responses = conversations.stream()
+                .map(room -> helper.buildConversationResponse(room, null, currentUserId, userCache, baseUrl, viewerCanSee, null))
+                .toList();
+
+        int totalPages = (int) Math.ceil((double) total / pageable.getPageSize());
+        return PageResponse.<List<ConversationResponse>>builder()
+                .data(responses).page(pageable.getPageNumber())
+                .totalPages(totalPages).limit(pageable.getPageSize()).totalItems((int) total).build();
     }
 
     private void publishGroupMemberEvent(String groupId, String userId, GroupMemberChangedEvent.GroupMemberAction action) {

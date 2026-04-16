@@ -54,6 +54,18 @@ public class ConversationController {
                 conversationService.getUserConversations(page, size)));
     }
 
+    @GetMapping("/groups/mine")
+    @Operation(summary = "Get my group conversations with search, sort and filter")
+    public ResponseEntity<ApiResponse<PageResponse<List<ConversationResponse>>>> getMyGroupConversations(
+            @RequestParam(required = false) String query,
+            @RequestParam(defaultValue = "activity_newest") String sort,
+            @RequestParam(defaultValue = "all") String filter,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(ApiResponse.success(
+                groupConversationService.getMyGroupConversations(query, sort, filter, page, size)));
+    }
+
     @GetMapping("/partner/{partnerId}")
     @Operation(summary = "Get or create a one-to-one conversation with a partner")
     public ResponseEntity<ApiResponse<ConversationResponse>> getOrCreateConversationWithPartner(
