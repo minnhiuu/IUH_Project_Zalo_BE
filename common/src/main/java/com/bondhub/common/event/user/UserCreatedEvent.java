@@ -21,5 +21,6 @@ public class UserCreatedEvent {
     private Set<String> initialInterests;
     private LocalDate dob;
     private String gender;
+    private String phoneNumber;
     private Long timestamp;
 }

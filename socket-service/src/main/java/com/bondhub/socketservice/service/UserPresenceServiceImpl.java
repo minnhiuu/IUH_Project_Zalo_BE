@@ -1,0 +1,127 @@
+package com.bondhub.socketservice.service;
+
+import com.bondhub.common.dto.ApiResponse;
+import com.bondhub.common.enums.Status;
+import com.bondhub.common.utils.S3UrlUtil;
+import com.bondhub.common.utils.S3Util;
+import com.bondhub.socketservice.client.FriendServiceClient;
+import com.bondhub.socketservice.dto.PresenceEvent;
+import com.bondhub.socketservice.model.ChatUser;
+import com.bondhub.socketservice.repository.ChatUserRepository;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.stereotype.Service;
+
+import java.time.LocalDateTime;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
+@Service
+@RequiredArgsConstructor
+@Slf4j
+public class UserPresenceServiceImpl implements UserPresenceService {
+
+    private final ChatUserRepository repository;
+    private final SimpMessagingTemplate messagingTemplate;
+    private final FriendServiceClient friendServiceClient;
+
+    @Value("${aws.s3.bucket.name}")
+    private String bucketName;
+
+    @Value("${cloud.aws.region.static}")
+    private String region;
+
+    @Override
+    public ChatUser saveUser(ChatUser user) {
+        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+
+        ChatUser savedUser = repository.findById(user.getId())
+                .map(stored -> {
+                    stored.setStatus(Status.ONLINE);
+                    if (user.getFullName() != null && !user.getFullName().isBlank()) {
+                        stored.setFullName(user.getFullName());
+                    }
+                    if (user.getEmail() != null && !user.getEmail().isBlank()) {
+                        stored.setEmail(user.getEmail());
+                    }
+                    if (user.getAvatar() != null && !user.getAvatar().isBlank()) {
+                        stored.setAvatar(S3UrlUtil.extractStorageKey(user.getAvatar(), baseUrl));
+                    }
+                    if (user.getAccountId() != null && !user.getAccountId().isBlank()) {
+                        stored.setAccountId(user.getAccountId());
+                    }
+                    stored.setLastUpdatedAt(LocalDateTime.now());
+                    log.info("[Presence] User ONLINE: {}", stored.getEmail());
+                    return repository.save(stored);
+                })
+                .orElseGet(() -> {
+                    user.setStatus(Status.ONLINE);
+                    user.setLastUpdatedAt(LocalDateTime.now());
+                    user.setFullName(user.getFullName() != null && !user.getFullName().isBlank()
+                            ? user.getFullName()
+                            : "Người dùng");
+                    if (user.getAvatar() != null && !user.getAvatar().isBlank()) {
+                        user.setAvatar(S3UrlUtil.extractStorageKey(user.getAvatar(), baseUrl));
+                    }
+                    if (user.getFriendIds() == null) {
+                        user.setFriendIds(new HashSet<>());
+                    }
+                    log.info("[Presence] New user ONLINE: {}", user.getEmail());
+                    return repository.save(user);
+                });
+
+        // Cold-start: sync friend IDs from friend-service if missing
+        if (savedUser.getFriendIds() == null || savedUser.getFriendIds().isEmpty()) {
+            try {
+                ApiResponse<Set<String>> response = friendServiceClient.getFriendIds(savedUser.getId());
+                if (response != null && response.data() != null && !response.data().isEmpty()) {
+                    savedUser.setFriendIds(response.data());
+                    savedUser = repository.save(savedUser);
+                    log.info("[Presence] Synced {} friend IDs for user {}", response.data().size(), savedUser.getId());
+                }
+            } catch (Exception e) {
+                log.warn("[Presence] Failed to sync friend IDs for user {}", savedUser.getId(), e);
+            }
+        }
+
+        notifyFriendsAboutPresence(savedUser, Status.ONLINE);
+        return savedUser;
+    }
+
+    @Override
+    public void disconnect(String userId) {
+        repository.findById(userId).ifPresent(user -> {
+            user.setStatus(Status.OFFLINE);
+            repository.save(user);
+            log.info("[Presence] User OFFLINE: {}", user.getEmail());
+            notifyFriendsAboutPresence(user, Status.OFFLINE);
+        });
+    }
+
+    private void notifyFriendsAboutPresence(ChatUser user, Status status) {
+        if (user.isInvisible() || user.getFriendIds() == null || user.getFriendIds().isEmpty()) return;
+
+        List<ChatUser> onlineFriends = repository.findByIdInAndStatus(user.getFriendIds(), Status.ONLINE);
+        PresenceEvent event = new PresenceEvent(user.getId(), status);
+
+        for (ChatUser friend : onlineFriends) {
+            messagingTemplate.convertAndSendToUser(friend.getId(), "/queue/presence", event);
+        }
+
+        // When coming online: also push back the list of already-online friends to the user
+        if (status == Status.ONLINE) {
+            for (ChatUser friend : onlineFriends) {
+                messagingTemplate.convertAndSendToUser(
+                        user.getId(), "/queue/presence", new PresenceEvent(friend.getId(), Status.ONLINE));
+            }
+        }
+    }
+
+    @Override
+    public List<ChatUser> findConnectedUsers() {
+        return repository.findAllByStatus(Status.ONLINE);
+    }
+}

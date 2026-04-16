@@ -25,5 +25,14 @@ public enum EventType {
     POST_COMMENT_COUNT_PROJECTION_REQUESTED,
     USER_INTERACTION_RECORDED,
     POST_VIEW_RECORDED,
-    POST_DISLIKE_RECORDED
+    POST_DISLIKE_RECORDED,
+
+    USER_INDEX_DELETED,
+    USER_PRIVACY_CHANGED,
+
+    // Friend Events (friend-service)
+    FRIENDSHIP_CHANGED,
+
+    // Group Events (message-service)
+    GROUP_MEMBER_CHANGED
 }

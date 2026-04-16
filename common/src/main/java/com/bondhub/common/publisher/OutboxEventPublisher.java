@@ -8,12 +8,16 @@ import com.bondhub.common.event.socialfeed.ReactionToggleCommandEvent;
 import com.bondhub.common.event.socialfeed.UserInteractionEvent;
 import com.bondhub.common.event.user.UserIndexDeletedEvent;
 import com.bondhub.common.event.user.UserIndexRequestedEvent;
+import com.bondhub.common.event.user.UserProfileUpdatedEvent;
 import com.bondhub.common.model.kafka.EventType;
 import com.bondhub.common.model.kafka.OutboxEvent;
 import com.bondhub.common.repository.OutboxEventRepository;
+import com.bondhub.common.event.friend.FriendshipChangedEvent;
+import com.bondhub.common.event.group.GroupMemberChangedEvent;
 import com.bondhub.common.event.user.UserCreatedEvent;
 import com.bondhub.common.event.user.UserUpdatedEvent;
 import com.bondhub.common.event.user.UserDeletedEvent;
+import com.bondhub.common.event.user.UserPrivacyChangedEvent;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -137,6 +141,9 @@ public class OutboxEventPublisher {
             case USER_DELETED -> kafkaTopicProperties.getUserEvents().getDeleted();
             case USER_INDEX_REQUESTED -> kafkaTopicProperties.getUserEvents().getIndexRequested();
             case USER_INDEX_DELETED -> kafkaTopicProperties.getUserEvents().getIndexDeleted();
+            case USER_PRIVACY_CHANGED -> kafkaTopicProperties.getUserEvents().getPrivacyChanged();
+            case FRIENDSHIP_CHANGED -> kafkaTopicProperties.getFriendEvents().getFriendshipChanged();
+            case GROUP_MEMBER_CHANGED -> kafkaTopicProperties.getGroupEvents().getMemberChanged();
             case POST_CREATED -> kafkaTopicProperties.getSocialFeedEvents().getPostCreated();
             case POST_UPDATED -> kafkaTopicProperties.getSocialFeedEvents().getPostUpdated();
             case POST_DELETED -> kafkaTopicProperties.getSocialFeedEvents().getPostDeleted();
@@ -152,11 +159,16 @@ public class OutboxEventPublisher {
         return switch (eventType) {
             case ACCOUNT_REGISTERED, ACCOUNT_UPDATED, ACCOUNT_DELETED, 
                  ACCOUNT_VERIFIED, ACCOUNT_ENABLED, ACCOUNT_DISABLED -> AccountRegisteredEvent.class;
+            case USER_CREATED, USER_DELETED -> UserCreatedEvent.class;
+            case USER_UPDATED -> UserProfileUpdatedEvent.class;
             case USER_CREATED -> UserCreatedEvent.class;
             case USER_UPDATED -> UserUpdatedEvent.class;
             case USER_DELETED -> UserDeletedEvent.class;
             case USER_INDEX_REQUESTED ->  UserIndexRequestedEvent.class;
             case USER_INDEX_DELETED -> UserIndexDeletedEvent.class;
+            case USER_PRIVACY_CHANGED -> UserPrivacyChangedEvent.class;
+            case FRIENDSHIP_CHANGED -> FriendshipChangedEvent.class;
+            case GROUP_MEMBER_CHANGED -> GroupMemberChangedEvent.class;
             case POST_CREATED, POST_UPDATED, POST_DELETED -> PostEvent.class;
             case REACTION_TOGGLE_COMMAND_REQUESTED -> ReactionToggleCommandEvent.class;
             case POST_COMMENT_COUNT_PROJECTION_REQUESTED -> PostCommentCountProjectionRequestedEvent.class;

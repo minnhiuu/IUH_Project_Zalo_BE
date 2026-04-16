@@ -9,6 +9,7 @@ import lombok.experimental.SuperBuilder;
 import org.springframework.data.mongodb.core.index.CompoundIndex;
 import org.springframework.data.mongodb.core.index.CompoundIndexes;
 import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.mapping.FieldType;
 import org.springframework.data.mongodb.core.mapping.MongoId;
 
 /**
@@ -30,7 +31,7 @@ import org.springframework.data.mongodb.core.mapping.MongoId;
 public class UserActivityLog extends BaseModel {
     
     @EqualsAndHashCode.Include
-    @MongoId
+    @MongoId(FieldType.OBJECT_ID)
     String id;
     
     String userId;

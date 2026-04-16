@@ -13,11 +13,14 @@ public record PageResponse<T>(
         int page,
         int totalPages,
         int limit,
-        long totalItems
-) {
+        long totalItems) {
     public static <E, R> PageResponse<List<R>> fromPage(Page<E> page, Function<E, R> mapper) {
+        return fromPageData(page, page.getContent().stream().map(mapper).toList());
+    }
+
+    public static <E, R> PageResponse<List<R>> fromPageData(Page<E> page, List<R> data) {
         return PageResponse.<List<R>>builder()
-                .data(page.getContent().stream().map(mapper).toList())
+                .data(data)
                 .page(page.getNumber())
                 .totalPages(page.getTotalPages())
                 .limit(page.getSize())

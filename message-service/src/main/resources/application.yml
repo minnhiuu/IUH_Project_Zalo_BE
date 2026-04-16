@@ -12,3 +12,26 @@ spring:
         initial-interval: 1000
         max-interval: 2000
         multiplier: 1.1
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:redis123}
+
+server:
+  port: 8084
+
+# ZEGOCLOUD Video Call
+zego:
+  app-id: ${ZEGO_APP_ID}
+  server-secret: ${ZEGO_SERVER_SECRET}
+
+# Resilience4j Circuit Breaker
+resilience4j:
+  circuitbreaker:
+    instances:
+      userService:
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 3

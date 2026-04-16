@@ -1,5 +1,5 @@
 server:
-  port: 8087
+  port: 8089
 
 spring:
   application:
@@ -65,6 +65,16 @@ bondhub:
   security:
     public-endpoints:
       - /search/**
+
+# AWS S3 Configuration
+cloud:
+  aws:
+    region:
+      static: ${AWS_REGION}
+aws:
+  s3:
+    bucket:
+      name: ${AWS_S3_BUCKET_NAME}
 
 # Elasticsearch Search Service Configuration
 elasticsearch:

@@ -82,6 +82,13 @@ spring:
               filters:
                 - RewritePath=/social-feed/v3/api-docs, /v3/api-docs
 
+            - id: ai-service-docs
+              uri: lb://ai-service
+              predicates:
+                - Path=/ai/v3/api-docs/**
+              filters:
+                - RewritePath=/ai/v3/api-docs, /v3/api-docs
+
             # Auth Service Routes (Public - no JWT required)
             - id: auth-service-qr-wait
               uri: lb://auth-service
@@ -121,16 +128,16 @@ spring:
                     fallbackUri: forward:/fallback/file-service
 
             # User Service Routes (Protected - JWT required)
-            - id: user-service-audit-logs
-              uri: lb://user-service
+            - id: friend-service-blocks
+              uri: lb://friend-service
               predicates:
-                - Path=/api/audit-logs,/api/audit-logs/**
+                - Path=/api/blocks,/api/blocks/**
               filters:
                 - RewritePath=/api/(?<segment>.*), /${segment}
                 - name: CircuitBreaker
                   args:
-                    name: userServiceCircuitBreaker
-                    fallbackUri: forward:/fallback/user-service
+                    name: friendServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/friend-service
 
             - id: user-service
               uri: lb://user-service
@@ -188,13 +195,34 @@ spring:
                     name: searchServiceCircuitBreaker
                     fallbackUri: forward:/fallback/search-service
 
-            # Message Service Routes (Protected - JWT required)
+            - id: user-service-elasticsearch-legacy
+              uri: lb://search-service
+              predicates:
+                - Path=/api/users/elasticsearch/**
+              filters:
+                - RewritePath=/api/users/elasticsearch/(?<segment>.*), /search/elasticsearch/${segment}
+                - name: CircuitBreaker
+                  args:
+                    name: searchServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/search-service
+
+            # Socket Service Routes (WebSocket)
+            - id: socket-service-ws
+              uri: lb:ws://socket-service
+              predicates:
+                - Path=/ws/**
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    name: socketServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/socket-service
+
             - id: message-service
               uri: lb://message-service
               predicates:
                 - Path=/api/messages/**
               filters:
-                - RewritePath=/api/messages/(?<segment>.*), /messages/${segment}
+                - RewritePath=/api/messages/(?<segment>.*), /${segment}
                 - name: CircuitBreaker
                   args:
                     name: messageServiceCircuitBreaker
@@ -391,6 +419,29 @@ spring:
                     name: postRecommendationServiceCircuitBreaker
                     fallbackUri: forward:/fallback/general
 
+            - id: friend-service-contacts
+              uri: lb://friend-service
+              predicates:
+                - Path=/api/contacts/**
+              filters:
+                - RewritePath=/api/(?<segment>.*), /${segment}
+                - name: CircuitBreaker
+                  args:
+                    name: friendServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/friend-service
+
+            - id: ai-service
+              uri: lb://ai-service
+              predicates:
+                - Path=/api/ai/**
+              filters:
+                - RewritePath=/api/ai/(?<segment>.*), /ai/${segment}
+                - AddResponseHeader=X-Accel-Buffering, no
+                - name: CircuitBreaker
+                  args:
+                    name: aiServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/ai-service
+
           # Global CORS Configuration
           globalCors:
             cors-configurations:
@@ -480,6 +531,8 @@ resilience4j:
         base-config: default
         failure-rate-threshold: 70
         wait-duration-in-open-state: 60s
+      socketServiceCircuitBreaker:
+        base-config: default
       messageServiceCircuitBreaker:
         base-config: default
       notificationServiceCircuitBreaker:
@@ -503,6 +556,8 @@ resilience4j:
         base-config: default
       qrWaitServiceCircuitBreaker:
         timeout-duration: ${GATEWAY_QR_TIMEOUT_MS}ms
+      socketServiceCircuitBreaker:
+        base-config: default
       messageServiceCircuitBreaker:
         base-config: default
       notificationServiceCircuitBreaker:
@@ -663,6 +718,8 @@ springdoc:
         url: /search/v3/api-docs
       - name: Social Feed Service
         url: /social-feed/v3/api-docs
+      - name: AI Service
+        url: /ai/v3/api-docs
     # Enable "Try it out" functionality
     use-root-path: true
     path: /swagger-ui.html

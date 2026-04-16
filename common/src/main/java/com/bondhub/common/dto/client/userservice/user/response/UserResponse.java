@@ -12,5 +12,6 @@ public record UserResponse(
     LocalDate dob,
     String bio,
     Gender gender,
-    String accountId
+    String accountId,
+    String avatar
 ) {}

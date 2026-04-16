@@ -13,10 +13,20 @@ import java.util.Map;
 
 @FeignClient(name = "user-service", path = "/users")
 public interface UserServiceClient {
-    
+
     @GetMapping("/{id}")
     ApiResponse<UserSummaryResponse> getUserSummary(@PathVariable("id") String id);
     
     @PostMapping("/batch")
     ApiResponse<Map<String, UserSummaryResponse>> getUsersByIds(@RequestBody List<String> ids);
+
+    @GetMapping("/account/{accountId}")
+    ApiResponse<UserSummaryResponse> getUserByAccountId(@PathVariable("accountId") String accountId);
+
+    @PostMapping("/search/by-phones")
+    ApiResponse<List<UserSummaryResponse>> findUsersByPhones(@RequestBody List<String> phones);
+
+    @PostMapping("/search/by-emails")
+    ApiResponse<List<UserSummaryResponse>> findUsersByEmails(@RequestBody List<String> emails);
+
 }

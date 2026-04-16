@@ -3,6 +3,7 @@ package com.bondhub.userservice.service.user;
 import com.bondhub.common.dto.client.userservice.user.response.UserSummaryResponse;
 import com.bondhub.userservice.dto.request.user.UserInterestSeedUpdateRequest;
 import com.bondhub.userservice.dto.response.UserSyncResponse;
+
 import java.util.List;
 
 public interface UserInternalService {
@@ -17,6 +18,10 @@ public interface UserInternalService {
     void recordLastLogin(String accountId);
 
     void syncBanStatus(String accountId, boolean banned);
+
+    boolean existsById(String userId);
+
+    UserSummaryResponse getUserSummaryByUserId(String userId);
 
     void updateUserInterestsForSeed(String accountId, UserInterestSeedUpdateRequest request);
 }

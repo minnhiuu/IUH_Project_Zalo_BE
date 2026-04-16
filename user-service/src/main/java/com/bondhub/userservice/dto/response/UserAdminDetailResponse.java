@@ -26,7 +26,6 @@ public record UserAdminDetailResponse(
     String email,
     String phoneNumber,
     String role,
-    Boolean isVerified,
 
     // Audit info
     LocalDateTime createdAt,

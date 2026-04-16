@@ -39,7 +39,16 @@ public class SecurityConfig {
                     auth.requestMatchers("/error", "/actuator/**").permitAll();
 
                     // Permit Swagger/OpenAPI documentation endpoints
-                    auth.requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/api/v3/docs/**").permitAll();
+                    auth.requestMatchers(
+                            "/v3/api-docs",
+                            "/v3/api-docs/**",
+                            "/swagger-ui/**",
+                            "/swagger-ui.html",
+                            "/api/v3/docs/**",
+                            "/search/v3/api-docs",
+                            "/search/v3/api-docs/**",
+                            "/search/swagger-ui/**"
+                    ).permitAll();
 
                     // Permit configured public endpoints
                     if (securityProperties.getPublicEndpoints() != null

@@ -28,4 +28,10 @@ public class UserSearchController {
         Pageable pageable = PageRequest.of(page, size);
         return ResponseEntity.ok(ApiResponse.success(userSearchService.searchUsers(keyword, pageable)));
     }
+
+    @PostMapping("/users/by-phones")
+    public ResponseEntity<ApiResponse<List<UserSummaryResponse>>> findUsersByPhones(
+            @RequestBody List<String> phones) {
+        return ResponseEntity.ok(ApiResponse.success(userSearchService.findUsersByPhones(phones)));
+    }
 }

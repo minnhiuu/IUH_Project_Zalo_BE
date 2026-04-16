@@ -24,6 +24,10 @@ public class SecurityPaths {
             "/api/auth/qr/generate",
             "/api/auth/qr/wait/**",
 
+            // WebSocket endpoints
+            "/ws/**",
+            "/ws",
+
             // Internal service-to-service endpoints
             "/api/users/internal/**",
 
@@ -41,6 +45,8 @@ public class SecurityPaths {
             "/api/users/v3/api-docs",
             "/api/messages/v3/api-docs",
             "/api/notifications/v3/api-docs",
+            "/api/search/v3/api-docs",
+            "/api/search/v3/api-docs/**",
             "/api/social/v3/api-docs",
 
             // Service-level API docs paths (after gateway routes them)
@@ -60,6 +66,8 @@ public class SecurityPaths {
             "/friend/v3/api-docs/**",
             "/social-feed/v3/api-docs",
             "/social-feed/v3/api-docs/**",
+            "/search/v3/api-docs",
+            "/search/v3/api-docs/**",
 
             // Actuator endpoints
             "/actuator/health",
@@ -81,6 +89,10 @@ public class SecurityPaths {
             "/auth/logout",
             "/auth/qr/generate",
             "/auth/qr/wait/**",
+
+            // WebSocket endpoints
+            "/ws/**",
+            "/ws",
 
             // Test endpoints (gateway strips /api/users -> /users)
             "/users/test/security/public",

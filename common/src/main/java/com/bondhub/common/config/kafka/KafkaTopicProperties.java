@@ -17,6 +17,20 @@ public class KafkaTopicProperties {
     private NotificationEvents notificationEvents = new NotificationEvents();
     private SocialFeedEvents socialFeedEvents = new SocialFeedEvents();
     private InteractionEvents interactionEvents = new InteractionEvents();
+    private FriendEvents friendEvents = new FriendEvents();
+    private GroupEvents groupEvents = new GroupEvents();
+
+    @Getter
+    @Setter
+    public static class GroupEvents {
+        private String memberChanged = "group.member.changed";
+    }
+
+    @Getter
+    @Setter
+    public static class FriendEvents {
+        private String friendshipChanged = "friend.friendship.changed";
+    }
 
     @Getter
     @Setter
@@ -38,6 +52,7 @@ public class KafkaTopicProperties {
 
         private String indexRequested = "user.search.index-requested";
         private String indexDeleted = "user.search.index-deleted";
+        private String privacyChanged = "user.privacy.changed";
     }
 
     @Getter
@@ -49,7 +64,8 @@ public class KafkaTopicProperties {
     @Getter
     @Setter
     public static class NotificationEvents {
-
+        private String raw = "noti.raw";
+        private String cleanup = "noti.cleanup";
     }
 
     @Getter
@@ -75,6 +91,5 @@ public class KafkaTopicProperties {
     public static class SystemEvents {
 
     }
-
 
 }

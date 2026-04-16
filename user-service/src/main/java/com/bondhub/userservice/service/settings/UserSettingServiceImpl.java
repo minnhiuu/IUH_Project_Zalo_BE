@@ -5,14 +5,13 @@ import com.bondhub.common.exception.ErrorCode;
 import com.bondhub.common.utils.JwtUtil;
 import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.userservice.client.AuthServiceClient;
-import com.bondhub.userservice.dto.request.settings.*;
 import com.bondhub.userservice.dto.response.settings.UserSettingResponse;
+import com.bondhub.common.event.user.UserPrivacyChangedEvent;
+import com.bondhub.common.model.kafka.EventType;
+import com.bondhub.common.publisher.OutboxEventPublisher;
 import com.bondhub.userservice.model.User;
 import com.bondhub.userservice.model.UserSetting;
 import com.bondhub.userservice.model.enums.AppLanguage;
-import com.bondhub.userservice.model.enums.PrivacyLevel;
-import com.bondhub.userservice.model.enums.SettingScope;
-import com.bondhub.userservice.model.enums.ThemeMode;
 import com.bondhub.userservice.repository.UserRepository;
 import com.bondhub.userservice.repository.UserSettingRepository;
 import jakarta.servlet.http.HttpServletRequest;
@@ -41,6 +40,7 @@ public class UserSettingServiceImpl implements UserSettingService {
     JwtUtil jwtUtil;
     HttpServletRequest httpServletRequest;
     AuthServiceClient authServiceClient;
+    OutboxEventPublisher outboxEventPublisher;
 
     @Override
     public UserSettingResponse getMySettings() {
@@ -159,7 +159,22 @@ public class UserSettingServiceImpl implements UserSettingService {
         String userId = getCurrentUserId();
         log.info("Updating privacySettings section for userId: {}", userId);
         userSettingRepository.updateSettingSection(userId, "privacySettings", request);
+
+        // Publish event for synchronization
+        publishUserPrivacyChangedEvent(userId, request.isShowSeenStatus());
+
         return getMySettings();
+    }
+
+    private void publishUserPrivacyChangedEvent(String userId, boolean showSeenStatus) {
+        UserPrivacyChangedEvent event = UserPrivacyChangedEvent.builder()
+                .userId(userId)
+                .showSeenStatus(showSeenStatus)
+                .timestamp(System.currentTimeMillis())
+                .build();
+
+        outboxEventPublisher.saveAndPublish(userId, "UserSetting", EventType.USER_PRIVACY_CHANGED, event);
+        log.info("Published USER_PRIVACY_CHANGED event via outbox for user: {}", userId);
     }
 
     @Override
@@ -313,18 +328,6 @@ public class UserSettingServiceImpl implements UserSettingService {
         String userId = user.getId();
 
         return userId;
-    }
-
-    private SettingScope mapPrivacyLevelToScope(PrivacyLevel level) {
-        if (level == null) {
-            return SettingScope.EVERYONE;
-        }
-        return switch (level) {
-            case EVERYBODY -> SettingScope.EVERYONE;
-            case FRIENDS -> SettingScope.FRIENDS;
-            case CONTACTED -> SettingScope.FRIENDS_AND_CONTACTED;
-            case PRIVATE -> SettingScope.ONLY_ME;
-        };
     }
 
     private void applyCurrentDeviceLanguage(UserSetting.LanguageAndInterface settings) {

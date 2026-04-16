@@ -6,6 +6,7 @@ import com.bondhub.friendservice.dto.response.*;
 import org.springframework.data.domain.Pageable;
 
 import java.util.List;
+import java.util.Set;
 
 public interface FriendshipService {
     
@@ -31,9 +32,13 @@ public interface FriendshipService {
     
     Integer getMutualFriendsCount(String userId);
 
-    /**
-     * Internal: returns the IDs of all accepted friends of the given user.
-     * Used by service-to-service calls that do not have a user JWT in context.
-     */
-    List<String> getFriendIds(String userId, int size);
+    Set<String> getFriendIds(String userId);
+
+    java.util.Map<String, String> batchCheckFriendshipStatus(List<String> targetUserIds);
+
+    PageResponse<List<FriendSuggestionResponse>> getGraphSuggestions(Pageable pageable);
+
+    PageResponse<List<FriendSuggestionResponse>> getContactSuggestions(Pageable pageable);
+
+    PageResponse<List<FriendSuggestionResponse>> getUnifiedSuggestions(Pageable pageable);
 }

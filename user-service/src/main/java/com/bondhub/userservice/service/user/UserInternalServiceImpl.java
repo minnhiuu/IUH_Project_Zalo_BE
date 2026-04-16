@@ -72,7 +72,7 @@ public class UserInternalServiceImpl implements UserInternalService {
     public List<UserSyncResponse> getUsersBatch(String lastId, int size) {
         List<User> users;
         PageRequest pageRequest = PageRequest.of(0, size);
-        
+
         if (lastId == null || lastId.isEmpty()) {
             users = userRepository.findAllByOrderByIdAsc(pageRequest);
         } else {
@@ -100,6 +100,29 @@ public class UserInternalServiceImpl implements UserInternalService {
             userRepository.save(user);
             log.info("Synced ban status for accountId={}, banned={}", accountId, banned);
         });
+    }
+
+    @Override
+    public boolean existsById(String userId) {
+        return userRepository.existsById(userId);
+    }
+
+    @Override
+    public UserSummaryResponse getUserSummaryByUserId(String userId) {
+        log.info("Internal: Fetching user summary for userId: {}", userId);
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+
+        UserSummaryResponse response = userMapper.toUserSummaryResponse(user);
+        if (response.avatar() != null && !response.avatar().isEmpty()) {
+            String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+            return UserSummaryResponse.builder()
+                    .id(response.id())
+                    .fullName(response.fullName())
+                    .avatar(baseUrl + response.avatar())
+                    .build();
+        }
+        return response;
     }
 
     @Override

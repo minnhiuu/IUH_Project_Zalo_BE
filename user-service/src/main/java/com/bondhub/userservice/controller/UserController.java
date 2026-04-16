@@ -6,7 +6,7 @@ import com.bondhub.userservice.dto.request.BioUpdateRequest;
 import com.bondhub.userservice.dto.request.user.AvatarUpdateRequest;
 import com.bondhub.userservice.dto.request.user.BackgroundUpdateRequest;
 import com.bondhub.userservice.dto.request.user.UserCreateRequest;
-import com.bondhub.userservice.dto.request.user.UserUpdateRequest;
+import com.bondhub.common.dto.client.userservice.user.request.UserUpdateRequest;
 import com.bondhub.userservice.dto.response.user.UserImageResponse;
 import com.bondhub.userservice.dto.response.user.UserProfileResponse;
 import com.bondhub.userservice.dto.response.user.UserResponse;
@@ -83,11 +83,12 @@ public class UserController {
         return ResponseEntity.ok(ApiResponse.success(userService.updateBackgroundPosition(y)));
     }
 
-    @PatchMapping("/profile/bio")
+    @PutMapping("/profile/bio")
     public ResponseEntity<ApiResponse<UserProfileResponse>> updateBio(
             @RequestBody BioUpdateRequest request) {
         return ResponseEntity.ok(ApiResponse.success(userService.updateBio(request)));
     }
+
 
     @DeleteMapping("/{id}")
     public ResponseEntity<ApiResponse<Void>> deleteUser(@PathVariable String id) {

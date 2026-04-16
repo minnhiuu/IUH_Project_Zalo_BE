@@ -45,7 +45,7 @@ public class QrWaitServiceImpl implements QrWaitService{
             if (timeUntilExpiry <= 0) {
                 throw new AppException(ErrorCode.QR_SESSION_EXPIRED);
             }
-            actualTimeout = Math.min(defaultTimeout, timeUntilExpiry);
+            actualTimeout = Math.max(1000L, Math.min(defaultTimeout, timeUntilExpiry));
         }
 
         DeferredResult<QrStatusResponse> deferredResult = new DeferredResult<>(actualTimeout);
