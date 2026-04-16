@@ -5,6 +5,7 @@ import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
 import com.bondhub.messageservice.dto.response.ChatNotification;
+import com.bondhub.messageservice.dto.response.MessageSeenResponse;
 import com.bondhub.messageservice.dto.response.ReplyMetadataResponse;
 import com.bondhub.messageservice.model.Conversation;
 import com.bondhub.messageservice.model.ConversationMember;
@@ -350,6 +351,78 @@ public class MessageServiceImpl implements MessageService {
         messageRepository.save(message);
 
         broadcastReactionUpdate(room, messageId, message.getReactions());
+    }
+
+    @Override
+    public List<MessageSeenResponse> getSeenMembers(String conversationId, String messageId) {
+        String currentUserId = securityUtil.getCurrentUserId();
+
+        Conversation room = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
+        assertConversationMember(room, currentUserId);
+
+        Message targetMessage = messageRepository.findById(messageId)
+                .orElseThrow(() -> new AppException(ErrorCode.MESSAGE_NOT_FOUND));
+
+        if (!targetMessage.getConversationId().equals(conversationId)) {
+            throw new AppException(ErrorCode.MESSAGE_NOT_FOUND);
+        }
+
+        if (!targetMessage.getSenderId().equals(currentUserId)) {
+            throw new AppException(ErrorCode.CHAT_NOT_SENDER);
+        }
+
+        // Collect lastReadMessageIds from active members (exclude sender of the target message)
+        List<ConversationMember> activeMembers = room.getMembers().stream()
+                .filter(this::isActiveMember)
+                .filter(m -> !m.getUserId().equals(targetMessage.getSenderId()))
+                .filter(m -> m.getLastReadMessageId() != null)
+                .toList();
+
+        if (activeMembers.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        // Batch-fetch all lastRead messages and filter those with createdAt >= targetMessage.createdAt
+        Set<String> lastReadIds = activeMembers.stream()
+                .map(ConversationMember::getLastReadMessageId)
+                .collect(Collectors.toSet());
+
+        Query query = new Query(
+                Criteria.where("id").in(lastReadIds)
+                        .and("createdAt").gte(targetMessage.getCreatedAt())
+        );
+        List<Message> seenMessages = mongoTemplate.find(query, Message.class);
+        Set<String> seenMessageIds = seenMessages.stream()
+                .map(Message::getId)
+                .collect(Collectors.toSet());
+
+        // Find members whose lastReadMessageId indicates they have seen the target message
+        List<String> seenUserIds = activeMembers.stream()
+                .filter(m -> seenMessageIds.contains(m.getLastReadMessageId()))
+                .map(ConversationMember::getUserId)
+                .toList();
+
+        if (seenUserIds.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        Map<String, ChatUser> userMap = chatUserRepository.findAllById(seenUserIds).stream()
+                .collect(Collectors.toMap(ChatUser::getId, u -> u));
+
+        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+        return seenUserIds.stream()
+                .map(userId -> {
+                    ChatUser user = userMap.get(userId);
+                    return MessageSeenResponse.builder()
+                            .userId(userId)
+                            .fullName(user != null ? user.getFullName() : null)
+                            .avatar(user != null && user.getAvatar() != null
+                                    ? baseUrl + user.getAvatar()
+                                    : null)
+                            .build();
+                })
+                .collect(Collectors.toList());
     }
 
     // ─────────────────────────── Private helpers ───────────────────────────
