@@ -285,10 +285,21 @@ public class MessageServiceImpl implements MessageService {
             throw new AppException(ErrorCode.CHAT_NOT_SENDER);
         }
 
+        if (message.getCreatedAt().isBefore(LocalDateTime.now().minusHours(24))) {
+            throw new AppException(ErrorCode.MESSAGE_REVOKE_TIME_EXCEEDED);
+        }
+
         message.setStatus(MessageStatus.REVOKED);
         message.setContent(null);
         message.setReplyTo(null);
         messageRepository.save(message);
+
+        // Update all messages that reply to this message
+        Query replyQuery = new Query(Criteria.where("replyTo.messageId").is(messageId));
+        Update replyUpdate = new Update()
+                .set("replyTo.content", null)
+                .set("replyTo.type", MessageType.CHAT);
+        mongoTemplate.updateMulti(replyQuery, replyUpdate, Message.class);
 
         updateLastMessageIfRevoked(message);
         broadcastStatusChange(message.getConversationId(), messageId, MessageStatus.REVOKED);
@@ -518,7 +529,7 @@ public class MessageServiceImpl implements MessageService {
         Query query = new Query(Criteria.where("id").is(revokedMsg.getConversationId())
                 .and("lastMessage.messageId").is(revokedMsg.getId()));
         Update update = new Update()
-                .set("lastMessage.content", "Tin nhắn đã được thu hồi")
+                .set("lastMessage.content", null)
                 .set("lastMessage.status", MessageStatus.REVOKED);
         mongoTemplate.updateFirst(query, update, Conversation.class);
     }
