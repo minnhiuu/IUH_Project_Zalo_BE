@@ -6,6 +6,7 @@ import com.bondhub.messageservice.dto.request.AddMembersRequest;
 import com.bondhub.messageservice.dto.request.GroupConversationCreateRequest;
 import com.bondhub.messageservice.dto.request.JoinByLinkRequest;
 import com.bondhub.messageservice.dto.request.LeaveGroupRequest;
+import com.bondhub.messageservice.dto.request.MarkAsReadRequest;
 import com.bondhub.messageservice.dto.request.UpdateGroupSettingsRequest;
 import com.bondhub.messageservice.dto.request.UpdateJoinQuestionRequest;
 import com.bondhub.messageservice.dto.response.AdminMemberResponse;
@@ -14,6 +15,7 @@ import com.bondhub.messageservice.dto.response.GroupMemberListItemResponse;
 import com.bondhub.messageservice.dto.response.JoinGroupPreviewResponse;
 import com.bondhub.messageservice.dto.response.JoinRequestResponse;
 import com.bondhub.messageservice.dto.response.SearchMemberResponse;
+import com.bondhub.messageservice.dto.response.UnreadAnchorResponse;
 import com.bondhub.messageservice.model.PinnedMessageInfo;
 import com.bondhub.messageservice.dto.request.GroupInviteSendRequest;
 import com.bondhub.messageservice.service.conversation.ConversationService;
@@ -76,9 +78,20 @@ public class ConversationController {
 
     @PutMapping("/{conversationId}/read")
     @Operation(summary = "Mark a conversation as read")
-    public ResponseEntity<ApiResponse<Void>> markAsRead(@PathVariable String conversationId) {
-        conversationService.markAsRead(conversationId);
+    public ResponseEntity<ApiResponse<Void>> markAsRead(
+            @PathVariable String conversationId,
+            @RequestBody(required = false) MarkAsReadRequest request) {
+        String lastReadMessageId = request != null ? request.lastReadMessageId() : null;
+        conversationService.markAsRead(conversationId, lastReadMessageId);
         return ResponseEntity.ok(ApiResponse.success(null));
+    }
+
+    @GetMapping("/{conversationId}/unread-anchor")
+    @Operation(summary = "Get first unread message ID and unread count")
+    public ResponseEntity<ApiResponse<UnreadAnchorResponse>> getUnreadAnchor(
+            @PathVariable String conversationId) {
+        return ResponseEntity.ok(ApiResponse.success(
+                conversationService.getUnreadAnchor(conversationId)));
     }
 
     @PostMapping("/groups")
