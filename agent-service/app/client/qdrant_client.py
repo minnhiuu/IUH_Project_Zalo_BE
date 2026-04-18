@@ -1,6 +1,6 @@
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.http import models
-from app.core.config import settings
+from app.config.app_config import settings
 from openai import AsyncOpenAI
 import logging
 

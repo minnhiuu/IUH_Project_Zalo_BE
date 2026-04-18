@@ -1,10 +1,10 @@
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage, get_buffer_string
-from app.graph.state import AgentState
+from app.model.agent_state import AgentState
 from app.graph.prompts import ANALYZER_PROMPT, REWRITER_PROMPT, GRADER_PROMPT, GENERATOR_PROMPT
 from app.graph.tools import tools
-from app.core.config import settings
-from app.integration.qdrant import qdrant_client
+from app.config.app_config import settings
+from app.client.qdrant_client import qdrant_client
 from langchain_community.tools.tavily_search import TavilySearchResults
 import datetime
 import logging
@@ -103,7 +103,7 @@ async def retrieve_node(state: AgentState):
         return {"context": ""}
         
     logger.info(f"--- RETRIEVING from Qdrant: {query} (chat_id: {conversation_id}) ---")
-    from app.integration.qdrant import search_similar
+    from app.client.qdrant_client import search_similar
     context = await search_similar(query, conversation_id)
     
     if context:

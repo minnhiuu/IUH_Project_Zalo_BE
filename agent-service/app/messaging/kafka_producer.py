@@ -1,7 +1,7 @@
 from aiokafka import AIOKafkaProducer
 import json
 import logging
-from app.core.config import settings
+from app.config.app_config import settings
 from typing import Optional
 
 logger = logging.getLogger(__name__)

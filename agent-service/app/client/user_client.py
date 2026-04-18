@@ -1,7 +1,7 @@
-from app.core import http_client
-from app.core.config import settings
-from app.core.security import get_user_context
-from app.dtos.user_dto import UserResponse
+from app.client import http_client
+from app.config.app_config import settings
+from app.security.security_context import get_user_context
+from app.dto.response.user_response import UserResponse
 import logging
 
 logger = logging.getLogger(__name__)

@@ -1,6 +1,6 @@
 import logging
-from app.graph.state import AgentState
-from app.core.config import settings
+from app.model.agent_state import AgentState
+from app.config.app_config import settings
 from langgraph.graph import END
 
 logger = logging.getLogger(__name__)

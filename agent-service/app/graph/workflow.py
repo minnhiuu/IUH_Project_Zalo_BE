@@ -1,25 +1,22 @@
 from langgraph.graph import StateGraph, START, END
 from langgraph.prebuilt import ToolNode
-from app.graph.state import AgentState
-import app.graph.nodes as nodes
+from app.model.agent_state import AgentState
+import app.service.ai_service as ai_service
 import app.graph.edges as edges
 from app.graph.tools import tools
-from langgraph.checkpoint.mongodb.aio import AsyncMongoDBSaver
-from motor.motor_asyncio import AsyncIOMotorClient
-from app.core.config import settings
 
 def build_graph():
     workflow = StateGraph(AgentState)
 
     # Add Nodes
-    workflow.add_node(edges.NODE_REWRITE, nodes.rewrite_node)
-    workflow.add_node(edges.NODE_ANALYZE, nodes.analyze_node)
-    workflow.add_node(edges.NODE_CLARIFY, nodes.clarify_node)
-    workflow.add_node(edges.NODE_RETRIEVE, nodes.retrieve_node)
-    workflow.add_node(edges.NODE_GRADE, nodes.grade_node)
-    workflow.add_node(edges.NODE_WEB_SEARCH, nodes.web_search_node)
-    workflow.add_node(edges.NODE_MARK_LOW_CONFIDENCE, nodes.mark_low_confidence_node)
-    workflow.add_node(edges.NODE_GENERATE, nodes.generate_node)
+    workflow.add_node(edges.NODE_REWRITE, ai_service.rewrite_node)
+    workflow.add_node(edges.NODE_ANALYZE, ai_service.analyze_node)
+    workflow.add_node(edges.NODE_CLARIFY, ai_service.clarify_node)
+    workflow.add_node(edges.NODE_RETRIEVE, ai_service.retrieve_node)
+    workflow.add_node(edges.NODE_GRADE, ai_service.grade_node)
+    workflow.add_node(edges.NODE_WEB_SEARCH, ai_service.web_search_node)
+    workflow.add_node(edges.NODE_MARK_LOW_CONFIDENCE, ai_service.mark_low_confidence_node)
+    workflow.add_node(edges.NODE_GENERATE, ai_service.generate_node)
     workflow.add_node(edges.NODE_ACTION, ToolNode(tools))
 
     # Define edges
@@ -66,21 +63,3 @@ def build_graph():
     workflow.add_edge(edges.NODE_ACTION, edges.NODE_GENERATE)
 
     return workflow
-
-# Global checkpointer singleton
-_checkpointer = None
-
-async def get_checkpointer():
-    global _checkpointer
-    if _checkpointer is None:
-        client = AsyncIOMotorClient(settings.mongodb_uri)
-        db_name = client.get_default_database().name
-        _checkpointer = AsyncMongoDBSaver(client, db_name=db_name)
-        # Ensure collections exist by doing a no-op or similar if needed
-        # AsyncMongoDBSaver internal setup is usually lazy but reliable
-    return _checkpointer
-
-async def get_compiled_graph():
-    checkpointer = await get_checkpointer()
-    graph = build_graph()
-    return graph.compile(checkpointer=checkpointer)

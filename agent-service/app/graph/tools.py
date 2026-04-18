@@ -1,6 +1,6 @@
 from langchain_core.tools import tool
-from app.integration.user_service import get_my_profile as get_profile_api, update_bio as update_bio_api
-from app.core.security import get_user_context
+from app.client.user_client import get_my_profile as get_profile_api, update_bio as update_bio_api
+from app.security.security_context import get_user_context
 import logging
 
 logger = logging.getLogger(__name__)
