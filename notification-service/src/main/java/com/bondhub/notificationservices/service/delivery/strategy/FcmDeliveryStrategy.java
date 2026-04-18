@@ -123,7 +123,8 @@ public class FcmDeliveryStrategy implements NotificationStrategy {
 
             sendToDevice(device, title, body, collapseKey,
                     recipientId, lastActorId, lastActorName, lastActorAvatar,
-                    actorCount, othersCount, persisted.getType().name(), requestId);
+                    actorCount, othersCount, persisted.getType().name(), requestId,
+                    persisted.getPayload());
         }
     }
 
@@ -138,7 +139,8 @@ public class FcmDeliveryStrategy implements NotificationStrategy {
                               int actorCount,
                               int othersCount,
                               String type,
-                              String requestId) {
+                              String requestId,
+                              Map<String, Object> notificationPayload) {
 
         String categoryIdentifier = "FRIEND_REQUEST".equals(type) ? "friend_request" : "";
 
@@ -157,6 +159,17 @@ public class FcmDeliveryStrategy implements NotificationStrategy {
         dataPayload.put("categoryIdentifier", categoryIdentifier);
         dataPayload.put("requestId", requestId != null ? requestId : "");
         dataPayload.put("url", url);
+
+        // For CALL notifications, include custom payload fields (sessionId, roomId, callerName, etc.)
+        if ("CALL".equals(type) && notificationPayload != null) {
+            for (Map.Entry<String, Object> entry : notificationPayload.entrySet()) {
+                String key = entry.getKey();
+                // Skip standard fields already added
+                if (!dataPayload.containsKey(key) && entry.getValue() != null) {
+                    dataPayload.put(key, entry.getValue().toString());
+                }
+            }
+        }
 
         if (device.getPlatform() == Platform.ANDROID) {
             dataPayload.put("customTitle", title != null ? title : "");

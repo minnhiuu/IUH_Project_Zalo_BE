@@ -19,5 +19,8 @@ public enum EventType {
     USER_PRIVACY_CHANGED,
 
     // Friend Events (friend-service)
-    FRIENDSHIP_CHANGED
+    FRIENDSHIP_CHANGED,
+
+    // Group Events (message-service)
+    GROUP_MEMBER_CHANGED
 }

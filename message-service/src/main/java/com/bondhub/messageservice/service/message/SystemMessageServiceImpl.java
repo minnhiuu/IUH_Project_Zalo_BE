@@ -58,6 +58,7 @@ public class SystemMessageServiceImpl implements SystemMessageService {
 
         Map<String, Object> metadata = new HashMap<>();
         metadata.put("action", action.name());
+        metadata.put("actorName", actorName);
         if (extraMetadata != null) {
             metadata.putAll(extraMetadata);
         }
@@ -78,13 +79,32 @@ public class SystemMessageServiceImpl implements SystemMessageService {
         boolean isRestricted = recipientUserIds != null && !recipientUserIds.isEmpty();
 
         boolean isNegativeAction = action == SystemActionType.LEAVE_GROUP
-                || action == SystemActionType.REMOVE_MEMBER;
+                || action == SystemActionType.REMOVE_MEMBER
+                || action == SystemActionType.BLOCK_MEMBER;
 
         Conversation room;
         Query query = new Query(Criteria.where("id").is(conversationId));
 
         if (isRestricted) {
-            room = mongoTemplate.findOne(query, Conversation.class);
+            Conversation existing = mongoTemplate.findOne(query, Conversation.class);
+            LocalDateTime preservedTimestamp = (existing != null && existing.getLastMessage() != null
+                    && existing.getLastMessage().getTimestamp() != null)
+                    ? existing.getLastMessage().getTimestamp()
+                    : now;
+
+            Update update = new Update().set("lastMessage", LastMessageInfo.builder()
+                    .messageId(savedMessage.getId())
+                    .senderId(actorId)
+                    .content(null)
+                    .timestamp(preservedTimestamp)
+                    .type(MessageType.SYSTEM)
+                    .metadata(savedMessage.getMetadata())
+                    .visibleTo(new HashSet<>(recipientUserIds))
+                    .build());
+
+            room = mongoTemplate.findAndModify(query, update,
+                    FindAndModifyOptions.options().returnNew(true),
+                    Conversation.class);
         } else if (isNegativeAction) {
             Conversation existing = mongoTemplate.findOne(query, Conversation.class);
             LocalDateTime preservedTimestamp = (existing != null && existing.getLastMessage() != null

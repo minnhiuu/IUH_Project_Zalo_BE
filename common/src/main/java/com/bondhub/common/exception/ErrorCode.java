@@ -73,6 +73,15 @@ public enum ErrorCode {
         NOT_AUTHORIZED_TO_CANCEL(HttpStatus.FORBIDDEN, 3008, "error.friend.not.authorized.to.cancel"),
         FRIEND_REQUEST_NOT_PENDING(HttpStatus.BAD_REQUEST, 3009, "error.friend.request.not.pending"),
 
+        // Contact errors (34xx)
+        CONTACT_IMPORT_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, 3401, "error.contact.import.failed"),
+        CONTACT_NO_VALID_PHONES(HttpStatus.BAD_REQUEST, 3402, "error.contact.no.valid.phones"),
+        CONTACT_TOO_MANY(HttpStatus.BAD_REQUEST, 3403, "error.contact.too.many"),
+
+        // Graph errors (35xx)
+        GRAPH_SYNC_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, 3501, "error.graph.sync.failed"),
+        GRAPH_QUERY_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, 3502, "error.graph.query.failed"),
+
         // Admin / ban errors
         CANNOT_BAN_YOURSELF(HttpStatus.BAD_REQUEST, 2208, "error.cannot.ban.yourself"),
         CANNOT_BAN_ADMIN(HttpStatus.FORBIDDEN, 2209, "error.cannot.ban.admin"),
@@ -109,6 +118,18 @@ public enum ErrorCode {
         CHAT_JOIN_LINK_DISABLED(HttpStatus.BAD_REQUEST, 4020, "error.chat.join.link.disabled"),
         CHAT_JOIN_LINK_INVALID(HttpStatus.NOT_FOUND, 4021, "error.chat.join.link.invalid"),
         CHAT_ALREADY_MEMBER(HttpStatus.BAD_REQUEST, 4022, "error.chat.already.member"),
+        CHAT_JOIN_REQUEST_NOT_FOUND(HttpStatus.NOT_FOUND, 4023, "error.chat.join.request.not.found"),
+        CHAT_JOIN_REQUEST_ALREADY_PENDING(HttpStatus.CONFLICT, 4024, "error.chat.join.request.already.pending"),
+        CHAT_JOIN_REQUEST_ALREADY_PROCESSED(HttpStatus.BAD_REQUEST, 4025, "error.chat.join.request.already.processed"),
+        CHAT_JOIN_QUESTION_REQUIRED(HttpStatus.BAD_REQUEST, 4026, "error.chat.join.question.required"),
+        CHAT_APPROVAL_NOT_ENABLED(HttpStatus.BAD_REQUEST, 4027, "error.chat.approval.not.enabled"),
+        CHAT_USER_BLOCKED_FROM_GROUP(HttpStatus.FORBIDDEN, 4028, "error.chat.user.blocked.from.group"),
+        CHAT_USER_ALREADY_BLOCKED_FROM_GROUP(HttpStatus.CONFLICT, 4029, "error.chat.user.already.blocked.from.group"),
+        CHAT_USER_NOT_BLOCKED_FROM_GROUP(HttpStatus.BAD_REQUEST, 4030, "error.chat.user.not.blocked.from.group"),
+        CHAT_CANNOT_BLOCK_OWNER(HttpStatus.FORBIDDEN, 4031, "error.chat.cannot.block.owner"),
+        CHAT_BLOCKED_FROM_ADDING(HttpStatus.FORBIDDEN, 4032, "error.chat.blocked.from.adding"),
+        CHAT_GROUP_ADD_ALREADY_BLOCKED(HttpStatus.CONFLICT, 4033, "error.chat.group.add.already.blocked"),
+        CHAT_GROUP_ADD_NOT_BLOCKED(HttpStatus.BAD_REQUEST, 4034, "error.chat.group.add.not.blocked"),
 
         //  NOTIFICATION_TEMPLATE (23xx)
         NOTIFICATION_TEMPLATE_NOT_FOUND(HttpStatus.NOT_FOUND, 2300, "error.notification.template.not.found"),
@@ -122,6 +143,20 @@ public enum ErrorCode {
         CALL_BLOCKED(HttpStatus.FORBIDDEN, 2305, "error.block.call.blocked"),
         STORY_BLOCKED(HttpStatus.FORBIDDEN, 2306, "error.block.story.blocked"),
         COMMUNICATION_BLOCKED(HttpStatus.FORBIDDEN, 2307, "error.block.communication.blocked"),
+
+        // Pin errors (44xx)
+        CHAT_MAX_PINNED_MESSAGES(HttpStatus.BAD_REQUEST, 4401, "error.chat.max.pinned.messages"),
+        CHAT_MESSAGE_NOT_PINNED(HttpStatus.BAD_REQUEST, 4402, "error.chat.message.not.pinned"),
+        CHAT_MESSAGE_ALREADY_PINNED(HttpStatus.BAD_REQUEST, 4403, "error.chat.message.already.pinned"),
+        MESSAGE_REVOKE_TIME_EXCEEDED(HttpStatus.BAD_REQUEST, 4035, "error.message.revoke.time.exceeded"),
+
+        // Call errors (5xxx)
+        CALL_USER_BUSY(HttpStatus.CONFLICT, 5001, "error.call.user.busy"),
+        CALL_USER_NOT_FOUND(HttpStatus.NOT_FOUND, 5002, "error.call.user.not.found"),
+        CALL_SESSION_NOT_FOUND(HttpStatus.NOT_FOUND, 5003, "error.call.session.not.found"),
+        CALL_ALREADY_IN_PROGRESS(HttpStatus.CONFLICT, 5004, "error.call.already.in.progress"),
+        CALL_SELF_NOT_ALLOWED(HttpStatus.BAD_REQUEST, 5005, "error.call.self.not.allowed"),
+        CALL_TOKEN_GENERATION_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, 5006, "error.call.token.generation.failed"),
 
         ;
 
