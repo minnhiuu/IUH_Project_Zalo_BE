@@ -23,9 +23,10 @@ tavily_tool = TavilySearchResults(max_results=3, tavily_api_key=settings.tavily_
 
 async def rewrite_node(state: AgentState):
     messages = state.get("messages", [])
-    # Convert message history to simple string for the rewriter
-    # Exclude the latest message which we will pass as the current task
-    history_str = get_buffer_string(messages[:-1]) if len(messages) > 1 else "No history."
+    # Limit message context based on settings
+    limit = settings.chat_history_limit
+    recent_messages = messages[-(limit+1):-1] if len(messages) > 1 else []
+    history_str = get_buffer_string(recent_messages) if recent_messages else "No history."
     
     sys_msg = SystemMessage(content=REWRITER_PROMPT.format(conversation_history=history_str))
     
@@ -149,10 +150,12 @@ async def generate_node(state: AgentState):
     
     sys_msg = SystemMessage(content=GENERATOR_PROMPT.format(current_time=curr_time, context=context))
     
-    # We use messages from state to maintain conversation context for tool calling
+    # We use dynamic limit to maintain context window and optimize costs
     messages = state.get("messages", [])
     if not messages:
         messages = [HumanMessage(content=state.get("rewritten_query", ""))]
+    else:
+        messages = messages[-settings.chat_history_limit:]
     
     # Invoke premium model with tools
     # Important: premium_with_tools will decide whether to call tools or generate final answer

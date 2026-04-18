@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     app_name: str = "agent-service"
     app_port: int = 8082
     max_web_retries: int = 1
+    chat_history_limit: int = 20
     api_gateway_url: str = "http://localhost:8080"
     
     eureka_instance_host: str = os.getenv("EUREKA_INSTANCE_HOST", "localhost")
