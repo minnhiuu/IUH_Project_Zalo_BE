@@ -1,6 +1,7 @@
 package com.bondhub.messageservice.service.conversation;
 
 import com.bondhub.common.enums.Status;
+import com.bondhub.common.utils.PhoneUtil;
 import com.bondhub.common.utils.S3Util;
 import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.common.exception.AppException;
@@ -244,6 +245,9 @@ public class ConversationHelper {
                                 && room.getSettings().isMembershipApprovalEnabled()
                                 ? joinRequestRepository.countByConversationIdAndStatus(room.getId(), JoinRequestStatus.PENDING)
                                 : null))
+                .invitedUserIds(room.isGroup() && room.getInvitedUserIds() != null
+                        ? new ArrayList<>(room.getInvitedUserIds())
+                        : null)
                 .build();
     }
 
@@ -388,7 +392,7 @@ public class ConversationHelper {
     }
 
     public boolean isPhoneNumber(String query) {
-        return query.matches("\\d{9,11}");
+        return PhoneUtil.isValidVnPhone(query);
     }
 
     private LastMessageInfo findFallbackLastMessage(String conversationId, String currentUserId) {
