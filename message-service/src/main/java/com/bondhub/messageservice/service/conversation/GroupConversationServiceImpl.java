@@ -85,15 +85,13 @@ public class GroupConversationServiceImpl implements GroupConversationService {
             throw new AppException(ErrorCode.USER_NOT_FOUND);
         }
 
-        // Check for duplicate group: same name and same active members → return existing group
-        if (groupName != null) {
-            Set<String> allMemberIds = new LinkedHashSet<>(memberIds);
-            allMemberIds.add(currentUserId);
-            Optional<Conversation> existingGroup = findDuplicateGroup(groupName, allMemberIds);
-            if (existingGroup.isPresent()) {
-                log.info("[Group] Duplicate group '{}' detected, returning existing group {}", groupName, existingGroup.get().getId());
-                return helper.buildConversationResponseForCurrentUser(existingGroup.get(), currentUserId);
-            }
+        // Check for duplicate group: same name (or both nameless) and same active members → return existing group
+        Set<String> allMemberIds = new LinkedHashSet<>(memberIds);
+        allMemberIds.add(currentUserId);
+        Optional<Conversation> existingGroup = findDuplicateGroup(groupName, allMemberIds);
+        if (existingGroup.isPresent()) {
+            log.info("[Group] Duplicate group '{}' detected, returning existing group {}", groupName, existingGroup.get().getId());
+            return helper.buildConversationResponseForCurrentUser(existingGroup.get(), currentUserId);
         }
 
         // Separate friends and non-friends
@@ -117,7 +115,7 @@ public class GroupConversationServiceImpl implements GroupConversationService {
                 .joinMethod(JoinMethod.ADDED_BY_MEMBER).addedBy(currentUserId).build());
         friendMemberIds.forEach(id -> members.add(
                 ConversationMember.builder().userId(id).role(MemberRole.MEMBER).joinedAt(now)
-                .joinMethod(JoinMethod.ADDED_BY_MEMBER).addedBy(currentUserId).build()));
+                        .joinMethod(JoinMethod.ADDED_BY_MEMBER).addedBy(currentUserId).build()));
 
         Map<String, Integer> unreadCounts = new HashMap<>();
         members.forEach(m -> unreadCounts.put(m.getUserId(), 0));
@@ -286,7 +284,7 @@ public class GroupConversationServiceImpl implements GroupConversationService {
             }
             conversation.getMembers().add(
                     ConversationMember.builder().userId(id).role(MemberRole.MEMBER).joinedAt(now)
-                    .joinMethod(JoinMethod.ADDED_BY_MEMBER).addedBy(currentUserId).build());
+                            .joinMethod(JoinMethod.ADDED_BY_MEMBER).addedBy(currentUserId).build());
         });
 
         if (conversation.getUnreadCounts() == null) conversation.setUnreadCounts(new HashMap<>());
@@ -748,14 +746,14 @@ public class GroupConversationServiceImpl implements GroupConversationService {
 
         String baseUrl = helper.getBaseUrl();
         return PageResponse.fromPage(candidatesPage, u -> {
-            String phoneNumber = (u.getPhoneNumber() != null && phoneTokens.contains(u.getPhoneNumber())) 
+            String phoneNumber = (u.getPhoneNumber() != null && phoneTokens.contains(u.getPhoneNumber()))
                     ? u.getPhoneNumber() : null;
-            
+
             return SearchMemberResponse.builder()
-                .userId(u.getId()).fullName(u.getFullName())
-                .avatar(u.getAvatar() != null ? baseUrl + u.getAvatar() : null)
-                .phoneNumber(phoneNumber)
-                .isAlreadyMember(memberIds.contains(u.getId())).build();
+                    .userId(u.getId()).fullName(u.getFullName())
+                    .avatar(u.getAvatar() != null ? baseUrl + u.getAvatar() : null)
+                    .phoneNumber(phoneNumber)
+                    .isAlreadyMember(memberIds.contains(u.getId())).build();
         });
     }
 
@@ -840,7 +838,7 @@ public class GroupConversationServiceImpl implements GroupConversationService {
                 .map(doc -> doc.getString("addedBy")).filter(Objects::nonNull).collect(Collectors.toSet());
         Map<String, String> addedByNameMap = addedByIds.isEmpty() ? Collections.emptyMap()
                 : chatUserRepository.findAllById(addedByIds).stream()
-                    .collect(Collectors.toMap(ChatUser::getId, ChatUser::getFullName));
+                .collect(Collectors.toMap(ChatUser::getId, ChatUser::getFullName));
 
         List<GroupMemberListItemResponse> pageData = dataDocs.stream().map(doc -> {
             String userId = doc.getString("userId");
