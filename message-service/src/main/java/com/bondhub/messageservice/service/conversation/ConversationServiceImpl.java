@@ -187,7 +187,6 @@ public class ConversationServiceImpl implements ConversationService {
             throw new AppException(ErrorCode.CHAT_MEMBER_NOT_FOUND);
         }
 
-        // Use FE-provided lastReadMessageId; fallback to room's last message
         String finalReadId = (lastReadMessageId != null && !lastReadMessageId.isBlank())
                 ? lastReadMessageId
                 : (room.getLastMessage() != null ? room.getLastMessage().getMessageId() : null);
@@ -209,9 +208,6 @@ public class ConversationServiceImpl implements ConversationService {
             });
         }
     }
-
-
-    // ─────────────────────────── Unread Anchor ───────────────────────────
 
     @Override
     public UnreadAnchorResponse getUnreadAnchor(String conversationId) {
@@ -288,14 +284,6 @@ public class ConversationServiceImpl implements ConversationService {
                 .build();
     }
 
-    /**
-     * Builds the same visibility Criteria used by findChatMessages:
-     *  - conversationId matches
-     *  - not soft-deleted by this user
-     *  - createdAt > deletedBefore threshold
-     *  - visibleTo is unrestricted or includes userId
-     *  - SYSTEM messages are only visible since memberJoinedAt
-     */
     private Criteria buildMessageVisibilityCriteria(
             String conversationId, String userId,
             LocalDateTime memberJoinedAt, LocalDateTime deletedBefore) {
