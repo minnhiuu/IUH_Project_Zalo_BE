@@ -10,7 +10,7 @@ import org.springframework.data.elasticsearch.annotations.*;
 import java.time.LocalDateTime;
 
 @Document(indexName = "users")
-@Setting(settingPath = "elasticsearch/es-setting.json")
+@Setting(settingPath = "elasticsearch/es-user-setting.json")
 @Data
 @Builder
 @FieldDefaults(level = AccessLevel.PRIVATE)
