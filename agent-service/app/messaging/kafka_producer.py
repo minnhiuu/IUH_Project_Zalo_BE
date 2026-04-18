@@ -4,6 +4,8 @@ import logging
 from app.config.app_config import settings
 from typing import Optional
 
+from app.messaging.event_types import KafkaEventType
+
 logger = logging.getLogger(__name__)
 
 producer: Optional[AIOKafkaProducer] = None
@@ -29,40 +31,33 @@ async def stop_kafka():
         producer = None
         logger.info("Kafka producer stopped")
 
-async def send_message(topic: str, message: dict):
+async def send_event(topic: str, payload: dict, event_type: KafkaEventType):
+    """Generic function to send mapped events with TypeId headers."""
     if producer is None:
-        logger.warning(f"Kafka producer is not initialized. Cannot send message to {topic}")
+        logger.error(f"Kafka producer not initialized! Cannot send {event_type.value}")
         return
-    
+
     try:
-        # Spring Boot JsonDeserializer requires __TypeId__ header if no default type is set
-        headers = [('__TypeId__', b'com.bondhub.common.event.ai.AiMessageSaveEvent')]
-        await producer.send_and_wait(topic, message, headers=headers)
-        logger.debug(f"Sent message to {topic}")
+        # Lấy giá trị alias định danh (ví dụ: "AiMessageSaveEvent")
+        type_id_alias = event_type.value
+        headers = [('__TypeId__', type_id_alias.encode('utf-8'))]
+        
+        await producer.send_and_wait(topic, payload, headers=headers)
+        logger.debug(f"Successfully sent {type_id_alias} to {topic}")
     except Exception as e:
-        logger.error(f"Error sending message to Kafka topic {topic}: {e}")
+        logger.error(f"Failed to send event {event_type.name}: {e}")
+
+async def send_message(topic: str, message: dict):
+    """Legacy wrapper for backward compatibility, now uses Type Mapping."""
+    await send_event(topic, message, KafkaEventType.AI_MESSAGE_SAVE)
 
 async def send_socket_event(target_user_id: str, event_type: str, destination: str, payload: dict):
-    """
-    Gửi event sang Java socket-service thông qua Kafka
-    event_type: MESSAGE, CONVERSATION, PRESENCE, NOTIFICATION
-    destination: /queue/messages, /queue/conversations...
-    """
-    if producer is None:
-        logger.warning("Kafka producer is not initialized. Cannot send socket event")
-        return
-
-    try:
-        # Tạo format y hệt record SocketEvent bên Java
-        event_msg = {
-            "type": event_type,
-            "targetUserId": target_user_id,
-            "destination": destination,
-            "payload": payload
-        }
-        # Thêm header cho Spring Boot
-        headers = [('__TypeId__', b'com.bondhub.common.dto.client.socketservice.SocketEvent')]
-        await producer.send_and_wait(settings.socket_events_topic, event_msg, headers=headers)
-        logger.info(f"Sent socket event {event_type} to user {target_user_id} via Kafka")
-    except Exception as e:
-        logger.error(f"Error sending socket event to Kafka: {e}")
+    """Refactored to use Type Mapping via SocketEvent alias."""
+    event_msg = {
+        "type": event_type,
+        "targetUserId": target_user_id,
+        "destination": destination,
+        "payload": payload
+    }
+    await send_event(settings.socket_events_topic, event_msg, KafkaEventType.SOCKET_NOTIFICATION)
+    logger.info(f"Sent socket event {event_type} to user {target_user_id} via Kafka")

@@ -3,7 +3,8 @@ from fastapi.responses import StreamingResponse
 from app.service.graph_manager import get_compiled_graph
 from app.graph import edges
 from app.security.security_context import security_context_dependency, user_context
-from app.messaging.kafka_producer import send_message, send_socket_event
+from app.messaging.kafka_producer import send_event, send_socket_event
+from app.messaging.event_types import KafkaEventType
 from app.config.app_config import settings
 from app.dto.request.chat_request import ChatRequest
 from langchain_core.messages import HumanMessage
@@ -36,7 +37,7 @@ async def chat(chat_req: ChatRequest, user_info: dict = Depends(security_context
             "content": query,
             "userId": user_id
         }
-        await send_message(settings.ai_message_save_topic, user_message_event)
+        await send_event(settings.ai_message_save_topic, user_message_event, KafkaEventType.AI_MESSAGE_SAVE)
 
         graph = await get_compiled_graph()
         config = {"configurable": {"thread_id": thread_id}}
@@ -106,7 +107,7 @@ async def chat(chat_req: ChatRequest, user_info: dict = Depends(security_context
                 "content": full_response,
                 "userId": user_id
             }
-            await send_message(settings.ai_message_save_topic, save_event)
+            await send_event(settings.ai_message_save_topic, save_event, KafkaEventType.AI_MESSAGE_SAVE)
             logger.info(f"Persisted AI response to Kafka for chat {conversation_id}")
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
