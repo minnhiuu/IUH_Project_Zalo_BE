@@ -134,9 +134,12 @@ async def grade_node(state: AgentState):
 
 async def web_search_node(state: AgentState):
     query = state.get("rewritten_query", "")
-    search_results = await tavily_tool.ainvoke({"query": query})
-    retries = (state.get("retry_count") or 0) + 1
+    logger.info(f"--- [WEB SEARCH] Starting search for: {query} ---")
     
+    search_results = await tavily_tool.ainvoke({"query": query})
+    logger.info(f"--- [WEB SEARCH] Raw Results Snippet: {repr(str(search_results)[:200])} ---")
+    
+    retries = (state.get("retry_count") or 0) + 1
     new_context = (state.get("context") or "") + f"\n\n[Dữ liệu từ Internet]:\n{search_results}"
     logger.info(f"--- WEB SEARCHING ---")
     logger.info(f"Context: {new_context}")

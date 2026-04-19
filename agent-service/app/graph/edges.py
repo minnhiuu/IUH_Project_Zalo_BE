@@ -40,6 +40,9 @@ def next_after_grade(state: AgentState) -> str:
     else:
         retry_count = state.get("retry_count", 0)
         retry_limit = max(0, settings.max_web_retries)
+        
+        logger.info(f"--- [DEBUG] Grade: {grade}, Retries: {retry_count}/{retry_limit} ---")
+        
         if retry_count >= retry_limit:
             target = NODE_MARK_LOW_CONFIDENCE
     
