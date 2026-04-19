@@ -7,12 +7,20 @@ from app.messaging.kafka_producer import send_event, send_socket_event
 from app.messaging.event_types import KafkaEventType
 from app.config.app_config import settings
 from app.dto.request.chat_request import ChatRequest
+from app.dto.request.summary_request import SummaryRequest
+from app.dto.response.summary_response import SummaryResponse
+from app.service.ai_service import summarize_messages
 from langchain_core.messages import HumanMessage
 import json
 import logging
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+@router.post("/summarize", response_model=SummaryResponse)
+async def summarize(req: SummaryRequest, _user_info: dict = Depends(security_context_dependency)):
+    summary = await summarize_messages(req.conversationId, req.sinceMessageId)
+    return SummaryResponse(summary=summary)
 
 @router.post("/chat")
 async def chat(chat_req: ChatRequest, user_info: dict = Depends(security_context_dependency)):

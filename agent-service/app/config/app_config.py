@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     max_web_retries: int = 1
     chat_history_limit: int = 20
     api_gateway_url: str = "http://localhost:8080"
+    message_service_url: str = "http://localhost:8081"
     
     eureka_instance_host: str = os.getenv("EUREKA_INSTANCE_HOST", "localhost")
 

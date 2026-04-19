@@ -1,10 +1,11 @@
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage, get_buffer_string
 from app.model.agent_state import AgentState
-from app.graph.prompts import ANALYZER_PROMPT, REWRITER_PROMPT, GRADER_PROMPT, GENERATOR_PROMPT
+from app.graph.prompts import ANALYZER_PROMPT, REWRITER_PROMPT, GRADER_PROMPT, GENERATOR_PROMPT, SUMMARIZER_PROMPT
 from app.graph.tools import tools
 from app.config.app_config import settings
 from app.client.qdrant_client import qdrant_client
+from app.client.message_client import get_messages_since
 from langchain_community.tools.tavily_search import TavilySearchResults
 import datetime
 import logging
@@ -162,3 +163,41 @@ async def generate_node(state: AgentState):
     result = await premium_with_tools.ainvoke([sys_msg] + messages)
     
     return {"messages": [result], "answer": result.content}
+
+#TODO: using i18n instead of hardcode string
+async def summarize_messages(conversation_id: str, since_message_id: str):
+    # 1. Fetch raw messages from Java service
+    raw_messages = await get_messages_since(conversation_id, since_message_id)
+    
+    if not raw_messages:
+        return "Không tìm thấy nội dung để tóm tắt."
+
+    # 2. Data Cleaning & Mapping
+    clean_messages = []
+    for m in raw_messages:
+        content = m.get("content")
+        msg_type = m.get("type")
+        
+        # Keep CHAT messages
+        if msg_type == "CHAT" and content:
+            clean_messages.append(m)
+        # Convert MEDIA markers so AI understands context
+        elif msg_type in ["IMAGE", "VIDEO", "FILE"]:
+            m["content"] = f"[{msg_type.capitalize()}]"
+            clean_messages.append(m)
+    
+    if not clean_messages:
+        return "Nội dung cuộc hội thoại chỉ bao gồm sticker hoặc tin nhắn hệ thống, không đủ dữ liệu để tóm tắt."
+
+    # 3. Format history for LLM: [HH:mm] **Sender**: Content
+    history_text = "\n".join([
+        f"[{m['createdAt'][11:16]}] **{m['senderName']}**: {m.get('content', '')}" 
+        for m in clean_messages
+    ])
+    
+    # 4. Invoke LLM for summary
+    prompt = SUMMARIZER_PROMPT.format(history=history_text)
+    logger.info(f"--- GENERATING CONVERSATION SUMMARY for {conversation_id}: {history_text} ---")
+    response = await premium_model.ainvoke([SystemMessage(content=prompt)])
+    
+    return response.content

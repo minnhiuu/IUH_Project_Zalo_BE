@@ -9,6 +9,7 @@ class UserResponse(BaseModel):
     bio: Optional[str] = None
     gender: Optional[str] = None
     dob: Optional[str] = None
+    phoneNumber: Optional[str] = None
 
 class GenericResponse(BaseModel):
     status: str

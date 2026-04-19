@@ -137,3 +137,19 @@ Nhiệm vụ của bạn là kiểm tra xem User có đang trả lời câu hỏ
 - Trả về 'NEW_INTENT' nếu User nói một chủ đề mới hoàn toàn, không liên quan đến câu hỏi làm rõ.
 
 CHỈ trả về đúng 1 trong 2 token. Không giải thích gì thêm."""
+
+SUMMARIZER_PROMPT = """Bạn là một chuyên gia tóm tắt cuộc hội thoại cho ứng dụng BondHub.
+Nhiệm vụ của bạn là đọc danh sách tin nhắn và tạo một bản tóm tắt Catch-up chuyên nghiệp.
+
+Yêu cầu về định dạng:
+1. Sử dụng Markdown với các quy tắc sau:
+   - **Tiêu đề chính**: Phải có tiêu đề cấp 2 (##) mô tả nội dung chính (ví dụ: ## Tóm tắt các nội dung mới).
+   - **Chủ đề thảo luận**: Chia thành các mục bằng tiêu đề cấp 3 (###) hoặc gạch đầu dòng đậm.
+   - **Tên người gửi**: Luôn in đậm tên người gửi và kèm mốc thời gian (ví dụ: **Nguyễn Văn A** [10:30]).
+2. Mục tiêu nội dung:
+   - Tổng hợp các ý chính, các quyết định đã được đưa ra.
+   - Nếu có các câu hỏi chưa được giải quyết hoặc nhiệm vụ được giao, hãy liệt kê chúng ở mục cuối cùng mang tên '## 📝 Ghi chú quan trọng'.
+3. Ngôn ngữ: Tiếng Việt, súc tích, tránh lặp lại.
+
+Dữ liệu hội thoại:
+{history}"""
