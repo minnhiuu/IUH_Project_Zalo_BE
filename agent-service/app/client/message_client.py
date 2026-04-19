@@ -30,3 +30,31 @@ async def get_messages_since(conversation_id: str, since_id: str):
     except Exception as e:
         logger.error(f"Failed to fetch messages from message-service: {e}")
         return []
+
+async def get_recent_messages(conversation_id: str, limit: int = 20):
+    """
+    Lấy 'limit' tin nhắn gần nhất của một conversation.
+    Dùng để cấp Short-term memory cho AI khi được @mention trong Group.
+    """
+    try:
+        curr = get_user_context()
+        headers = {
+            "X-Account-Id": str(curr.get("account_id") or ""),
+            "X-User-Id": str(curr.get("user_id") or ""),
+        }
+        if curr.get("raw_token"):
+            headers["Authorization"] = f"Bearer {curr.get('raw_token')}"
+
+        url = f"{settings.api_gateway_url}/api/messages/conversations/{conversation_id}/messages"
+        params = {"page": 0, "size": limit}
+
+        logger.info(f"Fetching {limit} recent messages for context from {conversation_id}")
+        client = http_client.get_client()
+        resp = await client.get(url, params=params, headers=headers)
+        resp.raise_for_status()
+
+        # Java trả về PageResponse: { data: { data: [...] } }
+        return resp.json().get("data", {}).get("data", [])
+    except Exception as e:
+        logger.error(f"Failed to fetch recent messages for context: {e}")
+        return []

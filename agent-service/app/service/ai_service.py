@@ -96,7 +96,7 @@ async def analyze_node(state: AgentState):
 async def clarify_node(state: AgentState):
     route = state.get("grade", "")
     missing_field = route.split("MISSING:")[1] if "MISSING:" in route else "thông tin"
-    return {"answer": f"Vui lòng cung cấp thêm về {missing_field}"}
+    return {"answer": f"<question>{missing_field}</question>"}
 
 async def retrieve_node(state: AgentState):
     query = state.get("rewritten_query", "")
