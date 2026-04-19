@@ -47,6 +47,12 @@ public interface MessageService {
     void removeAllMyReactions(String messageId);
 
     /**
+     * Xóa tin nhắn của thành viên trong nhóm (Admin/Owner).
+     * Admin không được xóa tin nhắn của Owner.
+     */
+    void deleteGroupMemberMessage(String conversationId, String messageId);
+
+    /**
      * Lấy danh sách thành viên đã xem một tin nhắn trong nhóm.
      * Loại trừ người gửi tin nhắn.
      */
