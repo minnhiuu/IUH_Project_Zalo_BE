@@ -1,5 +1,6 @@
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import SystemMessage, HumanMessage, get_buffer_string
+from langchain_core.runnables import RunnableConfig
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, get_buffer_string
 from app.model.agent_state import AgentState
 from app.graph.prompts import ANALYZER_PROMPT, REWRITER_PROMPT, GRADER_PROMPT, GENERATOR_PROMPT, SUMMARIZER_PROMPT
 from app.graph.tools import tools
@@ -16,7 +17,7 @@ logger = logging.getLogger(__name__)
 basic_model = ChatOpenAI(model="gpt-4o-mini", api_key=settings.openai_api_key, temperature=0)
 
 # Premium model for generation and tool calling
-premium_model = ChatOpenAI(model="gpt-4o", api_key=settings.openai_api_key, temperature=0.7)
+premium_model = ChatOpenAI(model="gpt-4o", api_key=settings.openai_api_key, temperature=0.7, streaming=True)
 premium_with_tools = premium_model.bind_tools(tools)
 
 # Search tool
@@ -145,7 +146,7 @@ async def mark_low_confidence_node(state: AgentState):
     new_context = (state.get("context") or "") + "\n\n[Lưu ý]: Dữ liệu có độ tin cậy thấp hoặc không tìm thấy thông tin chính xác."
     return {"context": new_context}
 
-async def generate_node(state: AgentState):
+async def generate_node(state: AgentState, config: RunnableConfig):
     curr_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     context = state.get("context") or ""
     
@@ -158,13 +159,13 @@ async def generate_node(state: AgentState):
     else:
         messages = messages[-settings.chat_history_limit:]
     
-    # Invoke premium model with tools
-    # Important: premium_with_tools will decide whether to call tools or generate final answer
-    result = await premium_with_tools.ainvoke([sys_msg] + messages)
+    # Quan trọng: Truyền config vào ainvoke để astream_events(v2) có thể 
+    # capturing được các event on_chat_model_stream từ bên trong.
+    result = await premium_with_tools.ainvoke([sys_msg] + messages, config=config)
     
     return {"messages": [result], "answer": result.content}
 
-#TODO: using i18n instead of hardcode string
+#Legacy
 async def summarize_messages(conversation_id: str, since_message_id: str):
     # 1. Fetch raw messages from Java service
     raw_messages = await get_messages_since(conversation_id, since_message_id)
@@ -201,3 +202,38 @@ async def summarize_messages(conversation_id: str, since_message_id: str):
     response = await premium_model.ainvoke([SystemMessage(content=prompt)])
     
     return response.content
+
+#TODO: using i18n instead of hardcode string
+async def summarize_messages_stream(conversation_id: str, since_message_id: str):
+    # 1. Fetch raw messages (reuse logic)
+    raw_messages = await get_messages_since(conversation_id, since_message_id)
+    if not raw_messages:
+        yield "Không tìm thấy nội dung để tóm tắt."
+        return
+
+    clean_messages = []
+    for m in raw_messages:
+        content = m.get("content")
+        msg_type = m.get("type")
+        if msg_type == "CHAT" and content:
+            clean_messages.append(m)
+        elif msg_type in ["IMAGE", "VIDEO", "FILE"]:
+            m["content"] = f"[{msg_type.capitalize()}]"
+            clean_messages.append(m)
+    
+    if not clean_messages:
+        yield "Nội dung không đủ dữ liệu để tóm tắt."
+        return
+
+    history_text = "\n".join([
+        f"[{m['createdAt'][11:16]}] **{m['senderName']}**: {m.get('content', '')}" 
+        for m in clean_messages
+    ])
+    
+    prompt = SUMMARIZER_PROMPT.format(history=history_text)
+    logger.info(f"--- STARTING STREAMING SUMMARY for {conversation_id} ---")
+    
+    # Stream from LLM
+    async for chunk in premium_model.astream([SystemMessage(content=prompt)]):
+        if chunk.content:
+            yield chunk.content

@@ -9,7 +9,7 @@ from app.config.app_config import settings
 from app.dto.request.chat_request import ChatRequest
 from app.dto.request.summary_request import SummaryRequest
 from app.dto.response.summary_response import SummaryResponse
-from app.service.ai_service import summarize_messages
+from app.service.ai_service import summarize_messages, summarize_messages_stream
 from langchain_core.messages import HumanMessage
 import json
 import logging
@@ -17,10 +17,23 @@ import logging
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-@router.post("/summarize", response_model=SummaryResponse)
-async def summarize(req: SummaryRequest, _user_info: dict = Depends(security_context_dependency)):
-    summary = await summarize_messages(req.conversationId, req.sinceMessageId)
-    return SummaryResponse(summary=summary)
+@router.post("/summarize")
+async def summarize(req: SummaryRequest, user_info: dict = Depends(security_context_dependency)):
+    async def event_generator():
+        # Re-inject context vào async generator vì ContextVar bị reset sau khi Depends yield
+        user_context.set(user_info)
+        async for token in summarize_messages_stream(req.conversationId, req.sinceMessageId):
+            yield f"data: {json.dumps({'content': token})}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "X-Accel-Buffering": "no",
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+        }
+    )
 
 @router.post("/chat")
 async def chat(chat_req: ChatRequest, user_info: dict = Depends(security_context_dependency)):
@@ -68,14 +81,16 @@ async def chat(chat_req: ChatRequest, user_info: dict = Depends(security_context
             kind = event["event"]
             node_name = event.get("metadata", {}).get("langgraph_node")
             
+            # DEBUG: Log tất cả các event để phân tích luồng
+            logger.info(f"[STREAM EVENT] kind={kind} | node={node_name}")
+            
             if (kind == "on_chain_start" or kind == "on_chat_model_start") and node_name:
                 status_map = {
                     edges.NODE_REWRITE: "REWRITING_QUERY",
                     edges.NODE_ANALYZE: "ANALYZING_INTENT",
                     edges.NODE_RETRIEVE: "RETRIEVING_VECTOR",
                     edges.NODE_GRADE: "GRADING_DATA",
-                    edges.NODE_WEB_SEARCH: "WEB_SEARCHING",
-                    edges.NODE_GENERATE: "GENERATING_ANSWER"
+                    edges.NODE_WEB_SEARCH: "WEB_SEARCHING"
                 }
                 if node_name in status_map:
                     status_value = status_map[node_name]
@@ -88,17 +103,25 @@ async def chat(chat_req: ChatRequest, user_info: dict = Depends(security_context
                         payload={"conversationId": conversation_id, "status": status_value}
                     )
             
-            if kind == "on_chat_model_stream" and node_name == edges.NODE_GENERATE:
-                chunk = event["data"]["chunk"].content
-                if chunk and isinstance(chunk, str):
-                    full_response += chunk
-                    yield f"data: {json.dumps({'type': 'ANSWER_CHUNK', 'content': chunk})}\n\n"
+            if kind == "on_chat_model_stream":
+                # Lấy chunk content từ OpenAI/LangChain event
+                chunk = event["data"].get("chunk")
+                if chunk and hasattr(chunk, "content"):
+                    content = chunk.content
+                    logger.info(f"[STREAM CHUNK] node={node_name} | len={len(content)} | preview={repr(content[:30])}")
+                    if isinstance(content, str) and content:
+                        full_response += content
+                        yield f"data: {json.dumps({'type': 'ANSWER_CHUNK', 'content': content})}\n\n"
+                    elif isinstance(content, str): # Chunk rỗng nhưng là stream start
+                         yield f"data: {json.dumps({'type': 'ANSWER_CHUNK', 'content': ''})}\n\n"
 
             if kind == "on_chat_model_end" and node_name == edges.NODE_GENERATE:
                 content = event["data"]["output"].content
+                logger.info(f"[MODEL END] node={node_name} | full_response_so_far_len={len(full_response)}")
                 if content and not full_response:
                     full_response = content
                     yield f"data: {json.dumps({'type': 'ANSWER_CHUNK', 'content': content})}\n\n"
+
 
             if kind == "on_chain_end" and node_name in [edges.NODE_GENERATE, edges.NODE_CLARIFY]:
                 output = event["data"].get("output", {})
@@ -118,4 +141,12 @@ async def chat(chat_req: ChatRequest, user_info: dict = Depends(security_context
             await send_event(settings.ai_message_save_topic, save_event, KafkaEventType.AI_MESSAGE_SAVE)
             logger.info(f"Persisted AI response to Kafka for chat {conversation_id}")
 
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "X-Accel-Buffering": "no",   # Ngăn Nginx/Gateway buffer SSE
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+        }
+    )
