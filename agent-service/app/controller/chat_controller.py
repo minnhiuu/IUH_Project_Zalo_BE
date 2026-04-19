@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from app.security.security_context import security_context_dependency
 from app.dto.request.chat_request import ChatRequest
 from app.dto.request.summary_request import SummaryRequest
 from app.dto.response.chat_response import SummaryStreamEventResponse
+from app.exception import AppException, ErrorCode
 from app.service.chat_service import ChatService, get_chat_service
 from app.service.ai_service import summarize_messages_stream
 from app.security.security_context import user_context
@@ -40,7 +41,7 @@ async def chat(
 ):
     # Validation
     if not (chat_req.query or chat_req.content):
-        raise HTTPException(status_code=400, detail="query or content is required")
+        raise AppException(ErrorCode.CHAT_QUERY_OR_CONTENT_REQUIRED)
 
     return StreamingResponse(
         await chat_service.get_chat_generator(chat_req, user_info, background_tasks),

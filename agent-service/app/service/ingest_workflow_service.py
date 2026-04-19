@@ -10,6 +10,7 @@ from app.dto.response.ingest_response import (
 )
 from app.service.ingest_progress_service import IngestProgressService
 from app.service.ingest_service import IngestService
+from app.i18n import get_request_locale, translate
 
 
 class IngestWorkflowService:
@@ -43,13 +44,18 @@ class IngestWorkflowService:
         )
 
     async def schedule_ingest(self, req: IngestRequest, background_tasks: BackgroundTasks) -> IngestAckResponse:
-        started = await self.progress_service.try_mark_ingest_started(req.docId, req.conversationId, len(req.chunks))
+        started = await self.progress_service.try_mark_ingest_started(
+            req.docId,
+            req.conversationId,
+            len(req.chunks),
+            get_request_locale(),
+        )
         if not started:
             return IngestAckResponse(
                 docId=req.docId,
                 conversationId=req.conversationId,
                 status="INGESTING",
-                message="Ingest is already running for this document",
+                message=translate("ingest.already.running"),
             )
 
         background_tasks.add_task(
@@ -63,7 +69,7 @@ class IngestWorkflowService:
             docId=req.docId,
             conversationId=req.conversationId,
             status="INGESTING",
-            message="Ingest started",
+            message=translate("ingest.started"),
         )
 
     async def get_documents(self, conversation_id: str | None = None) -> GetDocumentsResponse:

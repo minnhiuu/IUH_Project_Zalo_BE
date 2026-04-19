@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Any
 
 from app.dto.response.ingest_response import IngestDocumentResponse
+from app.i18n import translate
 
 
 class IngestProgressService:
@@ -13,7 +14,13 @@ class IngestProgressService:
         self._ingest_progress_lock = Lock()
         self._max_log_lines = max_log_lines
 
-    async def try_mark_ingest_started(self, doc_id: str, conversation_id: str, total_chunks: int) -> bool:
+    async def try_mark_ingest_started(
+        self,
+        doc_id: str,
+        conversation_id: str,
+        total_chunks: int,
+        locale: str = "vi",
+    ) -> bool:
         async with self._active_ingest_lock:
             if doc_id in self._active_ingest_doc_ids:
                 return False
@@ -23,13 +30,16 @@ class IngestProgressService:
             self._ingest_progress[doc_id] = {
                 "doc_id": doc_id,
                 "conversation_id": conversation_id,
+                "locale": locale,
                 "status": "PROCESSING",
                 "uploaded_chunks": 0,
                 "total_chunks": total_chunks,
                 "current_vector_id": None,
                 "error_message": None,
                 "ingest_logs": [
-                    self._format_log_line(f"Da upload 0 tren tong {total_chunks} chunks"),
+                    self._format_log_line(
+                        translate("ingest.progress.uploaded_ratio", locale=locale, uploaded=0, total=total_chunks)
+                    ),
                 ],
                 "started_at": datetime.utcnow().isoformat(),
                 "updated_at": datetime.utcnow().isoformat(),
@@ -42,6 +52,7 @@ class IngestProgressService:
             self._active_ingest_doc_ids.discard(doc_id)
 
     async def handle_progress_event(self, doc_id: str, event: dict[str, Any]) -> None:
+        locale = await self._get_progress_locale(doc_id)
         event_type = event.get("type")
         total_chunks = int(event.get("total_chunks") or 0)
         uploaded_chunks = int(event.get("uploaded_chunks") or 0)
@@ -54,7 +65,11 @@ class IngestProgressService:
                 total_chunks=total_chunks,
                 uploaded_chunks=uploaded_chunks,
                 current_vector_id=vector_id,
-                message=f"Dang upload chunk {vector_id}",
+                message=translate(
+                    "ingest.progress.chunk_uploading",
+                    locale=locale,
+                    vectorId=str(vector_id or ""),
+                ),
             )
             return
 
@@ -65,11 +80,20 @@ class IngestProgressService:
                 total_chunks=total_chunks,
                 uploaded_chunks=uploaded_chunks,
                 current_vector_id="",
-                message=f"Da upload xong chunk {vector_id}",
+                message=translate(
+                    "ingest.progress.chunk_uploaded",
+                    locale=locale,
+                    vectorId=str(vector_id or ""),
+                ),
             )
             await self._update_ingest_progress(
                 doc_id,
-                message=f"Da upload {uploaded_chunks} tren tong {total_chunks} chunks",
+                message=translate(
+                    "ingest.progress.uploaded_ratio",
+                    locale=locale,
+                    uploaded=uploaded_chunks,
+                    total=total_chunks,
+                ),
             )
             return
 
@@ -80,12 +104,12 @@ class IngestProgressService:
                 uploaded_chunks=uploaded_chunks,
                 total_chunks=total_chunks,
                 current_vector_id="",
-                message="Upload hoan tat",
+                message=translate("ingest.progress.completed", locale=locale),
             )
             return
 
         if event_type == "failed":
-            error = str(event.get("error_message") or "Unknown error")
+            error = str(event.get("error_message") or translate("error.sys.uncategorized", locale=locale))
             await self._update_ingest_progress(
                 doc_id,
                 status="FAILED",
@@ -93,7 +117,7 @@ class IngestProgressService:
                 total_chunks=total_chunks,
                 current_vector_id="",
                 error_message=error,
-                message=f"Upload that bai: {error}",
+                message=translate("ingest.progress.failed", locale=locale, reason=error),
             )
 
     async def mark_ingest_failed(self, doc_id: str, total_chunks: int, error_message: str) -> None:
@@ -207,3 +231,10 @@ class IngestProgressService:
                     progress["ingest_logs"] = progress_logs[-self._max_log_lines:]
 
             progress["updated_at"] = datetime.utcnow().isoformat()
+
+    async def _get_progress_locale(self, doc_id: str) -> str:
+        async with self._ingest_progress_lock:
+            progress = self._ingest_progress.get(doc_id)
+            if progress is None:
+                return "vi"
+            return str(progress.get("locale") or "vi")

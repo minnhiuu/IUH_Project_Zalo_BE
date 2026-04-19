@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from contextlib import asynccontextmanager
 from app.client import http_client
 from app.client.mongodb_client import close_mongodb, init_mongodb
@@ -8,6 +8,9 @@ from app.messaging import kafka_producer
 from app.controller import chat_controller, ingest_controller
 from app.service.graph_manager import close_checkpointer
 from app.config.app_config import settings
+from app.dto.response.api_response import ApiResponse
+from app.exception.handlers import register_exception_handlers
+from app.i18n import resolve_locale, reset_request_locale, set_request_locale
 import uvicorn
 import logging
 
@@ -38,11 +41,22 @@ async def lifespan(app: FastAPI):
     await close_mongodb()
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
+register_exception_handlers(app)
+
+
+@app.middleware("http")
+async def locale_middleware(request: Request, call_next):
+    locale = resolve_locale(request.headers.get("Accept-Language"))
+    token = set_request_locale(locale)
+    try:
+        return await call_next(request)
+    finally:
+        reset_request_locale(token)
 
 # Health check endpoint
-@app.get("/health")
+@app.get("/health", response_model=ApiResponse[dict[str, str]])
 async def health():
-    return {"status": "UP"}
+    return ApiResponse.success({"status": "UP"})
 
 # Include routers
 app.include_router(chat_controller.router, prefix="/api/v1/ai", tags=["AI"])

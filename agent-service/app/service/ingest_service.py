@@ -17,6 +17,7 @@ from llama_index.readers.file import DocxReader, PDFReader
 from app.client.qdrant_client import delete_by_doc_id, ensure_ingest_collection, upsert_document_vectors
 from app.config.app_config import settings
 from app.config.constants import GLOBAL_CONVERSATION_ID
+from app.exception import AppException, ErrorCode
 from app.model.document_entity import ChunkEntity, DocumentEntity
 from app.utils.s3_utils import S3Utils
 
@@ -79,13 +80,13 @@ class IngestService:
 
         if strategy == "excel_row":
             if not settings.excel_row_chunking_enabled:
-                raise ValueError("excel_row strategy is disabled")
+                raise AppException(ErrorCode.INGEST_EXCEL_STRATEGY_DISABLED)
             if not s3_key or not file_name:
-                raise ValueError("s3Key and fileName are required for excel_row strategy")
+                raise AppException(ErrorCode.INGEST_EXCEL_PARAMS_REQUIRED)
 
             suffix = Path(file_name).suffix.lower()
             if suffix not in {".xlsx", ".xls"}:
-                raise ValueError("excel_row strategy only supports .xlsx/.xls")
+                raise AppException(ErrorCode.INGEST_EXCEL_FILETYPE_INVALID)
 
             presigned_url = self.s3.get_presigned_url(s3_key)
             tmp_path, _ = await self._download_to_tempfile(presigned_url, suffix)

@@ -63,6 +63,10 @@ class Settings(BaseSettings):
     langchain_tracing_v2: bool = False
     langchain_api_key: str = ""
 
+    # i18n
+    default_locale: str = Field(default="vi", alias="DEFAULT_LOCALE")
+    supported_locales: str = Field(default="vi,en", alias="SUPPORTED_LOCALES")
+
     @classmethod
     def from_yaml(cls, path="config.yaml"):
         conf_data = {}

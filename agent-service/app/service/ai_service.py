@@ -7,6 +7,7 @@ from app.graph.tools import tools
 from app.config.app_config import settings
 from app.client.qdrant_client import get_chunk_contents_by_point_ids, search_similar_point_ids
 from app.client.message_client import get_messages_since
+from app.i18n import translate
 from langchain_community.tools.tavily_search import TavilySearchResults
 import datetime
 import logging
@@ -180,7 +181,7 @@ async def summarize_node(state: AgentState):
     history_text = state.get("chat_history_context", "")
     
     if not history_text or history_text.strip() == "":
-        return {"answer": "Tôi không tìm thấy lịch sử hội thoại gần đây để tóm tắt cho bạn.", "grade": "COMPLETE"}
+        return {"answer": translate("summary.no_history"), "grade": "COMPLETE"}
 
     # 2. Sử dụng SUMMARIZER_PROMPT hiện có
     prompt = SUMMARIZER_PROMPT.format(history=history_text)
@@ -198,7 +199,7 @@ async def summarize_messages(conversation_id: str, since_message_id: str):
     raw_messages = await get_messages_since(conversation_id, since_message_id)
     
     if not raw_messages:
-        return "Không tìm thấy nội dung để tóm tắt."
+        return translate("summary.no_content")
 
     # 2. Data Cleaning & Mapping
     clean_messages = []
@@ -215,7 +216,7 @@ async def summarize_messages(conversation_id: str, since_message_id: str):
             clean_messages.append(m)
     
     if not clean_messages:
-        return "Nội dung cuộc hội thoại chỉ bao gồm sticker hoặc tin nhắn hệ thống, không đủ dữ liệu để tóm tắt."
+        return translate("summary.insufficient_content")
 
     # 3. Format history for LLM: [HH:mm] **Sender**: Content
     history_text = "\n".join([
@@ -230,12 +231,11 @@ async def summarize_messages(conversation_id: str, since_message_id: str):
     
     return response.content
 
-#TODO: using i18n instead of hardcode string
 async def summarize_messages_stream(conversation_id: str, since_message_id: str):
     # 1. Fetch raw messages (reuse logic)
     raw_messages = await get_messages_since(conversation_id, since_message_id)
     if not raw_messages:
-        yield "Không tìm thấy nội dung để tóm tắt."
+        yield translate("summary.no_content")
         return
 
     clean_messages = []
@@ -249,7 +249,7 @@ async def summarize_messages_stream(conversation_id: str, since_message_id: str)
             clean_messages.append(m)
     
     if not clean_messages:
-        yield "Nội dung không đủ dữ liệu để tóm tắt."
+        yield translate("summary.insufficient_content")
         return
 
     history_text = "\n".join([
