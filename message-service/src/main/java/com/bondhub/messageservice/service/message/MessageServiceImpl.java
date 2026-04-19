@@ -376,6 +376,7 @@ public class MessageServiceImpl implements MessageService {
 
         updateLastMessageStatus(message, MessageStatus.DELETED_BY_ADMIN);
         broadcastStatusChange(conversationId, messageId, MessageStatus.DELETED_BY_ADMIN, currentUserId);
+        messageIndexEventPublisher.publishIndexRequest(message);
     }
 
     @Override
@@ -542,6 +543,11 @@ public class MessageServiceImpl implements MessageService {
         for (int i = 0; i < dtos.size(); i++) {
             MessageResponse d = dtos.get(i);
             MessageResponse enriched = d;
+
+            if (d.type() == MessageType.SYSTEM && d.metadata() != null) {
+                enriched = enriched.withMetadata(enrichSystemMetadata(d.metadata(), baseUrl));
+            }
+
             ChatUser sender = userMap.get(d.senderId());
             if (sender != null) {
                 enriched = enriched.withSenderName(sender.getFullName())
@@ -573,6 +579,13 @@ public class MessageServiceImpl implements MessageService {
         for (int i = 0; i < notifs.size(); i++) {
             ChatNotification n = notifs.get(i);
             ChatNotification enriched = n;
+
+            if (n.type() == MessageType.SYSTEM && n.metadata() != null) {
+                enriched = enriched.toBuilder()
+                        .metadata(enrichSystemMetadata(n.metadata(), baseUrl))
+                        .build();
+            }
+
             ChatUser sender = userMap.get(n.senderId());
             if (sender != null) {
                 enriched = enriched.withSenderName(sender.getFullName())
@@ -588,6 +601,34 @@ public class MessageServiceImpl implements MessageService {
             }
             notifs.set(i, enriched);
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> enrichSystemMetadata(Map<String, Object> metadata, String baseUrl) {
+        if (metadata == null) return null;
+        Map<String, Object> newMetadata = new HashMap<>(metadata);
+
+        if (newMetadata.get("targetAvatar") instanceof String avatar && !avatar.isBlank() && !avatar.startsWith("http")) {
+            newMetadata.put("targetAvatar", baseUrl + avatar);
+        }
+
+        if (newMetadata.get("payload") instanceof Map<?, ?> payload) {
+            Map<String, Object> newPayload = new HashMap<>((Map<String, Object>) payload);
+            if (newPayload.get("targetAvatars") instanceof List<?> avatars) {
+                List<String> enrichedAvatars = avatars.stream()
+                        .map(obj -> {
+                            if (obj instanceof String avatar && !avatar.isBlank() && !avatar.startsWith("http")) {
+                                return baseUrl + avatar;
+                            }
+                            return (String) obj;
+                        })
+                        .toList();
+                newPayload.put("targetAvatars", enrichedAvatars);
+            }
+            newMetadata.put("payload", newPayload);
+        }
+
+        return newMetadata;
     }
 
     private void updateLastMessageStatus(Message msg, MessageStatus newStatus) {

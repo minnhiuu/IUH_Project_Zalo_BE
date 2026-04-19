@@ -14,6 +14,7 @@ import com.bondhub.searchservice.config.ElasticsearchProperties;
 import com.bondhub.searchservice.dto.request.MessageSearchRequest;
 import com.bondhub.searchservice.dto.response.MessageSearchResponse;
 import com.bondhub.searchservice.model.elasticsearch.MessageIndex;
+import feign.FeignException;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
@@ -65,15 +66,7 @@ public class MessageSearchServiceImpl implements MessageSearchService {
             String userId,
             MessageSearchRequest request,
             Pageable pageable) {
-        ApiResponse<ConversationMemberLookupResponse> membershipResponse =
-                conversationMemberClient.getConversationMember(request.conversationId(), userId);
-
-        ConversationMemberLookupResponse membership =
-                membershipResponse != null ? membershipResponse.data() : null;
-
-        if (membership == null || !membership.member()) {
-            throw new AppException(ErrorCode.CHAT_MEMBER_NOT_FOUND);
-        }
+        ConversationMemberLookupResponse membership = getConversationMembership(request.conversationId(), userId);
 
         NativeQuery query = buildQuery(userId, request, membership.joinedAt(), pageable);
 
@@ -85,6 +78,24 @@ public class MessageSearchServiceImpl implements MessageSearchService {
 
         SearchPage<MessageIndex> page = SearchHitSupport.searchPageFor(hits, pageable);
         return PageResponse.fromPage(page, hit -> this.toResponse(hit, request.keyword()));
+    }
+
+    private ConversationMemberLookupResponse getConversationMembership(String conversationId, String userId) {
+        try {
+            ApiResponse<ConversationMemberLookupResponse> membershipResponse =
+                    conversationMemberClient.getConversationMember(conversationId, userId);
+
+            ConversationMemberLookupResponse membership =
+                    membershipResponse != null ? membershipResponse.data() : null;
+
+            if (membership == null || !membership.member()) {
+                throw new AppException(ErrorCode.CHAT_MEMBER_NOT_FOUND);
+            }
+
+            return membership;
+        } catch (FeignException.Forbidden | FeignException.NotFound exception) {
+            throw new AppException(ErrorCode.CHAT_MEMBER_NOT_FOUND);
+        }
     }
 
     private NativeQuery buildQuery(
