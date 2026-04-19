@@ -160,11 +160,8 @@ public class FcmDeliveryStrategy implements NotificationStrategy {
         dataPayload.put("requestId", requestId != null ? requestId : "");
         dataPayload.put("url", url);
 
-        // For CALL and moderation notifications, include custom payload fields
-        boolean includeCustomPayload = "CALL".equals(type)
-                || "CONTENT_REMOVED".equals(type)
-                || "CONTENT_HIDDEN".equals(type)
-                || "USER_WARNED".equals(type);
+        // For CALL notifications, include custom payload fields
+        boolean includeCustomPayload = "CALL".equals(type);
         if (includeCustomPayload && notificationPayload != null) {
             for (Map.Entry<String, Object> entry : notificationPayload.entrySet()) {
                 String key = entry.getKey();

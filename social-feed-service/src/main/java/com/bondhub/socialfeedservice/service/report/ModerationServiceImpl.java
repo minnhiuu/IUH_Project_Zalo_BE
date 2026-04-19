@@ -2,10 +2,11 @@ package com.bondhub.socialfeedservice.service.report;
 
 import com.bondhub.common.dto.PageResponse;
 import com.bondhub.common.enums.NotificationType;
-import com.bondhub.common.event.notification.RawNotificationEvent;
+import com.bondhub.common.enums.SystemNotificationCategory;
+import com.bondhub.common.event.notification.SystemNotificationEvent;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
-import com.bondhub.common.publisher.RawNotificationEventPublisher;
+import com.bondhub.common.publisher.SystemNotificationEventPublisher;
 import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.socialfeedservice.dto.request.report.BulkModerationRequest;
 import com.bondhub.socialfeedservice.dto.response.report.ContentReportSummary;
@@ -50,7 +51,7 @@ public class ModerationServiceImpl implements ModerationService {
     ReportAggregationRepository reportAggregationRepository;
     SecurityUtil securityUtil;
     ReportMapper reportMapper;
-    RawNotificationEventPublisher rawNotificationEventPublisher;
+    SystemNotificationEventPublisher systemNotificationEventPublisher;
 
     @Override
     @Transactional
@@ -78,16 +79,16 @@ public class ModerationServiceImpl implements ModerationService {
                 handleDeleteContent(request.targetId(), request.targetType());
                 if (authorId != null) {
                     publishModerationNotification(authorId, adminId, NotificationType.CONTENT_REMOVED,
-                            request.targetId(), Map.of("targetType", targetTypeLabel, "targetTypeVi", targetTypeLabelVi,
-                                    "referenceId", request.targetId()));
+                            request.targetId(), Map.of("targetId", request.targetId(), "targetType", targetTypeLabel,
+                                    "targetTypeVi", targetTypeLabelVi, "referenceId", request.targetId()));
                 }
             }
             case HIDE_CONTENT -> {
                 handleHideContent(request.targetId(), request.targetType());
                 if (authorId != null) {
                     publishModerationNotification(authorId, adminId, NotificationType.CONTENT_HIDDEN,
-                            request.targetId(), Map.of("targetType", targetTypeLabel, "targetTypeVi", targetTypeLabelVi,
-                                    "referenceId", request.targetId()));
+                            request.targetId(), Map.of("targetId", request.targetId(), "targetType", targetTypeLabel,
+                                    "targetTypeVi", targetTypeLabelVi, "referenceId", request.targetId()));
                 }
             }
             case WARN_USER -> {
@@ -95,6 +96,9 @@ public class ModerationServiceImpl implements ModerationService {
                 if (warning != null) {
                     Map<String, Object> payload = new HashMap<>();
                     payload.put("reason", pendingReports.get(0).getReason().name());
+                    payload.put("targetId", request.targetId());
+                    payload.put("targetType", targetTypeLabel);
+                    payload.put("targetTypeVi", targetTypeLabelVi);
                     if (request.adminNote() != null && !request.adminNote().isBlank()) {
                         payload.put("adminNote", request.adminNote());
                     }
@@ -196,18 +200,18 @@ public class ModerationServiceImpl implements ModerationService {
     }
 
     private void publishModerationNotification(String recipientId, String adminId, NotificationType type,
-                                                String referenceId, Map<String, Object> payload) {
+                                                String referenceId, Map<String, Object> metadata) {
         try {
-            RawNotificationEvent event = RawNotificationEvent.builder()
+            SystemNotificationEvent event = SystemNotificationEvent.builder()
                     .recipientId(recipientId)
                     .actorId(adminId)
-                    .actorName("Admin")
                     .type(type)
+                    .category(SystemNotificationCategory.MODERATION)
                     .referenceId(referenceId)
-                    .payload(payload)
+                    .metadata(metadata)
                     .occurredAt(LocalDateTime.now())
                     .build();
-            rawNotificationEventPublisher.publish(event);
+            systemNotificationEventPublisher.publish(event);
         } catch (Exception e) {
             log.warn("[Moderation] Failed to publish notification: type={}, recipient={}", type, recipientId, e);
         }
