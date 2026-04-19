@@ -143,6 +143,9 @@ public enum ErrorCode {
         CHAT_BLOCKED_FROM_ADDING(HttpStatus.FORBIDDEN, 4032, "error.chat.blocked.from.adding"),
         CHAT_GROUP_ADD_ALREADY_BLOCKED(HttpStatus.CONFLICT, 4033, "error.chat.group.add.already.blocked"),
         CHAT_GROUP_ADD_NOT_BLOCKED(HttpStatus.BAD_REQUEST, 4034, "error.chat.group.add.not.blocked"),
+        CHAT_GROUP_DUPLICATE(HttpStatus.CONFLICT, 4035, "error.chat.group.duplicate"),
+        CHAT_NEED_AT_LEAST_ONE_FRIEND(HttpStatus.BAD_REQUEST, 4036, "error.chat.group.need.at.least.one.friend"),
+        CHAT_INVALID_INVITE_TARGET(HttpStatus.BAD_REQUEST, 4037, "error.chat.invalid.invite.target"),
 
         //  NOTIFICATION_TEMPLATE (23xx)
         NOTIFICATION_TEMPLATE_NOT_FOUND(HttpStatus.NOT_FOUND, 2300, "error.notification.template.not.found"),

@@ -3,6 +3,7 @@ package com.bondhub.messageservice.service.message;
 import com.bondhub.common.dto.PageResponse;
 import com.bondhub.common.dto.client.messageservice.MessageSendRequest;
 import com.bondhub.messageservice.dto.response.MessageResponse;
+import com.bondhub.messageservice.dto.response.MessageSeenResponse;
 import com.bondhub.messageservice.model.Message;
 import java.util.List;
 
@@ -44,4 +45,10 @@ public interface MessageService {
      * Xóa toàn bộ reaction của current user khỏi tin nhắn.
      */
     void removeAllMyReactions(String messageId);
+
+    /**
+     * Lấy danh sách thành viên đã xem một tin nhắn trong nhóm.
+     * Loại trừ người gửi tin nhắn.
+     */
+    List<MessageSeenResponse> getSeenMembers(String conversationId, String messageId);
 }
