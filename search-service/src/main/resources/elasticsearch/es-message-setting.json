@@ -14,11 +14,6 @@
         "type": "custom",
         "tokenizer": "icu_tokenizer",
         "filter": ["icu_folding", "lowercase"]
-      },
-      "searchable_text_fuzzy_analyzer": {
-        "type": "custom",
-        "tokenizer": "standard",
-        "filter": ["icu_folding", "lowercase", "asciifolding"]
       }
     }
   }

@@ -45,20 +45,10 @@ public class MessageIndex {
     @Field(type = FieldType.Long, index = false)
     Long size;
 
-    @MultiField(
-            mainField = @Field(
-                    type = FieldType.Text,
-                    analyzer = "searchable_text_index_analyzer",
-                    searchAnalyzer = "searchable_text_search_analyzer"
-            ),
-            otherFields = {
-                    @InnerField(
-                            suffix = "fuzzy",
-                            type = FieldType.Text,
-                            analyzer = "searchable_text_fuzzy_analyzer",
-                            searchAnalyzer = "searchable_text_fuzzy_analyzer"
-                    )
-            }
+    @Field(
+            type = FieldType.Text,
+            analyzer = "searchable_text_index_analyzer",
+            searchAnalyzer = "searchable_text_search_analyzer"
     )
     String searchableText;
 

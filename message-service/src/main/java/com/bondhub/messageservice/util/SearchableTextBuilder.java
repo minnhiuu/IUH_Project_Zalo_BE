@@ -19,20 +19,16 @@ public final class SearchableTextBuilder {
 
         List<String> parts = new ArrayList<>();
 
+        if (message.getType() == MessageType.FILE) {
+            addAttachmentNames(parts, message.getAttachments());
+            return parts.isEmpty() ? null : String.join(" ", parts);
+        }
+
         if (message.getContent() != null && !message.getContent().isBlank()) {
             parts.add(message.getContent().trim());
         }
 
-        if (message.getAttachments() != null) {
-            for (AttachmentInfo attachment : message.getAttachments()) {
-                String name = attachment.getOriginalFileName() != null
-                        ? attachment.getOriginalFileName()
-                        : attachment.getFileName();
-                if (name != null && !name.isBlank()) {
-                    parts.add(name.trim());
-                }
-            }
-        }
+        addAttachmentNames(parts, message.getAttachments());
 
         LinkPreview linkPreview = message.getLinkPreview();
         if (linkPreview != null) {
@@ -45,5 +41,20 @@ public final class SearchableTextBuilder {
         }
 
         return parts.isEmpty() ? null : String.join(" ", parts);
+    }
+
+    private static void addAttachmentNames(List<String> parts, List<AttachmentInfo> attachments) {
+        if (attachments == null) {
+            return;
+        }
+
+        for (AttachmentInfo attachment : attachments) {
+            String name = attachment.getOriginalFileName() != null
+                    ? attachment.getOriginalFileName()
+                    : attachment.getFileName();
+            if (name != null && !name.isBlank()) {
+                parts.add(name.trim());
+            }
+        }
     }
 }

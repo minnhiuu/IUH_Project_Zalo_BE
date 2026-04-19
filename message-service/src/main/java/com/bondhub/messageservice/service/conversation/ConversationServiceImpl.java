@@ -1,6 +1,5 @@
 package com.bondhub.messageservice.service.conversation;
 
-import com.bondhub.common.dto.client.messageservice.ConversationMemberLookupResponse;
 import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
@@ -32,7 +31,6 @@ import org.springframework.data.mongodb.core.query.Update;
 import com.mongodb.client.result.UpdateResult;
 
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -377,7 +375,7 @@ public class ConversationServiceImpl implements ConversationService {
     public PageResponse<List<ConversationParticipantResponse>> getConversationParticipants(
             String conversationId, String query, int page, int size) {
         String currentUserId = securityUtil.getCurrentUserId();
-        log.info("[Conversation] User {} is fetching participants for sidebar dropdown in conversation {} with query: '{}'",
+        log.info("[Conversation] User {} is fetching participants for sidebar dropdown in conversation {} with query: '{}'", 
                 currentUserId, conversationId, query);
 
         Conversation conversation = conversationRepository.findById(conversationId)
@@ -429,11 +427,11 @@ public class ConversationServiceImpl implements ConversationService {
         int total = allParticipants.size();
         int start = page * size;
         int end = Math.min(start + size, total);
-        List<ConversationParticipantResponse> pagedList = (start < total)
-                ? allParticipants.subList(start, end)
+        List<ConversationParticipantResponse> pagedList = (start < total) 
+                ? allParticipants.subList(start, end) 
                 : Collections.emptyList();
 
-        log.debug("[Conversation] Dropdown fetch: found {} participants, returning {} for page {}",
+        log.debug("[Conversation] Dropdown fetch: found {} participants, returning {} for page {}", 
                 total, pagedList.size(), page);
 
         return PageResponse.fromPage(
@@ -441,27 +439,6 @@ public class ConversationServiceImpl implements ConversationService {
                         PageRequest.of(page, size), total),
                 r -> r
         );
-    }
-
-    @Override
-    public ConversationMemberLookupResponse getConversationMember(String conversationId, String userId) {
-        ConversationMember member = conversationRepository.findById(conversationId)
-                .flatMap(conversation -> conversation.getMembers().stream()
-                        .filter(helper::isActiveMember)
-                        .filter(item -> item.getUserId().equals(userId))
-                        .findFirst())
-                .orElse(null);
-
-        if (member == null) {
-            return new ConversationMemberLookupResponse(false, null);
-        }
-
-        return ConversationMemberLookupResponse.builder()
-                .member(true)
-                .joinedAt(member.getJoinedAt() != null
-                        ? member.getJoinedAt().atZone(ZoneId.systemDefault()).toInstant()
-                        : null)
-                .build();
     }
 }
 

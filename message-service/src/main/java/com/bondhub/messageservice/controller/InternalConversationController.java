@@ -2,6 +2,7 @@ package com.bondhub.messageservice.controller;
 
 import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.common.dto.client.messageservice.ConversationMemberLookupResponse;
+import com.bondhub.messageservice.service.conversation.ConversationInternalService;
 import com.bondhub.messageservice.service.conversation.ConversationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -18,6 +19,7 @@ import java.util.Set;
 public class InternalConversationController {
 
     private final ConversationService conversationService;
+    private final ConversationInternalService conversationInternalService;
 
     @GetMapping("/{conversationId}/member-ids")
     public ResponseEntity<ApiResponse<Set<String>>> getMemberIds(@PathVariable String conversationId) {
@@ -30,6 +32,6 @@ public class InternalConversationController {
             @PathVariable String conversationId,
             @PathVariable String userId) {
         return ResponseEntity.ok(ApiResponse.success(
-                conversationService.getConversationMember(conversationId, userId)));
+                conversationInternalService.getConversationMember(conversationId, userId)));
     }
 }
