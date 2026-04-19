@@ -9,6 +9,7 @@ import com.bondhub.messageservice.model.ChatUser;
 import com.bondhub.messageservice.model.Conversation;
 import com.bondhub.messageservice.model.ConversationMember;
 import com.bondhub.messageservice.model.LastMessageInfo;
+import com.bondhub.messageservice.model.Message;
 import com.bondhub.messageservice.repository.ConversationRepository;
 import com.bondhub.messageservice.repository.ChatUserRepository;
 import com.bondhub.messageservice.client.FriendServiceClient;
@@ -174,7 +175,7 @@ public class ConversationServiceImpl implements ConversationService {
     // ─────────────────────────── Đánh dấu đã đọc ───────────────────────────
 
     @Override
-    public void markAsRead(String conversationId) {
+    public void markAsRead(String conversationId, String lastReadMessageId) {
         String currentUserId = securityUtil.getCurrentUserId();
 
         Conversation room = conversationRepository.findById(conversationId)
@@ -186,7 +187,9 @@ public class ConversationServiceImpl implements ConversationService {
             throw new AppException(ErrorCode.CHAT_MEMBER_NOT_FOUND);
         }
 
-        String finalReadId = room.getLastMessage() != null ? room.getLastMessage().getMessageId() : null;
+        String finalReadId = (lastReadMessageId != null && !lastReadMessageId.isBlank())
+                ? lastReadMessageId
+                : (room.getLastMessage() != null ? room.getLastMessage().getMessageId() : null);
 
         Query query = new Query(Criteria.where("id").is(conversationId)
                 .and("members.userId").is(currentUserId));
@@ -206,6 +209,101 @@ public class ConversationServiceImpl implements ConversationService {
         }
     }
 
+    @Override
+    public UnreadAnchorResponse getUnreadAnchor(String conversationId) {
+        String currentUserId = securityUtil.getCurrentUserId();
+
+        Conversation room = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
+
+        ConversationMember currentMember = room.getMembers().stream()
+                .filter(m -> m.getUserId().equals(currentUserId))
+                .findFirst()
+                .orElseThrow(() -> new AppException(ErrorCode.CHAT_MEMBER_NOT_FOUND));
+
+        // Former/inactive members have no meaningful unread anchor
+        if (!helper.isActiveMember(currentMember)) {
+            return UnreadAnchorResponse.builder()
+                    .firstUnreadMessageId(null)
+                    .unreadCount(0)
+                    .build();
+        }
+
+        // Mirror the same visibility rules as findChatMessages
+        LocalDateTime memberJoinedAt = currentMember.getJoinedAt() != null
+                ? currentMember.getJoinedAt()
+                : LocalDateTime.of(1970, 1, 1, 0, 0);
+        LocalDateTime deletedBefore = room.getDeletedBefore() != null
+                ? room.getDeletedBefore().getOrDefault(currentUserId, LocalDateTime.of(1970, 1, 1, 0, 0))
+                : LocalDateTime.of(1970, 1, 1, 0, 0);
+
+        String lastReadMessageId = currentMember.getLastReadMessageId();
+
+        // Determine anchor and count by querying actual messages —
+        // do NOT rely on unreadCounts cache, which may already be zeroed by markAsRead
+        if (lastReadMessageId == null) {
+            // Never read — oldest visible message is the anchor, count all visible messages
+            Criteria base = buildMessageVisibilityCriteria(conversationId, currentUserId, memberJoinedAt, deletedBefore);
+            Query firstQ = new Query(base).with(Sort.by(Sort.Direction.ASC, "createdAt")).limit(1);
+            Message firstMsg = mongoTemplate.findOne(firstQ, Message.class);
+            long count = mongoTemplate.count(new Query(base), Message.class);
+            return UnreadAnchorResponse.builder()
+                    .firstUnreadMessageId(firstMsg != null ? firstMsg.getId() : null)
+                    .unreadCount((int) count)
+                    .build();
+        }
+
+        Message lastReadMsg = mongoTemplate.findById(lastReadMessageId, Message.class);
+        if (lastReadMsg == null) {
+            return UnreadAnchorResponse.builder()
+                    .firstUnreadMessageId(null)
+                    .unreadCount(0)
+                    .build();
+        }
+
+        // First visible message strictly after lastReadMsg, respecting all visibility rules
+        Criteria afterLastRead = new Criteria().andOperator(
+                buildMessageVisibilityCriteria(conversationId, currentUserId, memberJoinedAt, deletedBefore),
+                Criteria.where("createdAt").gt(lastReadMsg.getCreatedAt())
+        );
+        Query afterQ = new Query(afterLastRead);
+        long count = mongoTemplate.count(afterQ, Message.class);
+        if (count == 0) {
+            return UnreadAnchorResponse.builder()
+                    .firstUnreadMessageId(null)
+                    .unreadCount(0)
+                    .build();
+        }
+        Message firstUnread = mongoTemplate.findOne(
+                new Query(afterLastRead).with(Sort.by(Sort.Direction.ASC, "createdAt")).limit(1),
+                Message.class);
+
+        return UnreadAnchorResponse.builder()
+                .firstUnreadMessageId(firstUnread != null ? firstUnread.getId() : null)
+                .unreadCount((int) count)
+                .build();
+    }
+
+    private Criteria buildMessageVisibilityCriteria(
+            String conversationId, String userId,
+            LocalDateTime memberJoinedAt, LocalDateTime deletedBefore) {
+        return new Criteria().andOperator(
+                Criteria.where("conversationId").is(conversationId),
+                Criteria.where("senderId").ne(userId),
+                Criteria.where("deletedBy").ne(userId),
+                Criteria.where("createdAt").gt(deletedBefore),
+                new Criteria().orOperator(
+                        Criteria.where("visibleTo").exists(false),
+                        Criteria.where("visibleTo").is(null),
+                        Criteria.where("visibleTo").size(0),
+                        Criteria.where("visibleTo").is(userId)
+                ),
+                new Criteria().orOperator(
+                        Criteria.where("type").ne("SYSTEM"),
+                        Criteria.where("createdAt").gte(memberJoinedAt)
+                )
+        );
+    }
 
     @Override
     public void deleteConversationForMe(String conversationId) {
