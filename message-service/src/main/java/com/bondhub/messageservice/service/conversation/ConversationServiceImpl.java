@@ -20,12 +20,9 @@ import com.bondhub.common.dto.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.*;
 import org.springframework.stereotype.Service;
 
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import com.bondhub.common.dto.PageResponse;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
@@ -372,6 +369,76 @@ public class ConversationServiceImpl implements ConversationService {
                         .map(m -> m.getUserId())
                         .collect(java.util.stream.Collectors.toSet()))
                 .orElse(java.util.Collections.emptySet());
+    }
+
+    @Override
+    public PageResponse<List<ConversationParticipantResponse>> getConversationParticipants(
+            String conversationId, String query, int page, int size) {
+        String currentUserId = securityUtil.getCurrentUserId();
+        log.info("[Conversation] User {} is fetching participants for sidebar dropdown in conversation {} with query: '{}'", 
+                currentUserId, conversationId, query);
+
+        Conversation conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
+
+        // Security check
+        helper.assertMember(conversation, currentUserId);
+
+        List<ConversationMember> activeMembers = conversation.getMembers().stream()
+                .filter(helper::isActiveMember)
+                .toList();
+
+        List<String> userIds = activeMembers.stream()
+                .map(ConversationMember::getUserId)
+                .collect(Collectors.toList());
+
+        Map<String, ChatUser> userCache = chatUserRepository.findAllById(userIds).stream()
+                .collect(Collectors.toMap(ChatUser::getId, u -> u));
+
+        String normalizedQuery = (query != null) ? query.trim().toLowerCase() : "";
+        String baseUrl = helper.getBaseUrl();
+
+        List<ConversationParticipantResponse> allParticipants = activeMembers.stream()
+                .map(m -> {
+                    ChatUser user = userCache.get(m.getUserId());
+                    if (user == null) return null;
+
+                    String fullName = user.getFullName() != null ? user.getFullName() : "Người dùng";
+                    String phone = user.getPhoneNumber() != null ? user.getPhoneNumber() : "";
+
+                    if (!normalizedQuery.isEmpty()) {
+                        if (!fullName.toLowerCase().contains(normalizedQuery) && !phone.contains(normalizedQuery)) {
+                            return null;
+                        }
+                    }
+
+                    return ConversationParticipantResponse.builder()
+                            .userId(user.getId())
+                            .fullName(fullName)
+                            .avatar(user.getAvatar() != null ? baseUrl + user.getAvatar() : null)
+                            .isMe(user.getId().equals(currentUserId))
+                            .build();
+                })
+                .filter(Objects::nonNull)
+                .sorted(Comparator.comparing(ConversationParticipantResponse::isMe, Comparator.reverseOrder())
+                        .thenComparing(ConversationParticipantResponse::fullName))
+                .toList();
+
+        int total = allParticipants.size();
+        int start = page * size;
+        int end = Math.min(start + size, total);
+        List<ConversationParticipantResponse> pagedList = (start < total) 
+                ? allParticipants.subList(start, end) 
+                : Collections.emptyList();
+
+        log.debug("[Conversation] Dropdown fetch: found {} participants, returning {} for page {}", 
+                total, pagedList.size(), page);
+
+        return PageResponse.fromPage(
+                new PageImpl<>(pagedList,
+                        PageRequest.of(page, size), total),
+                r -> r
+        );
     }
 }
 

@@ -9,13 +9,7 @@ import com.bondhub.messageservice.dto.request.LeaveGroupRequest;
 import com.bondhub.messageservice.dto.request.MarkAsReadRequest;
 import com.bondhub.messageservice.dto.request.UpdateGroupSettingsRequest;
 import com.bondhub.messageservice.dto.request.UpdateJoinQuestionRequest;
-import com.bondhub.messageservice.dto.response.AdminMemberResponse;
-import com.bondhub.messageservice.dto.response.ConversationResponse;
-import com.bondhub.messageservice.dto.response.GroupMemberListItemResponse;
-import com.bondhub.messageservice.dto.response.JoinGroupPreviewResponse;
-import com.bondhub.messageservice.dto.response.JoinRequestResponse;
-import com.bondhub.messageservice.dto.response.SearchMemberResponse;
-import com.bondhub.messageservice.dto.response.UnreadAnchorResponse;
+import com.bondhub.messageservice.dto.response.*;
 import com.bondhub.messageservice.model.PinnedMessageInfo;
 import com.bondhub.messageservice.dto.request.GroupInviteSendRequest;
 import com.bondhub.messageservice.service.conversation.ConversationService;
@@ -215,6 +209,17 @@ public class ConversationController {
             @PathVariable String targetUserId) {
         return ResponseEntity.ok(ApiResponse.success(
                 groupConversationService.demoteFromAdmin(conversationId, targetUserId)));
+    }
+
+    @GetMapping("/{conversationId}/participants")
+    @Operation(summary = "Get all participants in a conversation for filtering (supports Group and 1:1)")
+    public ResponseEntity<ApiResponse<PageResponse<List<ConversationParticipantResponse>>>> getConversationParticipants(
+            @PathVariable String conversationId,
+            @RequestParam(required = false) String query,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(ApiResponse.success(
+                conversationService.getConversationParticipants(conversationId, query, page, size)));
     }
 
     @GetMapping("/{conversationId}/group-members")
