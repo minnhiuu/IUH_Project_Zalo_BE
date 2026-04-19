@@ -188,9 +188,10 @@ public class ConversationController {
     @Operation(summary = "Kick a member from group conversation (Owner/Admin with role constraints)")
     public ResponseEntity<ApiResponse<ConversationResponse>> removeMemberFromGroup(
             @PathVariable String conversationId,
-            @PathVariable String targetUserId) {
+            @PathVariable String targetUserId,
+            @RequestParam(defaultValue = "false") boolean blockFromGroup) {
         return ResponseEntity.ok(ApiResponse.success(
-                groupConversationService.removeMemberFromGroup(conversationId, targetUserId)));
+                groupConversationService.removeMemberFromGroup(conversationId, targetUserId, blockFromGroup)));
     }
 
     @PatchMapping("/{conversationId}/members/{targetUserId}/promote")

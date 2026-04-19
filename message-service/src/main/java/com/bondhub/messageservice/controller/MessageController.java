@@ -68,6 +68,15 @@ public class MessageController {
         return ResponseEntity.ok(ApiResponse.success(null));
     }
 
+    @DeleteMapping("/conversations/{conversationId}/messages/{messageId}/admin")
+    @Operation(summary = "Delete a member's message in group (Admin/Owner only; Admin cannot delete Owner's message)")
+    public ResponseEntity<ApiResponse<Void>> deleteGroupMemberMessage(
+            @PathVariable String conversationId,
+            @PathVariable String messageId) {
+        messageService.deleteGroupMemberMessage(conversationId, messageId);
+        return ResponseEntity.ok(ApiResponse.success(null));
+    }
+
     @PostMapping("/messages/{messageId}/reactions")
     @Operation(summary = "Toggle reaction on a message (add if not present, remove if already reacted)")
     public ResponseEntity<ApiResponse<Void>> toggleReaction(

@@ -31,6 +31,7 @@ public record MessageResponse(
                 boolean isForwarded,
                 MessageStatus status,
                 Map<String, Object> metadata,
+                String deletedByAdminId,
                 List<AttachmentInfoResponse> attachments,
                 LinkPreviewResponse linkPreview,
                 Map<String, List<String>> reactions) {
