@@ -105,37 +105,6 @@ public class AuthenticationServiceImpl implements AuthenticationService {
     }
 
     @Override
-    public TokenResponse register(RegisterRequest request) {
-        log.info("Registration attempt for email: {}", request.email());
-
-        if (accountRepository.existsByEmail(request.email())) {
-            throw new AppException(ErrorCode.ACC_EMAIL_ALREADY_USED);
-        }
-
-        if (request.phoneNumber() != null && !request.phoneNumber().isBlank()) {
-            if (accountRepository.existsByPhoneNumber(request.phoneNumber())) {
-                throw new AppException(ErrorCode.ACC_PHONE_NUMBER_ALREADY_USED);
-            }
-        }
-
-        Account account = Account.builder()
-                .email(request.email())
-                .password(passwordEncoder.encode(request.password()))
-                .phoneNumber(request.phoneNumber())
-                .role(Role.USER)
-                .enabled(true)
-                .build();
-
-        account = accountRepository.save(account);
-
-        String sessionId = UUID.randomUUID().toString();
-        String accessToken = jwtUtil.generateAccessToken(account.getId(), null, account.getEmail(), account.getRole(),
-                sessionId);
-
-        return TokenResponse.of(accessToken, null, 0);
-    }
-
-    @Override
     public TokenResponse refresh(String refreshToken, RefreshRequest request, String userAgent, String ipAddress) {
         if (refreshToken == null || !jwtUtil.validateToken(refreshToken)) {
             throw new AppException(ErrorCode.JWT_INVALID_TOKEN);

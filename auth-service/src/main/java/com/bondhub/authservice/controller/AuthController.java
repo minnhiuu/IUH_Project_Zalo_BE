@@ -54,17 +54,6 @@ public class AuthController {
     }
 
     /**
-     * OLD SINGLE-STEP REGISTRATION (deprecated, use two-step flow instead)
-     */
-    @Deprecated
-    @PostMapping("/register/old")
-    public ResponseEntity<ApiResponse<TokenResponse>> registerOld(@Valid @RequestBody RegisterRequest request) {
-        log.info("POST /auth/register/old - Registration for email: {}", request.email());
-        TokenResponse tokenResponse = authenticationService.register(request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(tokenResponse));
-    }
-
-    /**
      * TWO-STEP REGISTRATION - Step 1: Initiate registration
      * Validates email, generates OTP, sends email
      */

@@ -5,7 +5,6 @@ import com.bondhub.authservice.dto.auth.request.ForgotPasswordRequest;
 import com.bondhub.authservice.dto.auth.request.LoginRequest;
 import com.bondhub.authservice.dto.auth.request.RefreshRequest;
 import com.bondhub.authservice.dto.auth.request.RegisterInitRequest;
-import com.bondhub.authservice.dto.auth.request.RegisterRequest;
 import com.bondhub.authservice.dto.auth.request.RegisterVerifyRequest;
 import com.bondhub.authservice.dto.auth.request.ResetPasswordRequest;
 import com.bondhub.authservice.dto.auth.response.ForgotPasswordResponse;
@@ -26,14 +25,6 @@ public interface AuthenticationService {
      * @return Token response with access and refresh tokens
      */
     TokenResponse login(LoginRequest request, String userAgent, String ipAddress);
-
-    /**
-     * Register a new user (Single-step registration - OLD/DEPRECATED)
-     *
-     * @param request Registration request with email, password, etc.
-     * @return Token response with access token
-     */
-    TokenResponse register(RegisterRequest request);
 
     /**
      * Step 1: Initiate registration flow
