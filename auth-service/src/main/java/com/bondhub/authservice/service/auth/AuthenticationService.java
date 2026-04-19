@@ -120,9 +120,8 @@ public interface AuthenticationService {
      * Logout a specific device
      *
      * @param targetSessionId Session ID of the device to logout
-     * @param refreshToken    Current user's refresh token (for authorization)
      */
-    void logoutDevice(String targetSessionId, String refreshToken);
+    void logoutDevice(String targetSessionId);
 
     /**
      * Validate JWT token
