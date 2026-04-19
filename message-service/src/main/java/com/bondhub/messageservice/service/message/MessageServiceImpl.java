@@ -19,11 +19,11 @@ import com.bondhub.messageservice.repository.ConversationRepository;
 import com.bondhub.messageservice.repository.MessageRepository;
 import com.bondhub.messageservice.repository.ChatUserRepository;
 import com.bondhub.messageservice.service.conversation.ConversationService;
-import com.bondhub.common.dto.client.messageservice.AttachmentRequest;
 import com.bondhub.common.dto.client.messageservice.MessageSendRequest;
 import com.bondhub.common.event.ai.AiMessageSaveEvent;
 import com.bondhub.common.dto.client.socketservice.SocketEvent;
 import com.bondhub.common.enums.SocketEventType;
+import com.bondhub.messageservice.publisher.MessageIndexEventPublisher;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -68,6 +68,7 @@ public class MessageServiceImpl implements MessageService {
     private final MessageMapper messageMapper;
     private final ConversationService conversationService;
     private final ConversationHelper conversationHelper;
+    private final MessageIndexEventPublisher messageIndexEventPublisher;
 
     @Value("${aws.s3.bucket.name}")
     private String bucketName;
@@ -271,6 +272,8 @@ public class MessageServiceImpl implements MessageService {
                 .chatId(room.getId())
                 .content(message.getContent())
                 .build());
+
+        messageIndexEventPublisher.publishIndexRequest(message);
     }
 
     // ─────────────────────────── Thu hồi / Xóa ───────────────────────────
@@ -303,6 +306,8 @@ public class MessageServiceImpl implements MessageService {
 
         updateLastMessageIfRevoked(message);
         broadcastStatusChange(message.getConversationId(), messageId, MessageStatus.REVOKED);
+
+        messageIndexEventPublisher.publishIndexRequest(message);
     }
 
     @Override
@@ -311,6 +316,8 @@ public class MessageServiceImpl implements MessageService {
         Query query = new Query(Criteria.where("id").is(messageId));
         Update update = new Update().addToSet("deletedBy", currentUserId);
         mongoTemplate.updateFirst(query, update, Message.class);
+
+        messageRepository.findById(messageId).ifPresent(messageIndexEventPublisher::publishIndexRequest);
     }
 
     @Override

@@ -26,5 +26,4 @@ public enum EventType {
 
     // Message Search Events (message-service → search-service)
     MESSAGE_INDEX_REQUESTED,
-    MESSAGE_INDEX_DELETED
 }
