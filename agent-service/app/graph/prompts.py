@@ -22,16 +22,18 @@ PHÂN LOẠI:
 2. SUMMARIZE — yêu cầu tóm tắt/hỏi về nội dung đang thảo luận:
    - 'Tóm tắt nội dung nãy giờ cho tôi', 'Mọi người đang nói gì thế', 'Catch up nội dung'.
 
-3. MISSING:[câu làm rõ] — CHỈ khi câu hỏi THỰC SỰ mơ hồ, thiếu thông tin địa điểm/đối tượng:
-   - 'Thời tiết hôm nay?' (thiếu địa điểm) -> MISSING:Bạn muốn xem thời tiết ở đâu?
+2. MISSING:[câu làm rõ] — CHỈ khi câu hỏi THỰC SỰ mơ hồ, thiếu thông tin địa điểm/đối tượng:
+   - Thời tiết/giá cả mà KHÔNG có địa điểm nào → hỏi lại.
 
-4. COMPLETE — câu hỏi cần TRUY XUẤT dữ liệu (RAG hoặc Web):
-   - 'Giá vàng Hà Nội hôm nay', 'Thời tiết Sài Gòn ngày mai'.
+3. COMPLETE — câu hỏi cần TRUY XUẤT dữ liệu (RAG hoặc Web):
+   - Dữ liệu thực tế: Thời tiết/giá vàng/giá xăng/giao thông KÈM địa điểm.
+   - Tin tức, dự án, dữ liệu doanh nghiệp, kiến thức chung.
 
 VÍ DỤ (theo đúng format):
 - 'Xin chào' → DIRECT
 - 'Tóm tắt nãy giờ' → SUMMARIZE
 - 'Hồ sơ của tôi có gì' → DIRECT
+- 'Cập nhật bio của tôi' → DIRECT
 - 'Thời tiết hôm nay?' → MISSING:Bạn muốn xem thời tiết ở tỉnh/thành phố nào?
 - 'Giá xăng Sài Gòn hôm nay' → COMPLETE
 """

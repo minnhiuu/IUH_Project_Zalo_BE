@@ -3,6 +3,7 @@ from fastapi.responses import StreamingResponse
 from app.security.security_context import security_context_dependency
 from app.dto.request.chat_request import ChatRequest
 from app.dto.request.summary_request import SummaryRequest
+from app.dto.response.chat_response import SummaryStreamEventResponse
 from app.service.chat_service import ChatService, get_chat_service
 from app.service.ai_service import summarize_messages_stream
 from app.security.security_context import user_context
@@ -17,7 +18,8 @@ async def summarize(req: SummaryRequest, user_info: dict = Depends(security_cont
     async def event_generator():
         user_context.set(user_info)
         async for token in summarize_messages_stream(req.conversationId, req.sinceMessageId):
-            yield f"data: {json.dumps({'content': token})}\n\n"
+            payload = SummaryStreamEventResponse(content=token)
+            yield f"data: {json.dumps(payload.model_dump())}\n\n"
 
     return StreamingResponse(
         event_generator(),

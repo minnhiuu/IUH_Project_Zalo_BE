@@ -5,7 +5,7 @@ from app.model.agent_state import AgentState
 from app.graph.prompts import ANALYZER_PROMPT, REWRITER_PROMPT, GRADER_PROMPT, GENERATOR_PROMPT, SUMMARIZER_PROMPT
 from app.graph.tools import tools
 from app.config.app_config import settings
-from app.client.qdrant_client import qdrant_client
+from app.client.qdrant_client import get_chunk_contents_by_point_ids, search_similar_point_ids
 from app.client.message_client import get_messages_since
 from langchain_community.tools.tavily_search import TavilySearchResults
 import datetime
@@ -106,13 +106,18 @@ async def retrieve_node(state: AgentState):
         return {"context": ""}
         
     logger.info(f"--- RETRIEVING from Qdrant: {query} (chat_id: {conversation_id}) ---")
-    from app.client.qdrant_client import search_similar
-    context = await search_similar(query, conversation_id)
+    point_ids = await search_similar_point_ids(query, conversation_id)
+    if not point_ids:
+        logger.info("--- RETRIEVAL EMPTY ---")
+        return {"context": ""}
+
+    chunk_contents = await get_chunk_contents_by_point_ids(point_ids)
+    context = "\n---\n".join([text for text in chunk_contents if text])
     
     if context:
-        logger.info(f"--- RETRIEVAL SUCCESS: Found relevant context ---")
+        logger.info(f"--- RETRIEVAL SUCCESS: Found {len([t for t in chunk_contents if t])} chunks from MongoDB ---")
     else:
-        logger.info(f"--- RETRIEVAL EMPTY ---")
+        logger.info("--- RETRIEVAL EMPTY AFTER MONGODB ENRICH ---")
         
     return {"context": context or ""}
 

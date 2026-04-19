@@ -2,6 +2,7 @@ package com.bondhub.fileservice.service.file;
 
 import com.bondhub.common.dto.client.fileservice.FileUploadResponse;
 import com.bondhub.common.utils.S3Util;
+import com.bondhub.fileservice.dto.IngestUploadResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -50,6 +51,31 @@ public class FileServiceImpl implements FileService {
                 .contentType(file.getContentType())
                 .size(file.getSize())
                 .build();
+    }
+
+    @Override
+    public IngestUploadResponse uploadForIngest(MultipartFile file, String conversationId, String folder)
+            throws IOException {
+        String docId = UUID.randomUUID().toString();
+        String originalFileName = file.getOriginalFilename();
+        String key = folder + "/" + conversationId + "/" + docId + "/" + originalFileName;
+
+        s3Client.putObject(PutObjectRequest.builder()
+                        .bucket(bucketName)
+                        .key(key)
+                        .contentType(file.getContentType())
+                        .build(),
+                RequestBody.fromBytes(file.getBytes()));
+
+        return new IngestUploadResponse(
+                docId,
+                conversationId,
+                key,
+                originalFileName,
+                originalFileName,
+                file.getContentType(),
+                file.getSize()
+        );
     }
 
     @Override

@@ -8,11 +8,11 @@ from dotenv import load_dotenv
 # Resolve paths relative to the current file
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_ENV_PATH = os.path.abspath(os.path.join(BASE_DIR, "../../../.env"))
-LOCAL_ENV_PATH = os.path.abspath(os.path.join(BASE_DIR, "../../.env"))
+# LOCAL_ENV_PATH = os.path.abspath(os.path.join(BASE_DIR, "../../.env"))
 
 # Explicitly load into environment variables (this makes os.getenv work)
 load_dotenv(ROOT_ENV_PATH)
-load_dotenv(LOCAL_ENV_PATH, override=True) # Local settings for this service
+# load_dotenv(LOCAL_ENV_PATH, override=True) # Local settings for this service
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -36,6 +36,19 @@ class Settings(BaseSettings):
     qdrant_url: str = "http://localhost:6333" # Default port for REST
     qdrant_api_key: str = ""
     qdrant_collection_name: str = "bondhub-messages"
+    qdrant_ingest_collection: str = "bondhub-messages"
+    qdrant_score_threshold: float = 0.7
+    enable_citation_payload: bool = False
+
+    # Ingest + embedding settings
+    embedding_model: str = "text-embedding-3-small"
+    excel_row_chunking_enabled: bool = True
+
+    # AWS/S3 settings for ingest
+    aws_access_key: str = Field(default="", alias="AWS_ACCESS_KEY")
+    aws_secret_key: str = Field(default="", alias="AWS_SECRET_KEY")
+    aws_region: str = Field(default="", alias="AWS_REGION")
+    aws_bucket_name: str = Field(default="", alias="AWS_S3_BUCKET_NAME")
     
     app_name: str = "agent-service"
     app_port: int = 8082

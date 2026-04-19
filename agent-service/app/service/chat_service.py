@@ -10,6 +10,7 @@ from app.messaging.event_types import KafkaEventType
 from app.config.app_config import settings
 from app.config.constants import BONDHUB_AI_ID
 from app.dto.request.chat_request import ChatRequest
+from app.dto.response.chat_response import ChatAnswerChunkEventResponse, ChatStatusEventResponse
 from app.utils.string_utils import sanitize_ai_query
 from app.client.message_client import get_recent_messages
 
@@ -85,14 +86,16 @@ class ChatService:
                 if (kind == "on_chain_start" or kind == "on_chat_model_start") and node_name:
                     status_event = self._handle_status_event(node_name)
                     if status_event:
-                        yield f"data: {json.dumps(status_event)}\n\n"
+                        payload = ChatStatusEventResponse(type="STATUS", content=status_event)
+                        yield f"data: {json.dumps(payload.model_dump())}\n\n"
 
                 # Gửi từng phần câu trả lời (ANSWER_CHUNK)
                 if kind == "on_chat_model_stream":
                     chunk = event["data"].get("chunk")
                     if chunk and hasattr(chunk, "content") and chunk.content:
                         full_response_accum.append(chunk.content)
-                        yield f"data: {json.dumps({'type': 'ANSWER_CHUNK', 'content': chunk.content})}\n\n"
+                        payload = ChatAnswerChunkEventResponse(type="ANSWER_CHUNK", content=chunk.content)
+                        yield f"data: {json.dumps(payload.model_dump())}\n\n"
 
                 # Xử lý các node kết thúc không stream (như clarify)
                 if kind == "on_chain_end" and node_name in [edges.NODE_GENERATE, edges.NODE_CLARIFY]:
@@ -101,7 +104,8 @@ class ChatService:
                         answer = output["answer"]
                         if answer and not "".join(full_response_accum):
                             full_response_accum.append(answer)
-                            yield f"data: {json.dumps({'type': 'ANSWER_CHUNK', 'content': answer})}\n\n"
+                            payload = ChatAnswerChunkEventResponse(type="ANSWER_CHUNK", content=answer)
+                            yield f"data: {json.dumps(payload.model_dump())}\n\n"
 
             # 5. Xử lý phản hồi cuối cùng và Persistence
             full_response = "".join(full_response_accum)
@@ -141,7 +145,7 @@ class ChatService:
             edges.NODE_SUMMARIZE: "SUMMARIZING_CONVERSATION"
         }
         if node_name in status_map:
-            return {"type": "STATUS", "content": status_map[node_name]}
+            return status_map[node_name]
         return None
 
 # Singleton-like provider for FastAPI Depends
