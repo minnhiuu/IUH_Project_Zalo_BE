@@ -153,6 +153,46 @@ public class DataInitializer {
         seedIfAbsent(NotificationType.CALL, NotificationChannel.IN_APP, "en",
                 "Incoming call",
                 "<b>{{actorName}}</b> is calling you");
+
+        // --- MODERATION TEMPLATES ---
+        seedIfAbsent(NotificationType.CONTENT_REMOVED, NotificationChannel.IN_APP, "vi",
+                "Nội dung đã bị xóa",
+                "{{targetTypeVi}} của bạn đã bị gỡ do vi phạm chính sách cộng đồng.");
+        seedIfAbsent(NotificationType.CONTENT_REMOVED, NotificationChannel.IN_APP, "en",
+                "Content Removed",
+                "Your {{targetType}} has been removed for violating community guidelines.");
+        seedIfAbsent(NotificationType.CONTENT_REMOVED, NotificationChannel.FCM, "vi",
+                "Nội dung đã bị xóa",
+                "{{targetTypeVi}} của bạn đã bị gỡ do vi phạm chính sách cộng đồng.");
+        seedIfAbsent(NotificationType.CONTENT_REMOVED, NotificationChannel.FCM, "en",
+                "Content Removed",
+                "Your {{targetType}} has been removed for violating community guidelines.");
+
+        seedIfAbsent(NotificationType.CONTENT_HIDDEN, NotificationChannel.IN_APP, "vi",
+                "Nội dung đã bị ẩn",
+                "{{targetTypeVi}} của bạn đã bị ẩn do vi phạm chính sách cộng đồng.");
+        seedIfAbsent(NotificationType.CONTENT_HIDDEN, NotificationChannel.IN_APP, "en",
+                "Content Hidden",
+                "Your {{targetType}} has been hidden for violating community guidelines.");
+        seedIfAbsent(NotificationType.CONTENT_HIDDEN, NotificationChannel.FCM, "vi",
+                "Nội dung đã bị ẩn",
+                "{{targetTypeVi}} của bạn đã bị ẩn do vi phạm chính sách cộng đồng.");
+        seedIfAbsent(NotificationType.CONTENT_HIDDEN, NotificationChannel.FCM, "en",
+                "Content Hidden",
+                "Your {{targetType}} has been hidden for violating community guidelines.");
+
+        seedIfAbsent(NotificationType.USER_WARNED, NotificationChannel.IN_APP, "vi",
+                "Cảnh báo tài khoản",
+                "Bạn đã nhận được cảnh báo từ quản trị viên.{{#adminNote}} Ghi chú: {{adminNote}}{{/adminNote}}");
+        seedIfAbsent(NotificationType.USER_WARNED, NotificationChannel.IN_APP, "en",
+                "Account Warning",
+                "You have received a warning from an administrator.{{#adminNote}} Note: {{adminNote}}{{/adminNote}}");
+        seedIfAbsent(NotificationType.USER_WARNED, NotificationChannel.FCM, "vi",
+                "Cảnh báo tài khoản",
+                "Bạn đã nhận được cảnh báo từ quản trị viên.{{#adminNote}} Ghi chú: {{adminNote}}{{/adminNote}}");
+        seedIfAbsent(NotificationType.USER_WARNED, NotificationChannel.FCM, "en",
+                "Account Warning",
+                "You have received a warning from an administrator.{{#adminNote}} Note: {{adminNote}}{{/adminNote}}");
     }
 
     private static final List<String> NAMES = List.of(

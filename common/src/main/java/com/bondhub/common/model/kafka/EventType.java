@@ -26,8 +26,6 @@ public enum EventType {
     USER_INTERACTION_RECORDED,
     POST_VIEW_RECORDED,
     POST_DISLIKE_RECORDED,
-
-    USER_INDEX_DELETED,
     USER_PRIVACY_CHANGED,
 
     // Friend Events (friend-service)

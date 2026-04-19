@@ -159,10 +159,8 @@ public class OutboxEventPublisher {
         return switch (eventType) {
             case ACCOUNT_REGISTERED, ACCOUNT_UPDATED, ACCOUNT_DELETED, 
                  ACCOUNT_VERIFIED, ACCOUNT_ENABLED, ACCOUNT_DISABLED -> AccountRegisteredEvent.class;
-            case USER_CREATED, USER_DELETED -> UserCreatedEvent.class;
-            case USER_UPDATED -> UserProfileUpdatedEvent.class;
             case USER_CREATED -> UserCreatedEvent.class;
-            case USER_UPDATED -> UserUpdatedEvent.class;
+            case USER_UPDATED -> UserProfileUpdatedEvent.class;
             case USER_DELETED -> UserDeletedEvent.class;
             case USER_INDEX_REQUESTED ->  UserIndexRequestedEvent.class;
             case USER_INDEX_DELETED -> UserIndexDeletedEvent.class;

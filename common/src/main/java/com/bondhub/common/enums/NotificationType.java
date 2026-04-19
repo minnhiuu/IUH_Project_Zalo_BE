@@ -20,5 +20,10 @@ public enum NotificationType {
 
     SYSTEM,
 
-    DLQ_ALERT
+    DLQ_ALERT,
+
+    // --- MODERATION ---
+    CONTENT_REMOVED,
+    CONTENT_HIDDEN,
+    USER_WARNED
 }

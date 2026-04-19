@@ -1,8 +1,11 @@
 package com.bondhub.socialfeedservice.service.report;
 
 import com.bondhub.common.dto.PageResponse;
+import com.bondhub.common.enums.NotificationType;
+import com.bondhub.common.event.notification.RawNotificationEvent;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
+import com.bondhub.common.publisher.RawNotificationEventPublisher;
 import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.socialfeedservice.dto.request.report.BulkModerationRequest;
 import com.bondhub.socialfeedservice.dto.response.report.ContentReportSummary;
@@ -29,7 +32,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Slf4j
 @Service
@@ -44,6 +50,7 @@ public class ModerationServiceImpl implements ModerationService {
     ReportAggregationRepository reportAggregationRepository;
     SecurityUtil securityUtil;
     ReportMapper reportMapper;
+    RawNotificationEventPublisher rawNotificationEventPublisher;
 
     @Override
     @Transactional
@@ -61,11 +68,40 @@ public class ModerationServiceImpl implements ModerationService {
             throw new AppException(ErrorCode.REPORT_NOT_FOUND);
         }
 
-        // Perform content/user actions once â€” not repeated per report
+        String authorId = resolveContentAuthorId(request.targetId(), request.targetType());
+        String targetTypeLabel = request.targetType() == TargetType.POST ? "post" : "comment";
+        String targetTypeLabelVi = request.targetType() == TargetType.POST ? "bài viết" : "bình luận";
+
+        // Perform content/user actions once — not repeated per report
         switch (request.action()) {
-            case DELETE_CONTENT -> handleDeleteContent(request.targetId(), request.targetType());
-            case HIDE_CONTENT -> handleHideContent(request.targetId(), request.targetType());
-            case WARN_USER -> handleWarnUser(pendingReports.get(0), adminId, request.adminNote());
+            case DELETE_CONTENT -> {
+                handleDeleteContent(request.targetId(), request.targetType());
+                if (authorId != null) {
+                    publishModerationNotification(authorId, adminId, NotificationType.CONTENT_REMOVED,
+                            request.targetId(), Map.of("targetType", targetTypeLabel, "targetTypeVi", targetTypeLabelVi,
+                                    "referenceId", request.targetId()));
+                }
+            }
+            case HIDE_CONTENT -> {
+                handleHideContent(request.targetId(), request.targetType());
+                if (authorId != null) {
+                    publishModerationNotification(authorId, adminId, NotificationType.CONTENT_HIDDEN,
+                            request.targetId(), Map.of("targetType", targetTypeLabel, "targetTypeVi", targetTypeLabelVi,
+                                    "referenceId", request.targetId()));
+                }
+            }
+            case WARN_USER -> {
+                UserWarning warning = handleWarnUser(pendingReports.get(0), adminId, request.adminNote(), authorId);
+                if (warning != null) {
+                    Map<String, Object> payload = new HashMap<>();
+                    payload.put("reason", pendingReports.get(0).getReason().name());
+                    if (request.adminNote() != null && !request.adminNote().isBlank()) {
+                        payload.put("adminNote", request.adminNote());
+                    }
+                    publishModerationNotification(warning.getUserId(), adminId, NotificationType.USER_WARNED,
+                            warning.getId(), payload);
+                }
+            }
             case DISMISS_REPORT -> { /* No content action needed */ }
         }
 
@@ -145,18 +181,35 @@ public class ModerationServiceImpl implements ModerationService {
         }
     }
 
-    private void handleWarnUser(Report report, String adminId, String adminNote) {
-        String contentAuthorId = resolveContentAuthorId(report.getTargetId(), report.getTargetType());
-        if (contentAuthorId != null) {
-            UserWarning warning = UserWarning.builder()
-                    .userId(contentAuthorId)
-                    .reportId(report.getId())
-                    .reason(report.getReason())
-                    .adminId(adminId)
-                    .adminNote(adminNote)
+    private UserWarning handleWarnUser(Report report, String adminId, String adminNote, String contentAuthorId) {
+        if (contentAuthorId == null) return null;
+        UserWarning warning = UserWarning.builder()
+                .userId(contentAuthorId)
+                .reportId(report.getId())
+                .reason(report.getReason())
+                .adminId(adminId)
+                .adminNote(adminNote)
+                .build();
+        UserWarning saved = userWarningRepository.save(warning);
+        log.info("User warning created: userId={}, reportId={}", contentAuthorId, report.getId());
+        return saved;
+    }
+
+    private void publishModerationNotification(String recipientId, String adminId, NotificationType type,
+                                                String referenceId, Map<String, Object> payload) {
+        try {
+            RawNotificationEvent event = RawNotificationEvent.builder()
+                    .recipientId(recipientId)
+                    .actorId(adminId)
+                    .actorName("Admin")
+                    .type(type)
+                    .referenceId(referenceId)
+                    .payload(payload)
+                    .occurredAt(LocalDateTime.now())
                     .build();
-            userWarningRepository.save(warning);
-            log.info("User warning created: userId={}, reportId={}", contentAuthorId, report.getId());
+            rawNotificationEventPublisher.publish(event);
+        } catch (Exception e) {
+            log.warn("[Moderation] Failed to publish notification: type={}, recipient={}", type, recipientId, e);
         }
     }
 
