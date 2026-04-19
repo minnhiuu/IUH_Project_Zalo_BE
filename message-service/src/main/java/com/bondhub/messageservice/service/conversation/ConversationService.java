@@ -1,6 +1,7 @@
 package com.bondhub.messageservice.service.conversation;
 
 import com.bondhub.common.dto.PageResponse;
+import com.bondhub.common.dto.client.messageservice.ConversationMemberLookupResponse;
 import com.bondhub.messageservice.dto.response.ConversationParticipantResponse;
 import com.bondhub.messageservice.dto.response.ConversationResponse;
 import com.bondhub.messageservice.dto.response.UnreadAnchorResponse;
@@ -24,6 +25,8 @@ public interface ConversationService {
     void deleteConversationForMe(String conversationId);
 
     Set<String> getConversationMemberIds(String conversationId);
+
+    ConversationMemberLookupResponse getConversationMember(String conversationId, String userId);
 
     PageResponse<List<ConversationParticipantResponse>> getConversationParticipants(
             String conversationId, String query, int page, int size);

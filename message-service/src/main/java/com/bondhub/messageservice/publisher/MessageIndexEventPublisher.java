@@ -4,6 +4,7 @@ import com.bondhub.common.event.message.MessageIndexRequestedEvent;
 import com.bondhub.common.model.kafka.EventType;
 import com.bondhub.common.publisher.OutboxEventPublisher;
 import com.bondhub.common.enums.MessageType;
+import com.bondhub.messageservice.model.AttachmentInfo;
 import com.bondhub.messageservice.model.Message;
 import com.bondhub.messageservice.util.SearchableTextBuilder;
 import lombok.AccessLevel;
@@ -36,6 +37,7 @@ public class MessageIndexEventPublisher {
         Instant createdAt = message.getCreatedAt() != null
                 ? message.getCreatedAt().atZone(ZoneId.systemDefault()).toInstant()
                 : null;
+        AttachmentInfo primaryAttachment = resolvePrimaryAttachment(message);
 
         MessageIndexRequestedEvent event = MessageIndexRequestedEvent.builder()
                 .messageId(message.getId())
@@ -44,6 +46,8 @@ public class MessageIndexEventPublisher {
                 .senderName(message.getSenderName())
                 .senderAvatar(message.getSenderAvatar())
                 .content(message.getContent())
+                .originalFileName(resolveOriginalFileName(primaryAttachment))
+                .size(primaryAttachment != null ? primaryAttachment.getSize() : null)
                 .searchableText(searchableText)
                 .type(message.getType() != null ? message.getType().name() : null)
                 .status(message.getStatus() != null ? message.getStatus().name() : null)
@@ -62,5 +66,21 @@ public class MessageIndexEventPublisher {
         );
 
         log.info("Published MESSAGE_INDEX_REQUESTED: messageId={}", message.getId());
+    }
+
+    private AttachmentInfo resolvePrimaryAttachment(Message message) {
+        if (message.getAttachments() == null || message.getAttachments().isEmpty()) {
+            return null;
+        }
+        return message.getAttachments().get(0);
+    }
+
+    private String resolveOriginalFileName(AttachmentInfo attachmentInfo) {
+        if (attachmentInfo == null) {
+            return null;
+        }
+        return attachmentInfo.getOriginalFileName() != null
+                ? attachmentInfo.getOriginalFileName()
+                : attachmentInfo.getFileName();
     }
 }

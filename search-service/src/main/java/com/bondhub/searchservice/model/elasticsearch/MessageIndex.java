@@ -30,20 +30,21 @@ public class MessageIndex {
     @Field(type = FieldType.Keyword)
     String senderId;
 
-    // chỉ để hiển thị UI
     @Field(type = FieldType.Keyword, index = false)
     String senderName;
 
-    // chỉ để hiển thị UI
     @Field(type = FieldType.Keyword, index = false)
     String senderAvatar;
 
-    // raw content gốc của message text; không dùng làm field search chính
     @Field(type = FieldType.Text, index = false)
     String content;
 
-    // field tổng hợp để search:
-    // content + originalFileName + fileName + url + title + metadata text
+    @Field(type = FieldType.Keyword, index = false)
+    String originalFileName;
+
+    @Field(type = FieldType.Long, index = false)
+    Long size;
+
     @MultiField(
             mainField = @Field(
                     type = FieldType.Text,

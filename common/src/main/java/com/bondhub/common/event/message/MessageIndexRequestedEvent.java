@@ -13,6 +13,8 @@ public record MessageIndexRequestedEvent(
         String senderName,
         String senderAvatar,
         String content,
+        String originalFileName,
+        Long size,
         String searchableText,
         String type,
         String status,
