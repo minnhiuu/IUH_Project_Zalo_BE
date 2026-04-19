@@ -20,6 +20,8 @@ public interface ConversationService {
 
     UnreadAnchorResponse getUnreadAnchor(String conversationId);
 
+    void clearChatHistory(String conversationId);
+
     void deleteConversationForMe(String conversationId);
 
     Set<String> getConversationMemberIds(String conversationId);

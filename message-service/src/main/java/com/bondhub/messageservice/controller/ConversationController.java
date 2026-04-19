@@ -145,6 +145,13 @@ public class ConversationController {
         return ResponseEntity.ok(ApiResponse.success(null));
     }
 
+        @PatchMapping("/{conversationId}/clear-history")
+        @Operation(summary = "Clear chat history for current user (1:1 or group)")
+        public ResponseEntity<ApiResponse<Void>> clearChatHistory(@PathVariable String conversationId) {
+                conversationService.clearChatHistory(conversationId);
+                return ResponseEntity.ok(ApiResponse.success(null));
+        }
+
     @DeleteMapping("/{conversationId}/groups")
     @Operation(summary = "Disband group conversation (Owner only)")
     public ResponseEntity<ApiResponse<Void>> disbandGroup(@PathVariable String conversationId) {

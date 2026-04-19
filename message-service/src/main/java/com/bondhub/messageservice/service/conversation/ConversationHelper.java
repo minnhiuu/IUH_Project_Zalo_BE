@@ -178,9 +178,17 @@ public class ConversationHelper {
             String friendshipStatus, Long pendingJoinRequestCount) {
 
         LastMessageInfo last = room.getLastMessage();
+        LocalDateTime deletedBefore = room.getDeletedBefore() != null
+                ? room.getDeletedBefore().get(currentUserId)
+                : null;
         if (last != null && last.getVisibleTo() != null && !last.getVisibleTo().isEmpty()
                 && !last.getVisibleTo().contains(currentUserId)) {
-            last = findFallbackLastMessage(room.getId(), currentUserId);
+            last = findFallbackLastMessage(room.getId(), currentUserId, deletedBefore);
+        }
+        if (last != null && deletedBefore != null
+                && last.getTimestamp() != null
+                && !last.getTimestamp().isAfter(deletedBefore)) {
+            last = findFallbackLastMessage(room.getId(), currentUserId, deletedBefore);
         }
         List<ConversationMemberResponse> members = buildMembersWithCache(
                 room, currentUserId, userCache, baseUrl, viewerCanSee);
@@ -395,17 +403,24 @@ public class ConversationHelper {
         return PhoneUtil.isValidVnPhone(query);
     }
 
-    private LastMessageInfo findFallbackLastMessage(String conversationId, String currentUserId) {
+        private LastMessageInfo findFallbackLastMessage(String conversationId, String currentUserId, LocalDateTime deletedBefore) {
+        List<Criteria> criteriaList = new ArrayList<>();
+        criteriaList.add(Criteria.where("conversationId").is(conversationId));
+        criteriaList.add(Criteria.where("deletedBy").ne(currentUserId));
+        criteriaList.add(new Criteria().orOperator(
+            Criteria.where("visibleTo").exists(false),
+            Criteria.where("visibleTo").is(null),
+            Criteria.where("visibleTo").size(0),
+            Criteria.where("visibleTo").is(currentUserId)
+        ));
+        if (deletedBefore != null) {
+            criteriaList.add(Criteria.where("createdAt").gt(deletedBefore));
+        }
+
         Criteria criteria = new Criteria().andOperator(
-                Criteria.where("conversationId").is(conversationId),
-                Criteria.where("deletedBy").ne(currentUserId),
-                new Criteria().orOperator(
-                        Criteria.where("visibleTo").exists(false),
-                        Criteria.where("visibleTo").is(null),
-                        Criteria.where("visibleTo").size(0),
-                        Criteria.where("visibleTo").is(currentUserId)
-                )
+            criteriaList.toArray(new Criteria[0])
         );
+
         Query query = new Query(criteria)
                 .with(Sort.by(Sort.Direction.DESC, "createdAt"))
                 .limit(1);

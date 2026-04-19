@@ -306,6 +306,38 @@ public class ConversationServiceImpl implements ConversationService {
     }
 
     @Override
+    public void clearChatHistory(String conversationId) {
+        String currentUserId = securityUtil.getCurrentUserId();
+
+        Conversation conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
+
+        ConversationMember member = conversation.getMembers().stream()
+                .filter(m -> m.getUserId().equals(currentUserId))
+                .findFirst()
+                .orElseThrow(() -> new AppException(ErrorCode.CHAT_MEMBER_NOT_FOUND));
+
+        // User can clear history whether active or inactive, as long as they belong to this conversation.
+        LocalDateTime now = LocalDateTime.now();
+
+        if (conversation.getDeletedBefore() == null) {
+            conversation.setDeletedBefore(new HashMap<>());
+        }
+        conversation.getDeletedBefore().put(currentUserId, now);
+
+        if (conversation.getUnreadCounts() != null) {
+            conversation.getUnreadCounts().put(currentUserId, 0);
+        }
+
+        if (conversation.getLastMessage() != null) {
+            member.setLastReadMessageId(conversation.getLastMessage().getMessageId());
+        }
+
+        conversationRepository.save(conversation);
+        log.info("[Conversation] User {} cleared chat history in conversation {}", currentUserId, conversationId);
+    }
+
+    @Override
     public void deleteConversationForMe(String conversationId) {
         String currentUserId = securityUtil.getCurrentUserId();
 
