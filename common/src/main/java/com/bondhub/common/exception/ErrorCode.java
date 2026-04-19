@@ -133,6 +133,7 @@ public enum ErrorCode {
         CHAT_GROUP_DUPLICATE(HttpStatus.CONFLICT, 4035, "error.chat.group.duplicate"),
         CHAT_NEED_AT_LEAST_ONE_FRIEND(HttpStatus.BAD_REQUEST, 4036, "error.chat.group.need.at.least.one.friend"),
         CHAT_INVALID_INVITE_TARGET(HttpStatus.BAD_REQUEST, 4037, "error.chat.invalid.invite.target"),
+        CHAT_ADMIN_CANNOT_DELETE_OWNER_MESSAGE(HttpStatus.FORBIDDEN, 4038, "error.chat.admin.cannot.delete.owner.message"),
 
         //  NOTIFICATION_TEMPLATE (23xx)
         NOTIFICATION_TEMPLATE_NOT_FOUND(HttpStatus.NOT_FOUND, 2300, "error.notification.template.not.found"),
