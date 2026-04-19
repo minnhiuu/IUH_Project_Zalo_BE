@@ -6,18 +6,20 @@ TUYỆT ĐỐI không viết thêm bất kỳ ký tự nào ngoài token đó.
 
 ═══════════════════════════════════════════════
 QUY TẮC VÀNG (ưu tiên từ trên xuống dưới):
-1. CÁC CÂU HỎI VÀ THAO TÁC VỀ BẢN THÂN / CÁ NHÂN (Đổi tên, Cập nhật bio, Bạn bè, Tin nhắn, Đăng xuất) -> LUÔN LUÔN trả về DIRECT. (Bỏ qua các quy tắc dưới).
+1. CÁC THAO TÁC TRÊN TÀI KHOẢN HIỆN TẠI / THÔNG TIN CÁ NHÂN (Đổi tên của tôi, Cập nhật bio, Bạn bè của tôi, Tin nhắn của tôi, Đăng xuất) -> LUÔN LUÔN trả về DIRECT. (Bỏ qua các quy tắc dưới).
 2. Nếu người dùng yêu cầu tóm tắt nội dung cuộc hội thoại, tóm tắt ý chính của các tin nhắn trước đó, hoặc hỏi "đang nói về cái gì thế" → LUÔN trả về SUMMARIZE.
 3. Nếu câu hỏi yêu cầu dữ liệu thực tế VÀ đã có ĐỦ [Chủ thể] + [Vùng/Đơn vị rõ ràng] (ví dụ: thời tiết Hà Nội, giá vàng SJC) → LUÔN trả về COMPLETE.
-4. Nếu câu hỏi đã rõ ràng → TUYỆT ĐỐI KHÔNG hỏi lại bằng MISSING.
+4. Nếu hỏi về QUY TRÌNH/NGHIỆP VỤ HỆ THỐNG BONDHUB hoặc HƯỚNG DẪN đăng ký/sử dụng BondHub → LUÔN trả về COMPLETE.
+5. Nếu câu hỏi đã rõ ràng → TUYỆT ĐỐI KHÔNG hỏi lại bằng MISSING.
 ════════════════════════════════════════════════════
 
 PHÂN LOẠI:
-1. DIRECT — câu hỏi KHÔNG cần tìm kiếm dữ liệu mới từ Web/RAG:
+1. DIRECT — câu hỏi KHÔNG cần RAG:
    - Chào hỏi, giao tiếp xã hội, cảm ơn.
    - Câu hỏi ngày, giờ (đã biết từ thời gian hiện tại).
    - THÔNG TIN CÁ NHÂN VÀ TÀI KHOẢN: 'Tôi là ai?', 'Profile của tôi', 'Xem hồ sơ', 'Tên tôi là gì'.
-   - THAO TÁC CÁ NHÂN: 'Đổi tên', 'Cập nhật bio'.
+   - THAO TÁC TRÊN TÀI KHOẢN HIỆN TẠI: 'Đổi tên của tôi', 'Cập nhật bio', 'Bạn bè tôi là ai'.
+   - (CẢNH BÁO): Nếu hỏi về QUY TRÌNH, NGHIỆP VỤ HỆ THỐNG BONDHUB, HƯỚNG DẪN đăng ký/sử dụng BondHub -> Phải là COMPLETE.
 
 2. SUMMARIZE — yêu cầu tóm tắt/hỏi về nội dung đang thảo luận:
    - 'Tóm tắt nội dung nãy giờ cho tôi', 'Mọi người đang nói gì thế', 'Catch up nội dung'.
@@ -26,6 +28,7 @@ PHÂN LOẠI:
    - Thời tiết/giá cả mà KHÔNG có địa điểm nào → hỏi lại.
 
 3. COMPLETE — câu hỏi cần TRUY XUẤT dữ liệu (RAG hoặc Web):
+   - Hướng dẫn sử dụng BondHub, quy trình đăng ký, chính sách công ty.
    - Dữ liệu thực tế: Thời tiết/giá vàng/giá xăng/giao thông KÈM địa điểm.
    - Tin tức, dự án, dữ liệu doanh nghiệp, kiến thức chung.
 
@@ -51,6 +54,11 @@ QUY TẮC CỐT LÕI — KẾ THỪA THỰC THỂ (ENTITY CARRYOVER):
 3. CẢM BIẾN CHỦ ĐỀ (TOPIC SENSING):
    - Nếu chủ đề thay đổi hoàn toàn nhưng vẫn là thông tin cần vị trí -> Vẫn giữ vị trí cũ.
    - Ví dụ: "Thời tiết HCM" -> "Giá vàng hiện tại" => "Giá vàng hiện tại tại Hồ Chí Minh".
+4. QUY TẮC CẤM:
+   - KHÔNG được tự ý trả lời câu hỏi.
+   - Kết quả trả về PHẢI là một câu hỏi hoặc một cụm từ tìm kiếm ngắn gọn, đầy đủ thực thể.
+   - Ví dụ SAI: "Để đăng ký bạn cần vào web..."
+   - Ví dụ ĐÚNG: "Quy trình đăng ký tài khoản BondHub mới cho người dùng."
 
 QUY TẮC CẤM (TRÁNH NGÁO):
 - KHÔNG thêm địa điểm vào các câu xã giao, chào hỏi, hoặc câu hỏi kiến thức chung.

@@ -1,5 +1,6 @@
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.http import models
+from beanie.odm.operators.find.comparison import In
 from app.config.app_config import settings
 from app.config.constants import GLOBAL_CONVERSATION_ID
 from app.model.document_entity import ChunkEntity
@@ -167,10 +168,10 @@ async def get_chunk_contents_by_point_ids(point_ids: list[str]) -> list[str]:
     if not point_ids:
         return []
 
-    chunks = await ChunkEntity.find(ChunkEntity.point_id.in_(point_ids)).to_list()
+    chunks = await ChunkEntity.find(In(ChunkEntity.point_id, point_ids)).to_list()
     if not chunks:
         # Backward compatibility for historical data where Qdrant point id was vector_id.
-        chunks = await ChunkEntity.find(ChunkEntity.vector_id.in_(point_ids)).to_list()
+        chunks = await ChunkEntity.find(In(ChunkEntity.vector_id, point_ids)).to_list()
 
     chunks_by_point_id = {c.point_id: c.chunk_content for c in chunks if c.point_id}
     chunks_by_vector_id = {c.vector_id: c.chunk_content for c in chunks}
