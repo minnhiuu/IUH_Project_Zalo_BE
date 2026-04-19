@@ -15,6 +15,7 @@ NODE_GENERATE = "generate"
 NODE_WEB_SEARCH = "web_search"
 NODE_MARK_LOW_CONFIDENCE = "mark_low_confidence"
 NODE_ACTION = "action"
+NODE_SUMMARIZE = "summarize"
 
 def next_after_analyze(state: AgentState) -> str:
     route = str(state.get("grade", "")).strip().upper()
@@ -24,6 +25,8 @@ def next_after_analyze(state: AgentState) -> str:
         target = NODE_CLARIFY
     elif route == "COMPLETE":
         target = NODE_RETRIEVE
+    elif route == "SUMMARIZE":
+        target = NODE_SUMMARIZE
     
     logger.info(f"--- ROUTING DECISION: {route} ---> Next Node: {target}")
     return target

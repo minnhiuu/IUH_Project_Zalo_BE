@@ -15,3 +15,4 @@ class AgentState(TypedDict):
     grade: Optional[str]
     answer: Optional[str]
     retry_count: Optional[int]
+    chat_history_context: Optional[str]

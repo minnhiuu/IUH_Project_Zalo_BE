@@ -17,6 +17,7 @@ def build_graph():
     workflow.add_node(edges.NODE_WEB_SEARCH, ai_service.web_search_node)
     workflow.add_node(edges.NODE_MARK_LOW_CONFIDENCE, ai_service.mark_low_confidence_node)
     workflow.add_node(edges.NODE_GENERATE, ai_service.generate_node)
+    workflow.add_node(edges.NODE_SUMMARIZE, ai_service.summarize_node)
     workflow.add_node(edges.NODE_ACTION, ToolNode(tools))
 
     # Define edges
@@ -29,11 +30,13 @@ def build_graph():
         {
             edges.NODE_CLARIFY: edges.NODE_CLARIFY,
             edges.NODE_RETRIEVE: edges.NODE_RETRIEVE,
-            edges.NODE_GENERATE: edges.NODE_GENERATE
+            edges.NODE_GENERATE: edges.NODE_GENERATE,
+            edges.NODE_SUMMARIZE: edges.NODE_SUMMARIZE
         }
     )
     
     workflow.add_edge(edges.NODE_CLARIFY, END)
+    workflow.add_edge(edges.NODE_SUMMARIZE, END)
     
     workflow.add_edge(edges.NODE_RETRIEVE, edges.NODE_GRADE)
     

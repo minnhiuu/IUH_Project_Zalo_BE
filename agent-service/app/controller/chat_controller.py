@@ -108,7 +108,8 @@ async def chat(
             "conversation_id": conversation_id,
             "user_id": user_id,
             "original_query": clean_query,
-            "user_query": effective_query,
+            "user_query": clean_query,  # Giữ query sạch để AI analyze intent tốt hơn
+            "chat_history_context": chat_history_context,  # Truyền context riêng biệt
             "messages": [HumanMessage(content=clean_query)]
         }
 

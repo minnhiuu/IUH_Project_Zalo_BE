@@ -165,6 +165,25 @@ async def generate_node(state: AgentState, config: RunnableConfig):
     
     return {"messages": [result], "answer": result.content}
 
+async def summarize_node(state: AgentState):
+    logger.info("--- AI INTENT: SUMMARIZING CONVERSATION ---")
+    
+    # 1. Lấy context đã được Controller nạp sẵn
+    history_text = state.get("chat_history_context", "")
+    
+    if not history_text or history_text.strip() == "":
+        return {"answer": "Tôi không tìm thấy lịch sử hội thoại gần đây để tóm tắt cho bạn.", "grade": "COMPLETE"}
+
+    # 2. Sử dụng SUMMARIZER_PROMPT hiện có
+    prompt = SUMMARIZER_PROMPT.format(history=history_text)
+    
+    # 3. Gọi model để sinh tóm tắt
+    # Ở đây có thể dùng astream nếu muốn stream kết quả, 
+    # nhưng để đơn giản và ổn định cho node tổng hợp ta dùng invoke.
+    result = await premium_model.ainvoke([SystemMessage(content=prompt)])
+    
+    return {"answer": result.content, "grade": "COMPLETE"}
+
 #Legacy
 async def summarize_messages(conversation_id: str, since_message_id: str):
     # 1. Fetch raw messages from Java service
