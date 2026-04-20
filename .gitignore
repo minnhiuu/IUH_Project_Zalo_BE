@@ -187,7 +187,6 @@ tmp/
 *.zip
 *.tar.gz
 *.rar
-!gradle-wrapper.jar
 !.mvn/wrapper/maven-wrapper.jar
 
 ### Node (if using frontend assets) ###
@@ -209,10 +208,8 @@ yarn.lock
 *.truststore
 
 ### Backup Files ###
-*.bak
 *.backup
 *.old
-*~
 
 ### Cache ###
 .cache/
@@ -228,15 +225,29 @@ yarn.lock
 /mvnw
 /mvnw.cmd
 
-# Bytecode and Python caches
+### Python ###
 __pycache__/
 *.py[cod]
 *$py.class
-
-# Virtual environments
-.venv/
 venv/
+.venv/
 env/
+.env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 ENV/
 
 # Tool caches
@@ -254,23 +265,11 @@ ENV/
 htmlcov/
 
 # Build and packaging artifacts
-build/
-dist/
-*.egg-info/
-.eggs/
 *.whl
 pip-wheel-metadata/
 
-# Local runtime/log files
-*.log
-*.pid
-
 # Local environment files
-.env
 .env.*
 
 # Editor/OS noise
 .idea/
-.vscode/
-.DS_Store
-Thumbs.db

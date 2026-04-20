@@ -500,6 +500,32 @@ public class MessageServiceImpl implements MessageService {
      * Kiểm tra user có trong members của conversation không.
      * Nếu không → throw UNAUTHORIZED (403).
      */
+    @Override
+    public List<MessageResponse> getMessagesSince(String conversationId, String sinceId, String userId) {
+        // 1. Kiểm tra quyền membership
+        Conversation room = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
+        
+        boolean isMember = room.getMembers().stream()
+                .anyMatch(m -> m.getUserId().equals(userId) && isActiveMember(m));
+        
+        if (!isMember) {
+            throw new AppException(ErrorCode.CHAT_NOT_A_MEMBER);
+        }
+
+        // 2. Lấy 100 tin nhắn gần nhất tính từ sinceId
+        List<Message> messages = messageRepository.findTop100ByConversationIdAndIdGreaterThanAndStatusNot(
+                conversationId, sinceId, MessageStatus.REVOKED);
+
+        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+        List<MessageResponse> dtos = messages.stream()
+                .map(msg -> messageMapper.mapToMessageResponse(msg, baseUrl))
+                .collect(Collectors.toList());
+
+        enrichMessages(dtos);
+        return dtos;
+    }
+
     private void assertConversationMember(Conversation room, String userId) {
         boolean isMember = room.getMembers().stream()
                 .anyMatch(m -> m.getUserId().equals(userId));
