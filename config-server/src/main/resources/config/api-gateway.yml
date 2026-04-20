@@ -75,6 +75,13 @@ spring:
               filters:
                 - RewritePath=/search/v3/api-docs, /v3/api-docs
 
+            - id: social-feed-service-docs
+              uri: lb://social-feed-service
+              predicates:
+                - Path=/social-feed/v3/api-docs/**
+              filters:
+                - RewritePath=/social-feed/v3/api-docs, /v3/api-docs
+
             - id: ai-service-docs
               uri: lb://ai-service
               predicates:
@@ -144,6 +151,28 @@ spring:
                     fallbackUri: forward:/fallback/user-service
 
             # Admin Routes (Protected - ADMIN role required)
+            - id: social-feed-service-admin-reports-root
+              uri: lb://social-feed-service
+              predicates:
+                - Path=/api/admin/reports
+              filters:
+                - SetPath=/admin/reports
+                - name: CircuitBreaker
+                  args:
+                    name: socialFeedServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/general
+
+            - id: social-feed-service-admin-reports
+              uri: lb://social-feed-service
+              predicates:
+                - Path=/api/admin/reports/**
+              filters:
+                - RewritePath=/api/admin/reports/(?<segment>.*), /admin/reports/${segment}
+                - name: CircuitBreaker
+                  args:
+                    name: socialFeedServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/general
+
             - id: user-service-admin
               uri: lb://user-service
               predicates:
@@ -234,6 +263,162 @@ spring:
                     name: friendServiceCircuitBreaker
                     fallbackUri: forward:/fallback/friend-service
 
+            # Social Feed Service Routes (Protected - JWT required)
+            - id: social-feed-service-posts-root
+              uri: lb://social-feed-service
+              predicates:
+                - Path=/api/posts
+              filters:
+                - SetPath=/posts
+                - name: CircuitBreaker
+                  args:
+                    name: socialFeedServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/general
+
+            - id: social-feed-service-posts-root
+              uri: lb://social-feed-service
+              predicates:
+                - Path=/api/social/**
+              filters:
+                - RewritePath=/api/social/(?<segment>.*), /social/${segment}
+                - name: CircuitBreaker
+                  args:
+                    name: socialFeedServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/general
+
+            - id: social-feed-service-posts
+              uri: lb://social-feed-service
+              predicates:
+                - Path=/api/posts/**
+              filters:
+                - RewritePath=/api/posts/(?<segment>.*), /posts/${segment}
+                - name: CircuitBreaker
+                  args:
+                    name: socialFeedServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/general
+
+            - id: social-feed-service-comments-root
+              uri: lb://social-feed-service
+              predicates:
+                - Path=/api/comments
+              filters:
+                - SetPath=/comments
+                - name: CircuitBreaker
+                  args:
+                    name: socialFeedServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/general
+
+            - id: social-feed-service-comments
+              uri: lb://social-feed-service
+              predicates:
+                - Path=/api/comments/**
+              filters:
+                - RewritePath=/api/comments/(?<segment>.*), /comments/${segment}
+                - name: CircuitBreaker
+                  args:
+                    name: socialFeedServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/general
+
+            - id: social-feed-service-reactions-root
+              uri: lb://social-feed-service
+              predicates:
+                - Path=/api/reactions
+              filters:
+                - SetPath=/reactions
+                - name: CircuitBreaker
+                  args:
+                    name: socialFeedServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/general
+
+            - id: social-feed-service-reactions
+              uri: lb://social-feed-service
+              predicates:
+                - Path=/api/reactions/**
+              filters:
+                - RewritePath=/api/reactions/(?<segment>.*), /reactions/${segment}
+                - name: CircuitBreaker
+                  args:
+                    name: socialFeedServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/general
+
+            - id: social-feed-service-interactions-root
+              uri: lb://social-feed-service
+              predicates:
+                - Path=/api/interactions
+              filters:
+                - SetPath=/interactions
+                - name: CircuitBreaker
+                  args:
+                    name: socialFeedServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/general
+
+            - id: social-feed-service-interactions
+              uri: lb://social-feed-service
+              predicates:
+                - Path=/api/interactions/**
+              filters:
+                - RewritePath=/api/interactions/(?<segment>.*), /interactions/${segment}
+                - name: CircuitBreaker
+                  args:
+                    name: socialFeedServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/general
+
+            - id: social-feed-service-reports-root
+              uri: lb://social-feed-service
+              predicates:
+                - Path=/api/reports
+              filters:
+                - SetPath=/reports
+                - name: CircuitBreaker
+                  args:
+                    name: socialFeedServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/general
+
+            - id: social-feed-service-reports
+              uri: lb://social-feed-service
+              predicates:
+                - Path=/api/reports/**
+              filters:
+                - RewritePath=/api/reports/(?<segment>.*), /reports/${segment}
+                - name: CircuitBreaker
+                  args:
+                    name: socialFeedServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/general
+
+            - id: social-feed-service-recommendations-root
+              uri: lb://social-feed-service
+              predicates:
+                - Path=/api/recommendations
+              filters:
+                - SetPath=/recommendations
+                - name: CircuitBreaker
+                  args:
+                    name: socialFeedServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/general
+
+            - id: social-feed-service-recommendations
+              uri: lb://social-feed-service
+              predicates:
+                - Path=/api/recommendations/**
+              filters:
+                - RewritePath=/api/recommendations/(?<segment>.*), /recommendations/${segment}
+                - name: CircuitBreaker
+                  args:
+                    name: socialFeedServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/general
+
+            # Post Recommendation Service Routes (Protected - JWT required)
+            - id: post-recommendation-service
+              uri: lb://post-recommendation-service
+              predicates:
+                - Path=/api/post-recommendations/**
+              filters:
+                - RewritePath=/api/post-recommendations/(?<segment>.*), /api/v1/recommendations/${segment}
+                - name: CircuitBreaker
+                  args:
+                    name: postRecommendationServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/general
+
             - id: friend-service-contacts
               uri: lb://friend-service
               predicates:
@@ -256,6 +441,26 @@ spring:
                   args:
                     name: aiServiceCircuitBreaker
                     fallbackUri: forward:/fallback/ai-service
+
+            # Agent Service Routes (Python FastAPI - LangGraph)
+            - id: agent-service
+              uri: lb://agent-service
+              predicates:
+                - Path=/api/v1/ai/**
+              filters:
+                - RewritePath=/api/v1/ai/(?<segment>.*), /api/v1/ai/${segment}
+                - AddResponseHeader=X-Accel-Buffering, no
+                - name: CircuitBreaker
+                  args:
+                    name: agentServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/agent-service
+
+            - id: agent-service-docs
+              uri: lb://agent-service
+              predicates:
+                - Path=/agent/v3/api-docs/**
+              filters:
+                - RewritePath=/agent/v3/api-docs, /openapi.json
 
           # Global CORS Configuration
           globalCors:
@@ -356,6 +561,8 @@ resilience4j:
         base-config: default
       friendServiceCircuitBreaker:
         base-config: default
+      socialFeedServiceCircuitBreaker:
+        base-config: default
 
   timelimiter:
     configs:
@@ -378,6 +585,8 @@ resilience4j:
       fileServiceCircuitBreaker:
         base-config: default
       friendServiceCircuitBreaker:
+        base-config: default
+      socialFeedServiceCircuitBreaker:
         base-config: default
 
   # Retry Configuration
@@ -407,6 +616,8 @@ resilience4j:
         max-attempts: 2
       friendServiceRetry:
         base-config: default
+      socialFeedServiceRetry:
+        base-config: default
 
   # Rate Limiter Configuration
   ratelimiter:
@@ -432,6 +643,9 @@ resilience4j:
       friendServiceRateLimiter:
         base-config: default
         limit-for-period: 100
+      socialFeedServiceRateLimiter:
+        base-config: default
+        limit-for-period: 120
 
   # Bulkhead Configuration
   bulkhead:
@@ -453,6 +667,9 @@ resilience4j:
         base-config: default
         max-concurrent-calls: 15
       friendServiceBulkhead:
+        base-config: default
+        max-concurrent-calls: 20
+      socialFeedServiceBulkhead:
         base-config: default
         max-concurrent-calls: 20
 
@@ -519,8 +736,12 @@ springdoc:
         url: /friend/v3/api-docs
       - name: Search Service
         url: /search/v3/api-docs
-      - name: AI Service
+      - name: Social Feed Service
+        url: /social-feed/v3/api-docs
+      - name: AI Service (Legacy)
         url: /ai/v3/api-docs
+      - name: Agent Service (Python)
+        url: /agent/v3/api-docs
     # Enable "Try it out" functionality
     use-root-path: true
     path: /swagger-ui.html

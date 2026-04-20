@@ -38,6 +38,7 @@
         <module>search-service</module>
         <module>friend-service</module>
         <module>ai-service</module>
+        <module>social-feed-service</module>
     </modules>
 
     <dependencyManagement>

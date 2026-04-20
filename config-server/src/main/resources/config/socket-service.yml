@@ -23,8 +23,9 @@ spring:
       max-poll-records: 100
       auto-offset-reset: latest
       properties:
-        spring.json.use.type.headers: false
-        spring.json.value.default.type: com.bondhub.common.dto.client.socketservice.SocketEvent
+        spring.json.use.type.headers: true
+        spring.json.trusted.packages: "com.bondhub.common"
+        spring.json.type.mapping: "SocketEvent:com.bondhub.common.dto.client.socketservice.SocketEvent"
 
     listener:
       concurrency: 3

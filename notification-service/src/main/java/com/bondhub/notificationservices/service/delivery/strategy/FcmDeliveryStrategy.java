@@ -160,8 +160,9 @@ public class FcmDeliveryStrategy implements NotificationStrategy {
         dataPayload.put("requestId", requestId != null ? requestId : "");
         dataPayload.put("url", url);
 
-        // For CALL notifications, include custom payload fields (sessionId, roomId, callerName, etc.)
-        if ("CALL".equals(type) && notificationPayload != null) {
+        // For CALL notifications, include custom payload fields
+        boolean includeCustomPayload = "CALL".equals(type);
+        if (includeCustomPayload && notificationPayload != null) {
             for (Map.Entry<String, Object> entry : notificationPayload.entrySet()) {
                 String key = entry.getKey();
                 // Skip standard fields already added

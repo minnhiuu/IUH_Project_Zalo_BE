@@ -23,12 +23,16 @@ spring:
       retries: 3
       properties:
         max.in.flight.requests.per.connection: 5
-
+        spring.json.value.default.type: "com.bondhub.common.event.ai.AiMessageSaveEvent"
+        spring.json.trusted.packages: "com.bondhub.common.event"
     # Consumer configuration for incoming events
     consumer:
       group-id: message-service-group
       client-id: message-service-consumer
       max-poll-records: 100
+      properties:
+        spring.json.trusted.packages: "com.bondhub.common"
+        spring.json.type.mapping: "AiMessageSaveEvent:com.bondhub.common.event.ai.AiMessageSaveEvent"
 
     # Listener configuration
     listener:
