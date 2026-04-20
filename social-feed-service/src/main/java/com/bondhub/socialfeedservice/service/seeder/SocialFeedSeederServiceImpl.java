@@ -106,14 +106,18 @@ public class SocialFeedSeederServiceImpl implements SocialFeedSeederService {
     };
 
     static final String[] VIDEO_URLS = {
-            "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
-            "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
-            "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4",
-            "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4",
-            "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerMeltdowns.mp4",
-            "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/SubaruOutbackOnStreetAndDirt.mp4",
-            "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/WeAreGoingOnBullrun.mp4",
-            "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/VolkswagenGTIReview.mp4",
+            "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_1MB.mp4",
+            "https://filesamples.com/samples/video/mp4/sample_640x360.mp4",
+            "https://filesamples.com/samples/video/mp4/sample_1280x720_surfing_with_audio.mp4",
+            "https://filesamples.com/samples/video/mp4/sample_960x400_ocean_with_audio.mp4",
+            "https://samplelib.com/lib/preview/mp4/sample-5s.mp4",
+            "https://samplelib.com/lib/preview/mp4/sample-10s.mp4",
+            "https://samplelib.com/lib/preview/mp4/sample-15s.mp4",
+            "https://samplelib.com/lib/preview/mp4/sample-20s.mp4",
+            "https://www.w3schools.com/html/mov_bbb.mp4",
+            "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
+            "https://download.samplelib.com/mp4/sample-5s.mp4",
+            "https://download.samplelib.com/mp4/sample-10s.mp4",
     };
 
     // ── Comment pool ─────────────────────────────────────────────────────────
@@ -493,6 +497,8 @@ public class SocialFeedSeederServiceImpl implements SocialFeedSeederService {
             return buildSummary(0, 0, 0, 0, 0, "No user IDs available in user-service");
         }
 
+        purgeSocialFeedData();
+
         Random random = new Random();
         ReactionType[] reactionTypes = ReactionType.values();
 
@@ -526,6 +532,34 @@ public class SocialFeedSeederServiceImpl implements SocialFeedSeederService {
                 .formatted(userIds.size(), interestsPublished, allSavedPosts.size(),
                         engagementCounts[0], engagementCounts[1], engagementCounts[2]);
         return buildSummary(allSavedPosts.size(), engagementCounts[0], engagementCounts[1], engagementCounts[2], interestsPublished, message);
+    }
+
+    private void purgeSocialFeedData() {
+        long postCount = postRepository.count();
+        long commentCount = commentRepository.count();
+        long reactionCount = reactionRepository.count();
+        long interactionCount = userInteractionRepository.count();
+        long hashtagCount = hashtagRepository.count();
+
+        long total = postCount + commentCount + reactionCount + interactionCount + hashtagCount;
+        if (total == 0) {
+            log.info("🧹 No existing social-feed data found. Starting clean seed.");
+            return;
+        }
+
+        log.info(
+                "🧹 Clearing social-feed data before reseed: posts={}, comments={}, reactions={}, interactions={}, hashtags={}",
+                postCount, commentCount, reactionCount, interactionCount, hashtagCount
+        );
+
+        // Delete child collections first, then posts.
+        userInteractionRepository.deleteAll();
+        reactionRepository.deleteAll();
+        commentRepository.deleteAll();
+        hashtagRepository.deleteAll();
+        postRepository.deleteAll();
+
+        log.info("✅ Social-feed data cleared. Proceeding with reseed.");
     }
 
     // ─────────────────────────────────────────────────────────────────────────
