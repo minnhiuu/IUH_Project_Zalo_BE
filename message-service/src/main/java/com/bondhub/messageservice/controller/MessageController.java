@@ -4,6 +4,7 @@ import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.common.dto.PageResponse;
 import com.bondhub.common.dto.client.messageservice.MessageSendRequest;
 import com.bondhub.messageservice.dto.request.ReactionRequest;
+import com.bondhub.messageservice.dto.response.MessageContextResponse;
 import com.bondhub.messageservice.dto.response.MessageResponse;
 import com.bondhub.messageservice.dto.response.MessageSeenResponse;
 import com.bondhub.messageservice.service.message.MessageService;
@@ -100,5 +101,15 @@ public class MessageController {
             @PathVariable String messageId) {
         return ResponseEntity.ok(ApiResponse.success(
                 messageService.getSeenMembers(conversationId, messageId)));
+    }
+
+    @GetMapping("/conversations/{conversationId}/messages/{messageId}/context")
+    @Operation(summary = "Get the page index of a specific message (used by FE to scroll-to from search result)")
+    public ResponseEntity<ApiResponse<MessageContextResponse>> getMessageContext(
+            @PathVariable String conversationId,
+            @PathVariable String messageId,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(ApiResponse.success(
+                messageService.getMessageContext(conversationId, messageId, size)));
     }
 }

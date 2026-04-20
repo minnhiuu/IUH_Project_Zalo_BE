@@ -4,9 +4,7 @@ import com.bondhub.common.utils.S3Util;
 import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
-import com.bondhub.messageservice.dto.response.ChatNotification;
-import com.bondhub.messageservice.dto.response.MessageSeenResponse;
-import com.bondhub.messageservice.dto.response.ReplyMetadataResponse;
+import com.bondhub.messageservice.dto.response.*;
 import com.bondhub.messageservice.model.Conversation;
 import com.bondhub.messageservice.model.ConversationMember;
 import com.bondhub.messageservice.model.LastMessageInfo;
@@ -32,7 +30,6 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import com.bondhub.common.dto.PageResponse;
-import com.bondhub.messageservice.dto.response.MessageResponse;
 import com.bondhub.messageservice.mapper.MessageMapper;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
@@ -773,6 +770,70 @@ public class MessageServiceImpl implements MessageService {
             case LINK -> "[Liên kết]";
             default -> message.getContent();
         };
+    }
+
+    @Override
+    public MessageContextResponse getMessageContext(String conversationId, String messageId, int pageSize) {
+        String currentUserId = securityUtil.getCurrentUserId();
+
+        Conversation room = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
+        assertConversationMember(room, currentUserId);
+
+        Message targetMessage = messageRepository.findById(messageId)
+                .orElseThrow(() -> new AppException(ErrorCode.MESSAGE_NOT_FOUND));
+        if (!targetMessage.getConversationId().equals(conversationId)) {
+            throw new AppException(ErrorCode.MESSAGE_NOT_FOUND);
+        }
+
+        ConversationMember currentMember = room.getMembers().stream()
+                .filter(m -> m.getUserId().equals(currentUserId))
+                .findFirst().orElse(null);
+        LocalDateTime memberJoinedAt = (currentMember != null && currentMember.getJoinedAt() != null)
+                ? currentMember.getJoinedAt()
+                : LocalDateTime.of(1970, 1, 1, 0, 0);
+        LocalDateTime deletedBefore = (room.getDeletedBefore() != null)
+                ? room.getDeletedBefore().getOrDefault(currentUserId, LocalDateTime.of(1970, 1, 1, 0, 0))
+                : LocalDateTime.of(1970, 1, 1, 0, 0);
+
+        Criteria visibilityOrCriteria = new Criteria().orOperator(
+                Criteria.where("visibleTo").exists(false),
+                Criteria.where("visibleTo").is(null),
+                Criteria.where("visibleTo").size(0),
+                Criteria.where("visibleTo").in(currentUserId)
+        );
+        Criteria systemFilterCriteria = new Criteria().orOperator(
+                Criteria.where("type").ne(MessageType.SYSTEM),
+                Criteria.where("createdAt").gte(memberJoinedAt)
+        );
+
+        Criteria newerCriteria = Criteria.where("conversationId").is(conversationId)
+                .and("deletedBy").ne(currentUserId)
+                .andOperator(
+                        Criteria.where("createdAt").gt(targetMessage.getCreatedAt()),
+                        Criteria.where("createdAt").gt(deletedBefore),
+                        visibilityOrCriteria,
+                        systemFilterCriteria
+                );
+
+        long newerCount = mongoTemplate.count(new Query(newerCriteria), Message.class);
+        int page = (int) (newerCount / pageSize);
+
+        Criteria totalCriteria = Criteria.where("conversationId").is(conversationId)
+                .and("deletedBy").ne(currentUserId)
+                .and("createdAt").gt(deletedBefore)
+                .andOperator(visibilityOrCriteria, systemFilterCriteria);
+
+        long totalElements = mongoTemplate.count(new Query(totalCriteria), Message.class);
+
+        log.info("[ScrollTo] messageId={} → newerCount={}, page={}/{}, pageSize={}",
+                messageId, newerCount, page, (int) Math.ceil((double) totalElements / pageSize), pageSize);
+
+        return MessageContextResponse.builder()
+                .page(page)
+                .size(pageSize)
+                .totalElements(totalElements)
+                .build();
     }
 
 }
