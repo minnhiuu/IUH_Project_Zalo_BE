@@ -4,7 +4,9 @@ import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.common.dto.PageResponse;
 import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.searchservice.dto.request.MessageSearchRequest;
+import com.bondhub.searchservice.dto.response.MessageSearchOverviewResponse;
 import com.bondhub.searchservice.dto.response.MessageSearchResponse;
+import com.bondhub.searchservice.enums.MessageSearchSection;
 import com.bondhub.searchservice.service.MessageSearchService;
 import jakarta.validation.Valid;
 import lombok.AccessLevel;
@@ -33,10 +35,22 @@ public class MessageSearchController {
     @GetMapping
     public ResponseEntity<ApiResponse<PageResponse<List<MessageSearchResponse>>>> searchMessages(
             @Valid @ModelAttribute MessageSearchRequest request,
+            @RequestParam(defaultValue = "all") MessageSearchSection section,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         Pageable pageable = PageRequest.of(page, size);
         return ResponseEntity.ok(ApiResponse.success(
-                messageSearchService.searchMessages(securityUtil.getCurrentUserId(), request, pageable)));
+                messageSearchService.searchMessages(securityUtil.getCurrentUserId(), request, section, pageable)));
+    }
+
+    @GetMapping("/overview")
+    public ResponseEntity<ApiResponse<MessageSearchOverviewResponse>> getMessageSearchOverview(
+            @Valid @ModelAttribute MessageSearchRequest request,
+            @RequestParam(defaultValue = "5") int sectionSize) {
+        return ResponseEntity.ok(ApiResponse.success(
+                messageSearchService.searchMessageOverview(
+                        securityUtil.getCurrentUserId(),
+                        request,
+                        sectionSize)));
     }
 }

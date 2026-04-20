@@ -10,6 +10,9 @@ import java.util.List;
 
 public final class SearchableTextBuilder {
 
+    private static final String LINK_PREFIX = "[Link]";
+    private static final String LINK_INVITE_TEXT = "Bấm vào đây để tham gia nhóm trên Bondhub";
+
     private SearchableTextBuilder() {}
 
     public static String build(Message message) {
@@ -21,6 +24,11 @@ public final class SearchableTextBuilder {
 
         if (message.getType() == MessageType.FILE) {
             addAttachmentNames(parts, message.getAttachments());
+            return parts.isEmpty() ? null : String.join(" ", parts);
+        }
+
+        if (message.getType() == MessageType.LINK) {
+            addLinkParts(parts, message.getLinkPreview());
             return parts.isEmpty() ? null : String.join(" ", parts);
         }
 
@@ -41,6 +49,20 @@ public final class SearchableTextBuilder {
         }
 
         return parts.isEmpty() ? null : String.join(" ", parts);
+    }
+
+    private static void addLinkParts(List<String> parts, LinkPreview linkPreview) {
+        parts.add(LINK_PREFIX);
+
+        if (linkPreview != null && linkPreview.getGroupName() != null && !linkPreview.getGroupName().isBlank()) {
+            parts.add(linkPreview.getGroupName().trim());
+        }
+
+        parts.add(LINK_INVITE_TEXT);
+
+        if (linkPreview != null && linkPreview.getUrl() != null && !linkPreview.getUrl().isBlank()) {
+            parts.add(linkPreview.getUrl().trim());
+        }
     }
 
     private static void addAttachmentNames(List<String> parts, List<AttachmentInfo> attachments) {

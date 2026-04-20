@@ -11,12 +11,12 @@ public record MessageSearchResponse(
         String senderId,
         String senderName,
         String senderAvatar,
-        String content,
+        String displayContent,
         Long size,
         String type,
         String status,
         boolean hasAttachment,
         boolean hasLink,
         Instant createdAt,
-        String highlights
+        String displayHighlights
 ) {}

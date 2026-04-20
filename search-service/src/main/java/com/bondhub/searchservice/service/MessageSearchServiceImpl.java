@@ -12,7 +12,9 @@ import com.bondhub.common.utils.S3Util;
 import com.bondhub.searchservice.client.ConversationMemberClient;
 import com.bondhub.searchservice.config.ElasticsearchProperties;
 import com.bondhub.searchservice.dto.request.MessageSearchRequest;
+import com.bondhub.searchservice.dto.response.MessageSearchOverviewResponse;
 import com.bondhub.searchservice.dto.response.MessageSearchResponse;
+import com.bondhub.searchservice.enums.MessageSearchSection;
 import com.bondhub.searchservice.model.elasticsearch.MessageIndex;
 import feign.FeignException;
 import lombok.AccessLevel;
@@ -21,6 +23,7 @@ import lombok.experimental.FieldDefaults;
 import lombok.experimental.NonFinal;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.elasticsearch.client.elc.NativeQuery;
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
@@ -35,19 +38,34 @@ import org.springframework.data.elasticsearch.core.query.highlight.HighlightFiel
 import org.springframework.data.elasticsearch.core.query.highlight.HighlightFieldParameters;
 import org.springframework.data.elasticsearch.core.query.highlight.HighlightParameters;
 import org.springframework.stereotype.Service;
+import org.springframework.web.util.HtmlUtils;
 
+import java.text.Normalizer;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public class MessageSearchServiceImpl implements MessageSearchService {
+
+    private static final String FILE_MESSAGE_TYPE = "FILE";
+    private static final String LINK_MESSAGE_TYPE = "LINK";
+    private static final String LINK_PREFIX = "[Link]";
+    private static final String LINK_INVITE_TEXT = "Bấm vào đây để tham gia nhóm trên Bondhub";
+    private static final List<String> LINK_INVITE_TEXT_VARIANTS = List.of(
+            LINK_INVITE_TEXT,
+            "Bấm vào đây để tham gia nhóm trên Zalo zalo.me"
+    );
+    private static final Pattern URL_PATTERN = Pattern.compile("https?://\\S+");
 
     ElasticsearchOperations esOperations;
     ElasticsearchProperties esProperties;
@@ -65,10 +83,16 @@ public class MessageSearchServiceImpl implements MessageSearchService {
     public PageResponse<List<MessageSearchResponse>> searchMessages(
             String userId,
             MessageSearchRequest request,
+            MessageSearchSection section,
             Pageable pageable) {
         ConversationMemberLookupResponse membership = getConversationMembership(request.conversationId(), userId);
 
-        NativeQuery query = buildQuery(userId, request, membership.joinedAt(), pageable);
+        NativeQuery query = buildQuery(
+                userId,
+                request,
+                membership.joinedAt(),
+                section,
+                pageable);
 
         SearchHits<MessageIndex> hits = esOperations.search(
                 query,
@@ -78,6 +102,31 @@ public class MessageSearchServiceImpl implements MessageSearchService {
 
         SearchPage<MessageIndex> page = SearchHitSupport.searchPageFor(hits, pageable);
         return PageResponse.fromPage(page, hit -> this.toResponse(hit, request.keyword()));
+    }
+
+    @Override
+    public MessageSearchOverviewResponse searchMessageOverview(
+            String userId,
+            MessageSearchRequest request,
+            int sectionSize) {
+        ConversationMemberLookupResponse membership = getConversationMembership(request.conversationId(), userId);
+        int normalizedSectionSize = Math.max(sectionSize, 1);
+        Pageable sectionPageable = PageRequest.of(0, normalizedSectionSize);
+
+        PageResponse<List<MessageSearchResponse>> messages = executeSearch(
+                userId,
+                request,
+                membership.joinedAt(),
+                MessageSearchSection.MESSAGES,
+                sectionPageable);
+        PageResponse<List<MessageSearchResponse>> files = executeSearch(
+                userId,
+                request,
+                membership.joinedAt(),
+                MessageSearchSection.FILES,
+                sectionPageable);
+
+        return new MessageSearchOverviewResponse(messages, files);
     }
 
     private ConversationMemberLookupResponse getConversationMembership(String conversationId, String userId) {
@@ -102,6 +151,7 @@ public class MessageSearchServiceImpl implements MessageSearchService {
             String userId,
             MessageSearchRequest request,
             Instant joinedAt,
+            MessageSearchSection section,
             Pageable pageable) {
 
         Instant lowerBound = resolveLowerBound(request, joinedAt);
@@ -129,6 +179,18 @@ public class MessageSearchServiceImpl implements MessageSearchService {
                 b.filter(f -> f.term(t -> t
                         .field("senderId")
                         .value(request.senderId())
+                ));
+            }
+
+            if (section == MessageSearchSection.FILES) {
+                b.filter(f -> f.term(t -> t
+                        .field("type")
+                        .value(FILE_MESSAGE_TYPE)
+                ));
+            } else if (section == MessageSearchSection.MESSAGES) {
+                b.mustNot(mn -> mn.term(t -> t
+                        .field("type")
+                        .value(FILE_MESSAGE_TYPE)
                 ));
             }
 
@@ -168,6 +230,24 @@ public class MessageSearchServiceImpl implements MessageSearchService {
                 .withSort(s -> s.field(f -> f.field("createdAt").order(SortOrder.Desc)))
                 .withHighlightQuery(buildHighlightQuery())
                 .build();
+    }
+
+    private PageResponse<List<MessageSearchResponse>> executeSearch(
+            String userId,
+            MessageSearchRequest request,
+            Instant joinedAt,
+            MessageSearchSection section,
+            Pageable pageable) {
+        NativeQuery query = buildQuery(userId, request, joinedAt, section, pageable);
+
+        SearchHits<MessageIndex> hits = esOperations.search(
+                query,
+                MessageIndex.class,
+                IndexCoordinates.of(esProperties.getMessageAlias())
+        );
+
+        SearchPage<MessageIndex> page = SearchHitSupport.searchPageFor(hits, pageable);
+        return PageResponse.fromPage(page, hit -> this.toResponse(hit, request.keyword()));
     }
 
     private HighlightQuery buildHighlightQuery() {
@@ -224,21 +304,26 @@ public class MessageSearchServiceImpl implements MessageSearchService {
 
     private MessageSearchResponse toResponse(SearchHit<MessageIndex> hit, String keyword) {
         MessageIndex message = hit.getContent();
+        String rawHighlights = resolveHighlight(hit, message, keyword);
+        String displayContent = resolveDisplayContent(message);
+        String displayHighlights = resolveDisplayHighlights(message, displayContent, rawHighlights, keyword);
 
         return MessageSearchResponse.builder()
                 .messageId(message.getId())
                 .conversationId(message.getConversationId())
                 .senderId(message.getSenderId())
                 .senderName(message.getSenderName())
-                .senderAvatar(message.getSenderAvatar() != null ? S3Util.getS3BaseUrl(bucketName, region) + message.getSenderAvatar() : null)
-                .content(message.getContent())
+                .senderAvatar(message.getSenderAvatar() != null
+                        ? S3Util.getS3BaseUrl(bucketName, region) + message.getSenderAvatar()
+                        : null)
+                .displayContent(displayContent)
                 .size(message.getSize())
                 .type(message.getType())
                 .status(message.getStatus())
                 .hasAttachment(message.isHasAttachment())
                 .hasLink(message.isHasLink())
                 .createdAt(message.getCreatedAt())
-                .highlights(resolveHighlight(hit, message, keyword))
+                .displayHighlights(displayHighlights)
                 .build();
     }
 
@@ -253,35 +338,35 @@ public class MessageSearchServiceImpl implements MessageSearchService {
                     ? message.getSearchableText().trim()
                     : hasText(message.getContent()) ? message.getContent().trim() : null;
 
-            if (fallback == null) return null;
+            if (fallback == null) {
+                return null;
+            }
+
             fragment = fallback.length() > 150 ? fallback.substring(0, 150) + "..." : fallback;
         }
 
-        // Precise highlight: If the match is a prefix, only highlight the prefix part
         if (hasText(keyword) && fragment.contains("<em>") && fragment.contains("</em>")) {
             try {
                 String normalizedKeyword = normalizeForComparison(keyword);
                 int startTag = fragment.indexOf("<em>");
                 int endTag = fragment.indexOf("</em>");
-                String termWithTags = fragment.substring(startTag, endTag + 5);
                 String innerTerm = fragment.substring(startTag + 4, endTag);
                 String normalizedInner = normalizeForComparison(innerTerm);
 
                 int matchIndex = normalizedInner.indexOf(normalizedKeyword);
                 if (matchIndex != -1) {
-                    // Re-construct: prefix before tags + <em> + matched part + </em> + rest of word + rest of fragment
                     int matchEnd = matchIndex + normalizedKeyword.length();
                     String actualMatch = innerTerm.substring(matchIndex, matchEnd);
                     String restOfInner = innerTerm.substring(matchEnd);
-                    
-                    return fragment.substring(0, startTag) 
+
+                    return fragment.substring(0, startTag)
                             + innerTerm.substring(0, matchIndex)
-                            + "<em>" + actualMatch + "</em>" 
-                            + restOfInner 
+                            + "<em>" + actualMatch + "</em>"
+                            + restOfInner
                             + fragment.substring(endTag + 5);
                 }
-            } catch (Exception e) {
-                log.warn("Failed to refine highlight for keyword: {}", keyword, e);
+            } catch (Exception exception) {
+                log.warn("Failed to refine highlight for keyword: {}", keyword, exception);
             }
         }
 
@@ -289,9 +374,202 @@ public class MessageSearchServiceImpl implements MessageSearchService {
     }
 
     private String normalizeForComparison(String text) {
-        if (text == null) return "";
-        return java.text.Normalizer.normalize(text.toLowerCase(), java.text.Normalizer.Form.NFD)
+        if (text == null) {
+            return "";
+        }
+
+        return Normalizer.normalize(text.toLowerCase(Locale.ROOT), Normalizer.Form.NFD)
                 .replaceAll("\\p{M}", "");
+    }
+
+    private String resolveDisplayContent(MessageIndex message) {
+        if (FILE_MESSAGE_TYPE.equalsIgnoreCase(message.getType())) {
+            if (hasText(message.getOriginalFileName())) {
+                return message.getOriginalFileName().trim();
+            }
+            return hasText(message.getContent()) ? message.getContent().trim() : null;
+        }
+
+        if (LINK_MESSAGE_TYPE.equalsIgnoreCase(message.getType()) || message.isHasLink()) {
+            String groupName = resolveLinkGroupName(message);
+            String linkUrl = resolveLinkUrl(message);
+
+            if (!hasText(groupName) && !hasText(linkUrl)) {
+                if (hasText(message.getSearchableText())) {
+                    return message.getSearchableText().trim();
+                }
+                return hasText(message.getContent()) ? message.getContent().trim() : null;
+            }
+
+            List<String> parts = new ArrayList<>();
+            parts.add(LINK_PREFIX);
+            if (hasText(groupName)) {
+                parts.add(groupName);
+            }
+            parts.add(LINK_INVITE_TEXT);
+            if (hasText(linkUrl)) {
+                parts.add(linkUrl);
+            }
+
+            return String.join(" ", parts);
+        }
+
+        return hasText(message.getContent()) ? message.getContent().trim() : null;
+    }
+
+    private String resolveLinkGroupName(MessageIndex message) {
+        if (hasText(message.getLinkGroupName())) {
+            return message.getLinkGroupName().trim();
+        }
+
+        if (!hasText(message.getSearchableText())) {
+            return null;
+        }
+
+        String searchableText = message.getSearchableText().trim();
+        int inviteTextIndex = indexOfAnyIgnoreCase(searchableText, LINK_INVITE_TEXT_VARIANTS);
+        if (inviteTextIndex < 0) {
+            return null;
+        }
+
+        String prefixSegment = searchableText.substring(0, inviteTextIndex).trim();
+        if (prefixSegment.regionMatches(true, 0, LINK_PREFIX, 0, LINK_PREFIX.length())) {
+            prefixSegment = prefixSegment.substring(LINK_PREFIX.length()).trim();
+        }
+
+        return hasText(prefixSegment) ? prefixSegment : null;
+    }
+
+    private String resolveLinkUrl(MessageIndex message) {
+        if (hasText(message.getLinkUrl())) {
+            return message.getLinkUrl().trim();
+        }
+
+        String searchableUrl = extractFirstUrl(message.getSearchableText());
+        if (hasText(searchableUrl)) {
+            return searchableUrl;
+        }
+
+        return extractFirstUrl(message.getContent());
+    }
+
+    private String extractFirstUrl(String text) {
+        if (!hasText(text)) {
+            return null;
+        }
+
+        Matcher matcher = URL_PATTERN.matcher(text.trim());
+        return matcher.find() ? matcher.group() : null;
+    }
+
+    private int indexOfIgnoreCase(String source, String target) {
+        return source.toLowerCase(Locale.ROOT).indexOf(target.toLowerCase(Locale.ROOT));
+    }
+
+    private int indexOfAnyIgnoreCase(String source, List<String> targets) {
+        for (String target : targets) {
+            int index = indexOfIgnoreCase(source, target);
+            if (index >= 0) {
+                return index;
+            }
+        }
+
+        return -1;
+    }
+
+    private String resolveDisplayHighlights(
+            MessageIndex message,
+            String displayContent,
+            String rawHighlights,
+            String keyword) {
+        if (LINK_MESSAGE_TYPE.equalsIgnoreCase(message.getType()) || message.isHasLink()) {
+            return highlightDisplayContent(displayContent, keyword);
+        }
+
+        if (FILE_MESSAGE_TYPE.equalsIgnoreCase(message.getType())) {
+            return highlightDisplayContent(displayContent, keyword);
+        }
+
+        if (hasText(rawHighlights)) {
+            return rawHighlights;
+        }
+
+        return highlightDisplayContent(displayContent, keyword);
+    }
+
+    private String highlightDisplayContent(String displayContent, String keyword) {
+        if (!hasText(displayContent)) {
+            return null;
+        }
+
+        if (!hasText(keyword)) {
+            return displayContent;
+        }
+
+        String normalizedKeyword = normalizeForComparison(keyword).trim();
+        if (normalizedKeyword.isEmpty()) {
+            return displayContent;
+        }
+
+        List<int[]> ranges = findHighlightRanges(displayContent, normalizedKeyword);
+        if (ranges.isEmpty()) {
+            return displayContent;
+        }
+
+        StringBuilder builder = new StringBuilder();
+        int cursor = 0;
+        for (int[] range : ranges) {
+            int start = range[0];
+            int end = range[1];
+
+            if (cursor < start) {
+                builder.append(HtmlUtils.htmlEscape(displayContent.substring(cursor, start)));
+            }
+
+            builder.append("<em>")
+                    .append(HtmlUtils.htmlEscape(displayContent.substring(start, end)))
+                    .append("</em>");
+            cursor = end;
+        }
+
+        if (cursor < displayContent.length()) {
+            builder.append(HtmlUtils.htmlEscape(displayContent.substring(cursor)));
+        }
+
+        return builder.toString();
+    }
+
+    private List<int[]> findHighlightRanges(String original, String normalizedKeyword) {
+        String normalizedOriginal = normalizeForComparison(original);
+        List<Integer> normalizedToOriginal = buildNormalizedToOriginalIndex(original);
+        List<int[]> ranges = new ArrayList<>();
+        int searchStart = 0;
+
+        while (searchStart < normalizedOriginal.length()) {
+            int matchIndex = normalizedOriginal.indexOf(normalizedKeyword, searchStart);
+            if (matchIndex < 0) {
+                break;
+            }
+
+            int originalStart = normalizedToOriginal.get(matchIndex);
+            int originalEnd = normalizedToOriginal.get(matchIndex + normalizedKeyword.length() - 1) + 1;
+            ranges.add(new int[]{originalStart, originalEnd});
+            searchStart = matchIndex + normalizedKeyword.length();
+        }
+
+        return ranges;
+    }
+
+    private List<Integer> buildNormalizedToOriginalIndex(String original) {
+        List<Integer> normalizedToOriginal = new ArrayList<>();
+        for (int index = 0; index < original.length(); index++) {
+            String normalizedChar = normalizeForComparison(String.valueOf(original.charAt(index)));
+            for (int charIndex = 0; charIndex < normalizedChar.length(); charIndex++) {
+                normalizedToOriginal.add(index);
+            }
+        }
+
+        return normalizedToOriginal;
     }
 
     private boolean hasText(String value) {

@@ -120,6 +120,8 @@ public class MessageIndexRequestedListener {
                 .senderName(event.senderName())
                 .senderAvatar(event.senderAvatar())
                 .content(event.content())
+                .linkGroupName(event.linkGroupName())
+                .linkUrl(event.linkUrl())
                 .originalFileName(event.originalFileName())
                 .size(event.size())
                 .searchableText(event.searchableText())

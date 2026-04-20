@@ -40,6 +40,12 @@ public class MessageIndex {
     String content;
 
     @Field(type = FieldType.Keyword, index = false)
+    String linkGroupName;
+
+    @Field(type = FieldType.Keyword, index = false)
+    String linkUrl;
+
+    @Field(type = FieldType.Keyword, index = false)
     String originalFileName;
 
     @Field(type = FieldType.Long, index = false)
