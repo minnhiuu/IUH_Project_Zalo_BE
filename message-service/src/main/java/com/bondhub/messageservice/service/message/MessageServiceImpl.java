@@ -44,6 +44,7 @@ import org.springframework.data.mongodb.core.FindAndModifyOptions;
 
 import com.bondhub.messageservice.model.GroupSettings;
 import com.bondhub.messageservice.model.LinkPreview;
+import com.bondhub.messageservice.model.enums.MemberRole;
 import com.bondhub.messageservice.service.conversation.ConversationHelper;
 
 import java.time.LocalDateTime;
@@ -301,7 +302,7 @@ public class MessageServiceImpl implements MessageService {
                 .set("replyTo.type", MessageType.CHAT);
         mongoTemplate.updateMulti(replyQuery, replyUpdate, Message.class);
 
-        updateLastMessageIfRevoked(message);
+        updateLastMessageStatus(message, MessageStatus.REVOKED);
         broadcastStatusChange(message.getConversationId(), messageId, MessageStatus.REVOKED);
     }
 
@@ -311,6 +312,63 @@ public class MessageServiceImpl implements MessageService {
         Query query = new Query(Criteria.where("id").is(messageId));
         Update update = new Update().addToSet("deletedBy", currentUserId);
         mongoTemplate.updateFirst(query, update, Message.class);
+    }
+
+    @Override
+    public void deleteGroupMemberMessage(String conversationId, String messageId) {
+        String currentUserId = securityUtil.getCurrentUserId();
+
+        Conversation room = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
+        if (!room.isGroup()) throw new AppException(ErrorCode.CHAT_NOT_A_GROUP);
+
+        ConversationMember actor = room.getMembers().stream()
+                .filter(m -> m.getUserId().equals(currentUserId) && isActiveMember(m))
+                .findFirst()
+                .orElseThrow(() -> new AppException(ErrorCode.CHAT_MEMBER_NOT_FOUND));
+
+        MemberRole actorRole = actor.getRole() != null ? actor.getRole() : MemberRole.MEMBER;
+        if (actorRole == MemberRole.MEMBER) {
+            throw new AppException(ErrorCode.CHAT_NOT_GROUP_MANAGER);
+        }
+
+        Message message = messageRepository.findById(messageId)
+                .orElseThrow(() -> new AppException(ErrorCode.MESSAGE_NOT_FOUND));
+
+        if (!message.getConversationId().equals(conversationId)) {
+            throw new AppException(ErrorCode.MESSAGE_NOT_FOUND);
+        }
+
+        if (message.getCreatedAt().isBefore(LocalDateTime.now().minusHours(24))) {
+            throw new AppException(ErrorCode.MESSAGE_REVOKE_TIME_EXCEEDED);
+        }
+
+        if (actorRole == MemberRole.ADMIN) {
+            room.getMembers().stream()
+                    .filter(m -> m.getUserId().equals(message.getSenderId()))
+                    .findFirst()
+                    .ifPresent(sender -> {
+                        MemberRole senderRole = sender.getRole() != null ? sender.getRole() : MemberRole.MEMBER;
+                        if (senderRole == MemberRole.OWNER) {
+                            throw new AppException(ErrorCode.CHAT_ADMIN_CANNOT_DELETE_OWNER_MESSAGE);
+                        }
+                    });
+        }
+
+        message.setStatus(MessageStatus.DELETED_BY_ADMIN);
+        message.setDeletedByAdminId(currentUserId);
+        message.setContent(null);
+        message.setReplyTo(null);
+        messageRepository.save(message);
+
+        Query replyQuery = new Query(Criteria.where("replyTo.messageId").is(messageId));
+        Update replyUpdate = new Update()
+                .set("replyTo.content", null)
+                .set("replyTo.type", MessageType.CHAT);
+        mongoTemplate.updateMulti(replyQuery, replyUpdate, Message.class);
+
+        updateLastMessageStatus(message, MessageStatus.DELETED_BY_ADMIN);
+        broadcastStatusChange(conversationId, messageId, MessageStatus.DELETED_BY_ADMIN, currentUserId);
     }
 
     @Override
@@ -442,6 +500,32 @@ public class MessageServiceImpl implements MessageService {
      * Kiểm tra user có trong members của conversation không.
      * Nếu không → throw UNAUTHORIZED (403).
      */
+    @Override
+    public List<MessageResponse> getMessagesSince(String conversationId, String sinceId, String userId) {
+        // 1. Kiểm tra quyền membership
+        Conversation room = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
+        
+        boolean isMember = room.getMembers().stream()
+                .anyMatch(m -> m.getUserId().equals(userId) && isActiveMember(m));
+        
+        if (!isMember) {
+            throw new AppException(ErrorCode.CHAT_NOT_A_MEMBER);
+        }
+
+        // 2. Lấy 100 tin nhắn gần nhất tính từ sinceId
+        List<Message> messages = messageRepository.findTop100ByConversationIdAndIdGreaterThanAndStatusNot(
+                conversationId, sinceId, MessageStatus.REVOKED);
+
+        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+        List<MessageResponse> dtos = messages.stream()
+                .map(msg -> messageMapper.mapToMessageResponse(msg, baseUrl))
+                .collect(Collectors.toList());
+
+        enrichMessages(dtos);
+        return dtos;
+    }
+
     private void assertConversationMember(Conversation room, String userId) {
         boolean isMember = room.getMembers().stream()
                 .anyMatch(m -> m.getUserId().equals(userId));
@@ -525,16 +609,20 @@ public class MessageServiceImpl implements MessageService {
         }
     }
 
-    private void updateLastMessageIfRevoked(Message revokedMsg) {
-        Query query = new Query(Criteria.where("id").is(revokedMsg.getConversationId())
-                .and("lastMessage.messageId").is(revokedMsg.getId()));
+    private void updateLastMessageStatus(Message msg, MessageStatus newStatus) {
+        Query query = new Query(Criteria.where("id").is(msg.getConversationId())
+                .and("lastMessage.messageId").is(msg.getId()));
         Update update = new Update()
                 .set("lastMessage.content", null)
-                .set("lastMessage.status", MessageStatus.REVOKED);
+                .set("lastMessage.status", newStatus);
         mongoTemplate.updateFirst(query, update, Conversation.class);
     }
 
     private void broadcastStatusChange(String conversationId, String messageId, MessageStatus newStatus) {
+        broadcastStatusChange(conversationId, messageId, newStatus, null);
+    }
+
+    private void broadcastStatusChange(String conversationId, String messageId, MessageStatus newStatus, String deletedByAdminId) {
         Conversation conversation = conversationRepository.findById(conversationId).orElse(null);
         if (conversation == null) return;
 
@@ -546,6 +634,9 @@ public class MessageServiceImpl implements MessageService {
             payload.put("conversationId", conversationId);
             payload.put("messageId", messageId);
             payload.put("newStatus", newStatus);
+            if (deletedByAdminId != null) {
+                payload.put("deletedByAdminId", deletedByAdminId);
+            }
 
             kafkaTemplate.send(socketEventsTopic,
                     new SocketEvent(SocketEventType.MESSAGE, member.getUserId(),

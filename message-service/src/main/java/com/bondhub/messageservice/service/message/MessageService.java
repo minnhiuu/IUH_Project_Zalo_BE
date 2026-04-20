@@ -42,9 +42,21 @@ public interface MessageService {
     void toggleReaction(String messageId, String emoji);
 
     /**
+     * Lấy danh sách tin nhắn từ một mốc thời gian (sinceId).
+     * Phục vụ chức năng tóm tắt AI.
+     */
+    List<MessageResponse> getMessagesSince(String conversationId, String sinceId, String userId);
+
+    /**
      * Xóa toàn bộ reaction của current user khỏi tin nhắn.
      */
     void removeAllMyReactions(String messageId);
+
+    /**
+     * Xóa tin nhắn của thành viên trong nhóm (Admin/Owner).
+     * Admin không được xóa tin nhắn của Owner.
+     */
+    void deleteGroupMemberMessage(String conversationId, String messageId);
 
     /**
      * Lấy danh sách thành viên đã xem một tin nhắn trong nhóm.

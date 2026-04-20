@@ -328,7 +328,7 @@ public class GroupConversationServiceImpl implements GroupConversationService {
     }
 
     @Override
-    public ConversationResponse removeMemberFromGroup(String conversationId, String targetUserId) {
+    public ConversationResponse removeMemberFromGroup(String conversationId, String targetUserId, boolean blockFromGroup) {
         String currentUserId = helper.getSecurityUtil().getCurrentUserId();
         Conversation conversation = helper.findGroupConversation(conversationId);
         helper.assertMember(conversation, currentUserId);
@@ -350,6 +350,11 @@ public class GroupConversationServiceImpl implements GroupConversationService {
 
         if (conversation.getDeletedBefore() == null) conversation.setDeletedBefore(new HashMap<>());
         conversation.getDeletedBefore().put(targetUserId, LocalDateTime.now());
+
+        if (blockFromGroup) {
+            if (conversation.getBlockedUserIds() == null) conversation.setBlockedUserIds(new HashSet<>());
+            conversation.getBlockedUserIds().add(targetUserId);
+        }
 
         Conversation saved = conversationRepository.save(conversation);
 
