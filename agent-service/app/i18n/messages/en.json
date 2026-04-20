@@ -1,0 +1,21 @@
+{
+  "response.success": "Successful",
+  "error.sys.uncategorized": "Uncategorized system error",
+  "error.validation.error": "Validation failed",
+  "error.request.invalid": "Invalid request",
+  "error.chat.query_or_content.required": "query or content is required",
+  "error.ingest.chunks.required": "chunks must not be empty",
+  "error.ingest.excel.strategy.disabled": "excel_row strategy is disabled",
+  "error.ingest.excel.params.required": "s3Key and fileName are required for excel_row strategy",
+  "error.ingest.excel.filetype.invalid": "excel_row strategy only supports .xlsx/.xls",
+  "ingest.started": "Ingest started",
+  "ingest.already.running": "Ingest is already running for this document",
+  "ingest.progress.chunk_uploading": "Uploading chunk {vectorId}",
+  "ingest.progress.chunk_uploaded": "Uploaded chunk {vectorId}",
+  "ingest.progress.uploaded_ratio": "Uploaded {uploaded} of {total} chunks",
+  "ingest.progress.completed": "Upload completed",
+  "ingest.progress.failed": "Upload failed: {reason}",
+  "summary.no_history": "I could not find recent conversation history to summarize.",
+  "summary.no_content": "No content found to summarize.",
+  "summary.insufficient_content": "The content is insufficient to summarize."
+}
