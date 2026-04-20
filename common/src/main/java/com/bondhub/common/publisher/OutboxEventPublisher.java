@@ -2,6 +2,10 @@ package com.bondhub.common.publisher;
 
 import com.bondhub.common.config.kafka.KafkaTopicProperties;
 import com.bondhub.common.event.account.AccountRegisteredEvent;
+import com.bondhub.common.event.socialfeed.PostCommentCountProjectionRequestedEvent;
+import com.bondhub.common.event.socialfeed.PostEvent;
+import com.bondhub.common.event.socialfeed.ReactionToggleCommandEvent;
+import com.bondhub.common.event.socialfeed.UserInteractionEvent;
 import com.bondhub.common.event.user.UserIndexDeletedEvent;
 import com.bondhub.common.event.user.UserIndexRequestedEvent;
 import com.bondhub.common.event.user.UserProfileUpdatedEvent;
@@ -11,6 +15,8 @@ import com.bondhub.common.repository.OutboxEventRepository;
 import com.bondhub.common.event.friend.FriendshipChangedEvent;
 import com.bondhub.common.event.group.GroupMemberChangedEvent;
 import com.bondhub.common.event.user.UserCreatedEvent;
+import com.bondhub.common.event.user.UserUpdatedEvent;
+import com.bondhub.common.event.user.UserDeletedEvent;
 import com.bondhub.common.event.user.UserPrivacyChangedEvent;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -138,6 +144,14 @@ public class OutboxEventPublisher {
             case USER_PRIVACY_CHANGED -> kafkaTopicProperties.getUserEvents().getPrivacyChanged();
             case FRIENDSHIP_CHANGED -> kafkaTopicProperties.getFriendEvents().getFriendshipChanged();
             case GROUP_MEMBER_CHANGED -> kafkaTopicProperties.getGroupEvents().getMemberChanged();
+            case POST_CREATED -> kafkaTopicProperties.getSocialFeedEvents().getPostCreated();
+            case POST_UPDATED -> kafkaTopicProperties.getSocialFeedEvents().getPostUpdated();
+            case POST_DELETED -> kafkaTopicProperties.getSocialFeedEvents().getPostDeleted();
+            case REACTION_TOGGLE_COMMAND_REQUESTED -> kafkaTopicProperties.getSocialFeedEvents().getReactionToggleCommandRequested();
+            case POST_COMMENT_COUNT_PROJECTION_REQUESTED -> kafkaTopicProperties.getSocialFeedEvents().getPostCommentCountProjectionRequested();
+            case USER_INTERACTION_RECORDED -> kafkaTopicProperties.getInteractionEvents().getUserInteraction();
+            case POST_VIEW_RECORDED -> kafkaTopicProperties.getSocialFeedEvents().getPostViewRecorded();
+            case POST_DISLIKE_RECORDED -> kafkaTopicProperties.getSocialFeedEvents().getPostDislikeRecorded();
         };
     }
 
@@ -145,13 +159,18 @@ public class OutboxEventPublisher {
         return switch (eventType) {
             case ACCOUNT_REGISTERED, ACCOUNT_UPDATED, ACCOUNT_DELETED, 
                  ACCOUNT_VERIFIED, ACCOUNT_ENABLED, ACCOUNT_DISABLED -> AccountRegisteredEvent.class;
-            case USER_CREATED, USER_DELETED -> UserCreatedEvent.class;
+            case USER_CREATED -> UserCreatedEvent.class;
             case USER_UPDATED -> UserProfileUpdatedEvent.class;
+            case USER_DELETED -> UserDeletedEvent.class;
             case USER_INDEX_REQUESTED ->  UserIndexRequestedEvent.class;
             case USER_INDEX_DELETED -> UserIndexDeletedEvent.class;
             case USER_PRIVACY_CHANGED -> UserPrivacyChangedEvent.class;
             case FRIENDSHIP_CHANGED -> FriendshipChangedEvent.class;
             case GROUP_MEMBER_CHANGED -> GroupMemberChangedEvent.class;
+            case POST_CREATED, POST_UPDATED, POST_DELETED -> PostEvent.class;
+            case REACTION_TOGGLE_COMMAND_REQUESTED -> ReactionToggleCommandEvent.class;
+            case POST_COMMENT_COUNT_PROJECTION_REQUESTED -> PostCommentCountProjectionRequestedEvent.class;
+            case USER_INTERACTION_RECORDED, POST_VIEW_RECORDED, POST_DISLIKE_RECORDED -> UserInteractionEvent.class;
         };
     }
 }

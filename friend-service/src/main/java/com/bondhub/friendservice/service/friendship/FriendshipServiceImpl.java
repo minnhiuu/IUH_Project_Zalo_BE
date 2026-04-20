@@ -531,4 +531,13 @@ public class FriendshipServiceImpl implements FriendshipService {
                                 .avatar(null)
                                 .build()));
     }
+
+    @Override
+    public List<String> getFriendIds(String userId, int size) {
+        Pageable pageable = org.springframework.data.domain.PageRequest.of(0, size);
+        Page<FriendShip> page = friendShipRepository.findAllFriendsByUserId(userId, pageable);
+        return page.getContent().stream()
+                .map(fs -> fs.getRequested().equals(userId) ? fs.getReceived() : fs.getRequested())
+                .toList();
+    }
 }

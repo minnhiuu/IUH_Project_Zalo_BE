@@ -73,6 +73,19 @@ public enum ErrorCode {
         NOT_AUTHORIZED_TO_CANCEL(HttpStatus.FORBIDDEN, 3008, "error.friend.not.authorized.to.cancel"),
         FRIEND_REQUEST_NOT_PENDING(HttpStatus.BAD_REQUEST, 3009, "error.friend.request.not.pending"),
 
+        // Social feed errors (4xxx)
+        POST_NOT_FOUND(HttpStatus.NOT_FOUND, 4001, "error.post.not.found"),
+        COMMENT_NOT_FOUND(HttpStatus.NOT_FOUND, 4002, "error.comment.not.found"),
+        REACTION_NOT_FOUND(HttpStatus.NOT_FOUND, 4003, "error.reaction.not.found"),
+        POST_INVALID_VISIBILITY(HttpStatus.BAD_REQUEST, 4004, "error.post.invalid.visibility"),
+
+        // Report & Moderation errors (5xxx)
+        REPORT_NOT_FOUND(HttpStatus.NOT_FOUND, 5001, "error.report.not.found"),
+        REPORT_ALREADY_PENDING(HttpStatus.CONFLICT, 5002, "error.report.already.pending"),
+        REPORT_SELF_CONTENT(HttpStatus.BAD_REQUEST, 5003, "error.report.self.content"),
+        REPORT_TARGET_NOT_FOUND(HttpStatus.NOT_FOUND, 5004, "error.report.target.not.found"),
+        REPORT_ALREADY_PROCESSED(HttpStatus.CONFLICT, 5005, "error.report.already.processed"),
+
         // Contact errors (34xx)
         CONTACT_IMPORT_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, 3401, "error.contact.import.failed"),
         CONTACT_NO_VALID_PHONES(HttpStatus.BAD_REQUEST, 3402, "error.contact.no.valid.phones"),
