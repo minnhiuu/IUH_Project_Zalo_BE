@@ -5,6 +5,7 @@ import com.bondhub.common.dto.PageResponse;
 import com.bondhub.common.dto.client.messageservice.MessageSendRequest;
 import com.bondhub.messageservice.dto.request.ReactionRequest;
 import com.bondhub.messageservice.dto.response.MessageResponse;
+import com.bondhub.messageservice.dto.response.MessageSeenResponse;
 import com.bondhub.messageservice.service.message.MessageService;
 import jakarta.validation.Valid;
 import io.swagger.v3.oas.annotations.Operation;
@@ -81,5 +82,14 @@ public class MessageController {
     public ResponseEntity<ApiResponse<Void>> removeAllMyReactions(@PathVariable String messageId) {
         messageService.removeAllMyReactions(messageId);
         return ResponseEntity.ok(ApiResponse.success(null));
+    }
+
+    @GetMapping("/conversations/{conversationId}/messages/{messageId}/seen-members")
+    @Operation(summary = "Get members who have seen a message in a group conversation")
+    public ResponseEntity<ApiResponse<List<MessageSeenResponse>>> getSeenMembers(
+            @PathVariable String conversationId,
+            @PathVariable String messageId) {
+        return ResponseEntity.ok(ApiResponse.success(
+                messageService.getSeenMembers(conversationId, messageId)));
     }
 }

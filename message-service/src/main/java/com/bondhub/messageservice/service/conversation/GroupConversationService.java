@@ -59,4 +59,6 @@ public interface GroupConversationService {
 
     PageResponse<List<SearchMemberResponse>> getBlockCandidates(String conversationId, String query, int page, int size);
 
+    PageResponse<List<ConversationResponse>> getMyGroupConversations(String query, String sort, String filter, int page, int size);
+
 }
