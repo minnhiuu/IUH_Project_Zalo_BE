@@ -161,6 +161,7 @@ public enum ErrorCode {
         CALL_ALREADY_IN_PROGRESS(HttpStatus.CONFLICT, 5004, "error.call.already.in.progress"),
         CALL_SELF_NOT_ALLOWED(HttpStatus.BAD_REQUEST, 5005, "error.call.self.not.allowed"),
         CALL_TOKEN_GENERATION_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, 5006, "error.call.token.generation.failed"),
+        CHAT_NOT_A_MEMBER(HttpStatus.FORBIDDEN, 4036, "error.chat.not.a.member"),
 
         ;
 
