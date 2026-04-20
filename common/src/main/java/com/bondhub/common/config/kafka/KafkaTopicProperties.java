@@ -56,7 +56,8 @@ public class KafkaTopicProperties {
     @Getter
     @Setter
     public static class MessageEvents {
-
+        private String indexRequested = "message.search.index-requested";
+        private String indexDeleted = "message.search.index-deleted";
     }
 
     @Getter

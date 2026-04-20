@@ -4,7 +4,9 @@ import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.common.dto.PageResponse;
 import com.bondhub.common.dto.client.messageservice.MessageSendRequest;
 import com.bondhub.messageservice.dto.request.ReactionRequest;
+import com.bondhub.messageservice.dto.response.MessageContextResponse;
 import com.bondhub.messageservice.dto.response.MessageResponse;
+import com.bondhub.messageservice.dto.response.MessageSeenResponse;
 import com.bondhub.messageservice.service.message.MessageService;
 import jakarta.validation.Valid;
 import io.swagger.v3.oas.annotations.Operation;
@@ -67,6 +69,15 @@ public class MessageController {
         return ResponseEntity.ok(ApiResponse.success(null));
     }
 
+    @DeleteMapping("/conversations/{conversationId}/messages/{messageId}/admin")
+    @Operation(summary = "Delete a member's message in group (Admin/Owner only; Admin cannot delete Owner's message)")
+    public ResponseEntity<ApiResponse<Void>> deleteGroupMemberMessage(
+            @PathVariable String conversationId,
+            @PathVariable String messageId) {
+        messageService.deleteGroupMemberMessage(conversationId, messageId);
+        return ResponseEntity.ok(ApiResponse.success(null));
+    }
+
     @PostMapping("/messages/{messageId}/reactions")
     @Operation(summary = "Toggle reaction on a message (add if not present, remove if already reacted)")
     public ResponseEntity<ApiResponse<Void>> toggleReaction(
@@ -81,5 +92,24 @@ public class MessageController {
     public ResponseEntity<ApiResponse<Void>> removeAllMyReactions(@PathVariable String messageId) {
         messageService.removeAllMyReactions(messageId);
         return ResponseEntity.ok(ApiResponse.success(null));
+    }
+
+    @GetMapping("/conversations/{conversationId}/messages/{messageId}/seen-members")
+    @Operation(summary = "Get members who have seen a message in a group conversation")
+    public ResponseEntity<ApiResponse<List<MessageSeenResponse>>> getSeenMembers(
+            @PathVariable String conversationId,
+            @PathVariable String messageId) {
+        return ResponseEntity.ok(ApiResponse.success(
+                messageService.getSeenMembers(conversationId, messageId)));
+    }
+
+    @GetMapping("/conversations/{conversationId}/messages/{messageId}/context")
+    @Operation(summary = "Get the page index of a specific message (used by FE to scroll-to from search result)")
+    public ResponseEntity<ApiResponse<MessageContextResponse>> getMessageContext(
+            @PathVariable String conversationId,
+            @PathVariable String messageId,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(ApiResponse.success(
+                messageService.getMessageContext(conversationId, messageId, size)));
     }
 }

@@ -8,6 +8,7 @@ import java.time.LocalDate;
 @Builder
 public record UserUpdateRequest(
     String fullName,
+    String phoneNumber,
     LocalDate dob,
     String bio,
     String gender

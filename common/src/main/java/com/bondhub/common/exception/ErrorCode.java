@@ -130,6 +130,10 @@ public enum ErrorCode {
         CHAT_BLOCKED_FROM_ADDING(HttpStatus.FORBIDDEN, 4032, "error.chat.blocked.from.adding"),
         CHAT_GROUP_ADD_ALREADY_BLOCKED(HttpStatus.CONFLICT, 4033, "error.chat.group.add.already.blocked"),
         CHAT_GROUP_ADD_NOT_BLOCKED(HttpStatus.BAD_REQUEST, 4034, "error.chat.group.add.not.blocked"),
+        CHAT_GROUP_DUPLICATE(HttpStatus.CONFLICT, 4035, "error.chat.group.duplicate"),
+        CHAT_NEED_AT_LEAST_ONE_FRIEND(HttpStatus.BAD_REQUEST, 4036, "error.chat.group.need.at.least.one.friend"),
+        CHAT_INVALID_INVITE_TARGET(HttpStatus.BAD_REQUEST, 4037, "error.chat.invalid.invite.target"),
+        CHAT_ADMIN_CANNOT_DELETE_OWNER_MESSAGE(HttpStatus.FORBIDDEN, 4038, "error.chat.admin.cannot.delete.owner.message"),
 
         //  NOTIFICATION_TEMPLATE (23xx)
         NOTIFICATION_TEMPLATE_NOT_FOUND(HttpStatus.NOT_FOUND, 2300, "error.notification.template.not.found"),
@@ -148,6 +152,7 @@ public enum ErrorCode {
         CHAT_MAX_PINNED_MESSAGES(HttpStatus.BAD_REQUEST, 4401, "error.chat.max.pinned.messages"),
         CHAT_MESSAGE_NOT_PINNED(HttpStatus.BAD_REQUEST, 4402, "error.chat.message.not.pinned"),
         CHAT_MESSAGE_ALREADY_PINNED(HttpStatus.BAD_REQUEST, 4403, "error.chat.message.already.pinned"),
+        MESSAGE_REVOKE_TIME_EXCEEDED(HttpStatus.BAD_REQUEST, 4035, "error.message.revoke.time.exceeded"),
 
         // Call errors (5xxx)
         CALL_USER_BUSY(HttpStatus.CONFLICT, 5001, "error.call.user.busy"),

@@ -22,5 +22,8 @@ public enum EventType {
     FRIENDSHIP_CHANGED,
 
     // Group Events (message-service)
-    GROUP_MEMBER_CHANGED
+    GROUP_MEMBER_CHANGED,
+
+    // Message Search Events (message-service → search-service)
+    MESSAGE_INDEX_REQUESTED,
 }

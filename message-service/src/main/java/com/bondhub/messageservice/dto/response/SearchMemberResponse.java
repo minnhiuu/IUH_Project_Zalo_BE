@@ -7,5 +7,6 @@ public record SearchMemberResponse(
         String userId,
         String fullName,
         String avatar,
+        String phoneNumber,
         boolean isAlreadyMember
 ) {}
