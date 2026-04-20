@@ -354,6 +354,7 @@ public class ConversationHelper {
 
         return room.getMembers().stream()
                 .filter(this::isActiveMember)
+                .filter(m -> room.isGroup() || !m.getUserId().equals(currentUserId))
                 .sorted(Comparator
                         .comparing((ConversationMember m) ->
                                         m.getJoinedAt() != null ? m.getJoinedAt() : LocalDateTime.MIN,

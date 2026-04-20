@@ -15,7 +15,3 @@ spring:
 
 server:
   port: 8087
-
-ai:
-  crag:
-    max-web-retries: 1

@@ -41,7 +41,5 @@ public interface MessageRepository extends MongoRepository<Message, String> {
 
     Page<Message> findByConversationId(String conversationId, Pageable pageable);
 
-    List<Message> findTop100ByConversationIdAndIdGreaterThanAndStatusNot(String conversationId, String sinceId, com.bondhub.common.enums.MessageStatus status);
-
     void deleteByConversationId(String conversationId);
 }
