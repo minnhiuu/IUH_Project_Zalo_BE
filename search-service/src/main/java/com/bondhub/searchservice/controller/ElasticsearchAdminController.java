@@ -3,9 +3,11 @@ package com.bondhub.searchservice.controller;
 import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.common.utils.LocalizationUtil;
 import com.bondhub.searchservice.dto.response.*;
-import com.bondhub.searchservice.model.elasticsearch.UserIndex;
-import com.bondhub.searchservice.service.ElasticsearchAdminService;
-import com.bondhub.searchservice.service.user.UserSyncService;
+import com.bondhub.searchservice.enums.SearchIndexType;
+import com.bondhub.searchservice.service.index.core.SearchIndexSynchronizer;
+import com.bondhub.searchservice.service.index.admin.SearchIndexOrchestrator;
+import com.bondhub.searchservice.service.index.admin.ElasticsearchAdminService;
+
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -20,66 +22,60 @@ import java.util.Map;
 @PreAuthorize("hasRole('ADMIN')")
 public class ElasticsearchAdminController {
 
-    private final UserSyncService userSyncService;
+    private final SearchIndexOrchestrator orchestrator;
     private final ElasticsearchAdminService elasticsearchAdminService;
     private final LocalizationUtil localizationUtil;
 
-    @PostMapping("/reindex")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> reindexAll() {
-        String taskId = userSyncService.reindexAll();
+    @PostMapping("/reindex/{type}")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> reindex(@PathVariable SearchIndexType type) {
+        String taskId = orchestrator.reindex(type);
         return ResponseEntity.ok(ApiResponse.success(Map.of(
             "message", localizationUtil.getMessage("search.re-index.success"),
-            "taskId", taskId
+            "taskId", taskId,
+            "type", type
         )));
     }
 
-    @GetMapping("/reindex/status/{taskId}")
-    public ResponseEntity<ApiResponse<ReindexStatusResponse>> getReindexStatus(@PathVariable String taskId) {
-        return ResponseEntity.ok(ApiResponse.success(userSyncService.getReindexStatus(taskId)));
+    @GetMapping("/reindex/{type}/status/{taskId}")
+    public ResponseEntity<ApiResponse<ReindexStatusResponse>> getReindexStatus(
+            @PathVariable SearchIndexType type,
+            @PathVariable String taskId) {
+        return ResponseEntity.ok(ApiResponse.success(orchestrator.getStatus(type, taskId)));
     }
 
-    @PostMapping("/reindex/{userId}")
+    @GetMapping("/index/{type}/summary")
+    public ResponseEntity<ApiResponse<ElasticsearchSummaryResponse>> getIndexSummary(@PathVariable SearchIndexType type) {
+        SearchIndexSynchronizer handler = orchestrator.getHandler(type);
+        return ResponseEntity.ok(ApiResponse.success(ElasticsearchSummaryResponse.builder()
+
+                .health(handler.getHealth())
+                .stats(handler.getStats())
+                .compare(handler.compareWithDatabase())
+                .build()));
+    }
+
+    @GetMapping("/index/{type}/stats")
+    public ResponseEntity<ApiResponse<IndexStatsResponse>> getIndexStats(@PathVariable SearchIndexType type) {
+        return ResponseEntity.ok(ApiResponse.success(orchestrator.getHandler(type).getStats()));
+    }
+
+    @GetMapping("/index/{type}/physical-indexes")
+    public ResponseEntity<ApiResponse<List<IndexDetailResponse>>> getPhysicalIndexes(@PathVariable SearchIndexType type) {
+        return ResponseEntity.ok(ApiResponse.success(orchestrator.getHandler(type).getAllPhysicalIndexes()));
+    }
+
+    @GetMapping("/health")
+    public ResponseEntity<ApiResponse<ElasticsearchHealthResponse>> getGlobalHealth() {
+        return ResponseEntity.ok(ApiResponse.success(elasticsearchAdminService.getHealth()));
+    }
+
+    @PostMapping("/reindex/users/{userId}")
     public ResponseEntity<ApiResponse<Map<String, String>>> reindexUser(@PathVariable String userId) {
         elasticsearchAdminService.reindexUser(userId);
         return ResponseEntity.ok(ApiResponse.success(Map.of(
             "message", localizationUtil.getMessage("search.re-index.user.success"),
             "userId", userId
         )));
-    }
-
-    @GetMapping("/summary")
-    public ResponseEntity<ApiResponse<ElasticsearchSummaryResponse>> getSummary() {
-        return ResponseEntity.ok(ApiResponse.success(elasticsearchAdminService.getSummary()));
-    }
-
-    @GetMapping("/health")
-    public ResponseEntity<ApiResponse<ElasticsearchHealthResponse>> getHealth() {
-        return ResponseEntity.ok(ApiResponse.success(elasticsearchAdminService.getHealth()));
-    }
-
-    @GetMapping("/stats")
-    public ResponseEntity<ApiResponse<IndexStatsResponse>> getStats() {
-        return ResponseEntity.ok(ApiResponse.success(elasticsearchAdminService.getIndexStats()));
-    }
-
-    @GetMapping("/compare")
-    public ResponseEntity<ApiResponse<DataComparisonResponse>> compareWithDatabase() {
-        return ResponseEntity.ok(ApiResponse.success(elasticsearchAdminService.compareWithDatabase()));
-    }
-
-    @GetMapping("/document/{userId}")
-    public ResponseEntity<ApiResponse<UserIndex>> getDocument(@PathVariable String userId) {
-        return ResponseEntity.ok(ApiResponse.success(elasticsearchAdminService.getDocument(userId)));
-    }
-
-    @GetMapping("/indexes")
-    public ResponseEntity<ApiResponse<List<IndexDetailResponse>>> getAllIndexes() {
-        return ResponseEntity.ok(ApiResponse.success(elasticsearchAdminService.getAllUserIndexes()));
-    }
-
-    @PostMapping("/indexes/{indexName}/switch")
-    public ResponseEntity<ApiResponse<IndexOperationResponse>> switchAlias(@PathVariable String indexName) {
-        return ResponseEntity.ok(ApiResponse.success(elasticsearchAdminService.switchAlias(indexName)));
     }
 
     @DeleteMapping("/indexes/{indexName}")

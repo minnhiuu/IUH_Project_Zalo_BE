@@ -1,4 +1,4 @@
-package com.bondhub.searchservice.service.message;
+package com.bondhub.searchservice.service.index.message;
 
 import co.elastic.clients.elasticsearch._types.SortOrder;
 import co.elastic.clients.elasticsearch._types.query_dsl.Query;

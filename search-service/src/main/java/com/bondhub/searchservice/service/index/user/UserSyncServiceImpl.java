@@ -1,19 +1,19 @@
-package com.bondhub.searchservice.service.user;
+package com.bondhub.searchservice.service.index.user;
 
 import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.common.utils.LocalizationUtil;
 import com.bondhub.searchservice.client.AuthServiceClient;
 import com.bondhub.searchservice.client.UserServiceClient;
 import com.bondhub.searchservice.config.ElasticsearchProperties;
-import com.bondhub.searchservice.dto.response.AccountResponse;
-import com.bondhub.searchservice.dto.response.UserSyncResponse;
-import com.bondhub.searchservice.enums.ReindexStep;
-import com.bondhub.searchservice.enums.ReindexTaskStatus;
+import com.bondhub.searchservice.dto.response.*;
+import com.bondhub.searchservice.enums.*;
 import com.bondhub.searchservice.model.elasticsearch.UserIndex;
-import com.bondhub.searchservice.service.AbstractSyncService;
-import com.bondhub.searchservice.service.ReindexTaskTracker;
+import com.bondhub.searchservice.service.index.core.AbstractSyncService;
+import com.bondhub.searchservice.service.index.core.ReindexTaskTracker;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
+import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
+import org.springframework.data.elasticsearch.core.query.Query;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -31,23 +31,29 @@ public class UserSyncServiceImpl extends AbstractSyncService<UserIndex> implemen
 
     public UserSyncServiceImpl(
             ElasticsearchOperations esOps,
+            co.elastic.clients.elasticsearch.ElasticsearchClient esClient,
             ElasticsearchProperties esProperties,
             ReindexTaskTracker taskTracker,
             LocalizationUtil localizationUtil,
-            AuthServiceClient authServiceClient,
-            UserServiceClient userServiceClient) {
-        super(esOps, esProperties, taskTracker, localizationUtil);
-        this.authServiceClient = authServiceClient;
+            UserServiceClient userServiceClient,
+            AuthServiceClient authServiceClient) {
+        super(esOps, esClient, esProperties, taskTracker, localizationUtil);
         this.userServiceClient = userServiceClient;
+        this.authServiceClient = authServiceClient;
     }
 
     @Override
-    protected String getAlias() {
+    public SearchIndexType getType() {
+        return SearchIndexType.USER;
+    }
+
+    @Override
+    public String getAlias() {
         return esProperties.getUserAlias();
     }
 
     @Override
-    protected Class<UserIndex> getIndexClass() {
+    public Class<UserIndex> getIndexClass() {
         return UserIndex.class;
     }
 
@@ -109,7 +115,6 @@ public class UserSyncServiceImpl extends AbstractSyncService<UserIndex> implemen
             lastId = users.getLast().id();
             processed += users.size();
 
-            // Determine current step based on progress ratio
             ReindexStep currentStep = ReindexStep.SYNCING_START;
             if (totalDocs > 0) {
                 double currentRatio = (double) processed / totalDocs;
@@ -136,5 +141,24 @@ public class UserSyncServiceImpl extends AbstractSyncService<UserIndex> implemen
             log.warn("Failed to fetch accounts batch: {}", e.getMessage());
         }
         return Map.of();
+    }
+
+    @Override
+    public DataComparisonResponse compareWithDatabase() {
+        try {
+            long esCount = esOps.count(Query.findAll(), IndexCoordinates.of(getAlias()));
+            ApiResponse<Long> response = userServiceClient.getUserCount();
+            long dbCount = (response != null && response.data() != null) ? response.data() : 0;
+
+            return DataComparisonResponse.builder()
+                    .elasticsearchCount(esCount)
+                    .databaseCount(dbCount)
+                    .difference(Math.abs(esCount - dbCount))
+                    .status(esCount == dbCount ? DataSyncStatus.IN_SYNC :
+                            (esCount > dbCount ? DataSyncStatus.ES_AHEAD : DataSyncStatus.DB_AHEAD))
+                    .build();
+        } catch (Exception e) {
+            return super.compareWithDatabase();
+        }
     }
 }

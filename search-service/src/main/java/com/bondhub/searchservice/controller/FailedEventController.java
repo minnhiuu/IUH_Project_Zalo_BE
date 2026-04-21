@@ -4,7 +4,7 @@ import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.common.dto.PageResponse;
 import com.bondhub.common.utils.LocalizationUtil;
 import com.bondhub.searchservice.dto.response.FailedEventResponse;
-import com.bondhub.searchservice.service.FailedEventService;
+import com.bondhub.searchservice.service.failevent.FailedEventService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;

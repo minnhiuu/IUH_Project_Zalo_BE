@@ -4,7 +4,7 @@ import com.bondhub.common.event.message.MessageIndexRequestedEvent;
 import com.bondhub.common.model.kafka.EventType;
 import com.bondhub.searchservice.config.ElasticsearchProperties;
 import com.bondhub.searchservice.model.elasticsearch.MessageIndex;
-import com.bondhub.searchservice.service.FailedEventService;
+import com.bondhub.searchservice.service.failevent.FailedEventService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;

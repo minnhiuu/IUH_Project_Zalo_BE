@@ -1,4 +1,4 @@
-package com.bondhub.searchservice.service;
+package com.bondhub.searchservice.service.index.core;
 
 import com.bondhub.searchservice.dto.response.ReindexStatusResponse;
 import com.bondhub.searchservice.enums.ReindexTaskStatus;

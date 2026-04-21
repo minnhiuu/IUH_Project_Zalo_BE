@@ -1,12 +1,12 @@
-package com.bondhub.searchservice.service;
+package com.bondhub.searchservice.service.index.core;
 
+import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
 import com.bondhub.common.utils.LocalizationUtil;
 import com.bondhub.searchservice.config.ElasticsearchProperties;
-import com.bondhub.searchservice.dto.response.ReindexStatusResponse;
-import com.bondhub.searchservice.enums.ReindexStep;
-import com.bondhub.searchservice.enums.ReindexTaskStatus;
+import com.bondhub.searchservice.dto.response.*;
+import com.bondhub.searchservice.enums.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
 import org.springframework.data.elasticsearch.core.IndexOperations;
@@ -19,31 +19,36 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 
 @Slf4j
-public abstract class AbstractSyncService<T> {
+public abstract class AbstractSyncService<T> extends AbstractSearchIndexService implements SearchIndexSynchronizer {
 
-    protected final ElasticsearchOperations esOps;
-    protected final ElasticsearchProperties esProperties;
     protected final ReindexTaskTracker taskTracker;
-    protected final LocalizationUtil localizationUtil;
 
     protected AbstractSyncService(
             ElasticsearchOperations esOps,
+            ElasticsearchClient esClient,
             ElasticsearchProperties esProperties,
             ReindexTaskTracker taskTracker,
             LocalizationUtil localizationUtil) {
-        this.esOps = esOps;
-        this.esProperties = esProperties;
+        super(esOps, esClient, esProperties, localizationUtil);
         this.taskTracker = taskTracker;
-        this.localizationUtil = localizationUtil;
     }
 
-    protected abstract String getAlias();
-    
-    protected abstract Class<T> getIndexClass();
+    @Override
+    public abstract Class<T> getIndexClass();
     
     protected abstract long getTotalDocsCount();
     
     protected abstract void fullSyncToIndex(String indexName, String taskId, long totalDocs);
+
+    @Override
+    public DataComparisonResponse compareWithDatabase() {
+        return DataComparisonResponse.builder()
+                .elasticsearchCount(0)
+                .databaseCount(0)
+                .status(DataSyncStatus.IN_SYNC)
+                .recommendation("Override compareWithDatabase in subclass to enable this feature")
+                .build();
+    }
 
     public String reindexAll() {
         if (taskTracker.isReindexRunning()) {
@@ -60,6 +65,11 @@ public abstract class AbstractSyncService<T> {
         return taskId;
     }
 
+    @Override
+    public ReindexStatusResponse getReindexStatus(String taskId) {
+        return taskTracker.getStatus(taskId);
+    }
+
     protected void updateTaskStatus(String taskId, ReindexTaskStatus status, ReindexStep step, long total, long processed) {
         taskTracker.updateStatus(taskId, ReindexStatusResponse.builder()
                 .taskId(taskId)
@@ -69,10 +79,6 @@ public abstract class AbstractSyncService<T> {
                 .percentage(step.getPercentage())
                 .message(localizationUtil.getMessage(step.getMessageKey()))
                 .build());
-    }
-
-    public ReindexStatusResponse getReindexStatus(String taskId) {
-        return taskTracker.getStatus(taskId);
     }
 
     private void performAsyncReindex(String taskId, long totalDocs) {
@@ -101,7 +107,6 @@ public abstract class AbstractSyncService<T> {
             deleteOldIndexes(alias, oldIndexes, newIndex);
 
             updateTaskStatus(taskId, ReindexTaskStatus.RUNNING, ReindexStep.FINALIZING, totalDocs, totalDocs);
-
             updateTaskStatus(taskId, ReindexTaskStatus.COMPLETED, ReindexStep.COMPLETED, totalDocs, totalDocs);
 
         } catch (Exception e) {
@@ -124,13 +129,7 @@ public abstract class AbstractSyncService<T> {
         if (docs.isEmpty()) return;
 
         List<IndexQuery> queries = docs.stream()
-                .map(doc -> {
-                    // We assume the model has an getId() method or use reflection/ObjectUtils
-                    // For safety in this generic context, we can use ElasticsearchOperations' default ID extraction
-                    return new IndexQueryBuilder()
-                            .withObject(doc)
-                            .build();
-                })
+                .map(doc -> new IndexQueryBuilder().withObject(doc).build())
                 .toList();
 
         esOps.bulkIndex(queries, IndexCoordinates.of(indexName));
@@ -140,21 +139,14 @@ public abstract class AbstractSyncService<T> {
     private void deletePhysicalIndexIfConflict(String alias) {
         IndexOperations indexOps = esOps.indexOps(IndexCoordinates.of(alias));
 
-        if (!indexOps.exists()) {
-            log.debug("No index or alias named '{}' exists", alias);
-            return;
-        }
+        if (!indexOps.exists()) return;
 
         try {
             var aliasInfo = indexOps.getAliases();
-
             if (aliasInfo.containsKey(alias)) {
                 log.warn("Found physical index named '{}' that conflicts with alias name. Deleting it...", alias);
                 indexOps.delete();
-                log.info("Successfully deleted conflicting physical index '{}'", alias);
                 Thread.sleep(1000);
-            } else {
-                log.debug("'{}' is already an alias, no conflict to resolve", alias);
             }
         } catch (Exception e) {
             log.error("Error while checking/deleting physical index '{}': {}", alias, e.getMessage());
@@ -172,7 +164,6 @@ public abstract class AbstractSyncService<T> {
             if (!existingAliases.isEmpty()) {
                 oldIndexes.addAll(existingAliases.keySet());
                 existingAliases.keySet().forEach(indexName -> {
-                    log.info("Adding 'remove' action for alias '{}' from index '{}'", alias, indexName);
                     combinedActions.add(new AliasAction.Remove(
                             AliasActionParameters.builder()
                                     .withIndices(indexName)
@@ -182,11 +173,9 @@ public abstract class AbstractSyncService<T> {
                 });
             }
         } catch (Exception e) {
-            log.warn("Note: No existing indices found for alias '{}' to remove: {}", alias, e.getMessage());
+            log.warn("Note: No existing indices found for alias '{}' to remove.", alias);
         }
 
-        // Add the new index action to the same combined object
-        log.info("Adding 'add' action for alias '{}' to index '{}'", alias, newIndex);
         combinedActions.add(new AliasAction.Add(
                 AliasActionParameters.builder()
                         .withIndices(newIndex)
@@ -194,27 +183,20 @@ public abstract class AbstractSyncService<T> {
                         .build()
         ));
 
-        // Execute all actions ATOMICALLY in one go
         esOps.indexOps(IndexCoordinates.of(alias)).alias(combinedActions);
-
-        log.info("Successfully switched alias '{}' to index '{}' atomically", alias, newIndex);
         return oldIndexes;
     }
 
     private void deleteOldIndexes(String alias, List<String> oldIndexes, String currentIndex) {
         try {
-            if (oldIndexes.isEmpty()) {
-                return;
-            }
+            if (oldIndexes.isEmpty()) return;
 
             String indexPrefix = alias + "_";
-
             List<String> sortedIndexes = oldIndexes.stream()
                     .filter(idx -> idx.startsWith(indexPrefix) && !idx.equals(currentIndex))
                     .sorted(Comparator.comparing((String idx) -> {
                         try {
-                            String timestamp = idx.substring(indexPrefix.length());
-                            return Long.parseLong(timestamp);
+                            return Long.parseLong(idx.substring(indexPrefix.length()));
                         } catch (Exception e) {
                             return 0L;
                         }
@@ -222,14 +204,10 @@ public abstract class AbstractSyncService<T> {
                     .toList();
 
             int retainCount = esProperties.getIndex().getRetainIndexCount();
-            List<String> indexesToDelete = sortedIndexes.stream()
-                    .skip(retainCount)
-                    .toList();
+            List<String> indexesToDelete = sortedIndexes.stream().skip(retainCount).toList();
 
             for (String indexName : indexesToDelete) {
-                IndexOperations ops = esOps.indexOps(IndexCoordinates.of(indexName));
-                ops.delete();
-                log.info("Deleted old index: {}", indexName);
+                esOps.indexOps(IndexCoordinates.of(indexName)).delete();
             }
         } catch (Exception e) {
             log.warn("Failed to cleanup old indexes for alias '{}': {}", alias, e.getMessage());

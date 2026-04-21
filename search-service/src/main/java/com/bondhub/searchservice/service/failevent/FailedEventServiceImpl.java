@@ -1,4 +1,4 @@
-package com.bondhub.searchservice.service;
+package com.bondhub.searchservice.service.failevent;
 
 import com.bondhub.common.dto.PageResponse;
 import com.bondhub.common.model.kafka.EventType;
@@ -16,8 +16,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.kafka.core.KafkaTemplate;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.io.PrintWriter;
-import java.io.StringWriter;
 
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;

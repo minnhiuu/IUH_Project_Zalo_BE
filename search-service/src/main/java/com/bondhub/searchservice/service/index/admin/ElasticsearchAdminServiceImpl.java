@@ -1,4 +1,4 @@
-package com.bondhub.searchservice.service;
+package com.bondhub.searchservice.service.index.admin;
 
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch._types.HealthStatus;
@@ -13,10 +13,11 @@ import com.bondhub.common.exception.ErrorCode;
 import com.bondhub.common.utils.LocalizationUtil;
 import com.bondhub.searchservice.client.AuthServiceClient;
 import com.bondhub.searchservice.client.UserServiceClient;
-import com.bondhub.searchservice.config.ElasticsearchProperties;
 import com.bondhub.searchservice.dto.response.*;
 import com.bondhub.searchservice.enums.*;
 import com.bondhub.searchservice.model.elasticsearch.UserIndex;
+import com.bondhub.searchservice.service.failevent.FailedEventService;
+import com.bondhub.searchservice.service.index.core.ReindexTaskTracker;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
@@ -42,7 +43,6 @@ public class ElasticsearchAdminServiceImpl implements ElasticsearchAdminService 
 
     ElasticsearchOperations esOps;
     ElasticsearchClient esClient;
-    ElasticsearchProperties esProperties;
     AuthServiceClient authServiceClient;
     UserServiceClient userServiceClient;
     LocalizationUtil localizationUtil;

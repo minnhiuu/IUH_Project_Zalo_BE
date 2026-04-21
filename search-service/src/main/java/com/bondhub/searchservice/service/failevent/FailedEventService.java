@@ -1,4 +1,4 @@
-package com.bondhub.searchservice.service;
+package com.bondhub.searchservice.service.failevent;
 
 import com.bondhub.common.dto.PageResponse;
 import com.bondhub.common.model.kafka.EventType;
