@@ -162,8 +162,8 @@ public abstract class AbstractSyncService<T> {
     }
 
     private List<String> switchAlias(String alias, String newIndex) {
-        IndexOperations newIndexOps = esOps.indexOps(IndexCoordinates.of(newIndex));
         List<String> oldIndexes = new ArrayList<>();
+        AliasActions combinedActions = new AliasActions();
 
         try {
             IndexOperations aliasOps = esOps.indexOps(IndexCoordinates.of(alias));
@@ -171,33 +171,33 @@ public abstract class AbstractSyncService<T> {
 
             if (!existingAliases.isEmpty()) {
                 oldIndexes.addAll(existingAliases.keySet());
-                AliasActions removeActions = new AliasActions();
                 existingAliases.keySet().forEach(indexName -> {
-                    log.info("Removing alias '{}' from index '{}'", alias, indexName);
-                    removeActions.add(new AliasAction.Remove(
+                    log.info("Adding 'remove' action for alias '{}' from index '{}'", alias, indexName);
+                    combinedActions.add(new AliasAction.Remove(
                             AliasActionParameters.builder()
                                     .withIndices(indexName)
                                     .withAliases(alias)
                                     .build()
                     ));
                 });
-                esOps.indexOps(IndexCoordinates.of(alias)).alias(removeActions);
-                log.info("Removed alias '{}' from {} indices", alias, existingAliases.size());
             }
         } catch (Exception e) {
-            log.warn("Failed to remove existing aliases for '{}' (might not exist): {}", alias, e.getMessage());
+            log.warn("Note: No existing indices found for alias '{}' to remove: {}", alias, e.getMessage());
         }
 
-        AliasActions addAction = new AliasActions();
-        addAction.add(new AliasAction.Add(
+        // Add the new index action to the same combined object
+        log.info("Adding 'add' action for alias '{}' to index '{}'", alias, newIndex);
+        combinedActions.add(new AliasAction.Add(
                 AliasActionParameters.builder()
                         .withIndices(newIndex)
                         .withAliases(alias)
                         .build()
         ));
-        newIndexOps.alias(addAction);
 
-        log.info("Successfully switched alias '{}' to index '{}'", alias, newIndex);
+        // Execute all actions ATOMICALLY in one go
+        esOps.indexOps(IndexCoordinates.of(alias)).alias(combinedActions);
+
+        log.info("Successfully switched alias '{}' to index '{}' atomically", alias, newIndex);
         return oldIndexes;
     }
 
