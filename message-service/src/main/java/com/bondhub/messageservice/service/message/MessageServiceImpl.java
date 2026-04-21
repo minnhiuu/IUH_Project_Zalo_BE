@@ -1,6 +1,7 @@
 package com.bondhub.messageservice.service.message;
 
 import com.bondhub.common.utils.S3Util;
+import com.bondhub.common.utils.S3UtilV2;
 import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
@@ -71,12 +72,9 @@ public class MessageServiceImpl implements MessageService {
     private final MessageMapper messageMapper;
     private final ConversationService conversationService;
     private final ConversationHelper conversationHelper;
+    private final S3UtilV2 s3UtilV2;
 
-    @Value("${aws.s3.bucket.name}")
-    private String bucketName;
 
-    @Value("${cloud.aws.region.static}")
-    private String region;
 
     @Value("${kafka.topics.socket-events}")
     private String socketEventsTopic;
@@ -114,7 +112,7 @@ public class MessageServiceImpl implements MessageService {
                 PageRequest.of(0, 1, Sort.by(Sort.Direction.DESC, "createdAt"))
             );
 
-        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+        String baseUrl = s3UtilV2.getS3BaseUrl();
         List<MessageResponse> dtos = messagePage.getContent().stream()
                 .map(msg -> messageMapper.mapToMessageResponse(msg, baseUrl))
                 .collect(Collectors.toList());
@@ -151,7 +149,7 @@ public class MessageServiceImpl implements MessageService {
         Page<Message> messagePage = messageRepository.findByConversationIdAndTypesAndNotDeleted(
                 conversationId, currentUserId, messageTypes, deletedBefore, pageable);
 
-        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+        String baseUrl = s3UtilV2.getS3BaseUrl();
         List<MessageResponse> dtos = messagePage.getContent().stream()
                 .map(msg -> messageMapper.mapToMessageResponse(msg, baseUrl))
                 .collect(Collectors.toList());
@@ -285,7 +283,7 @@ public class MessageServiceImpl implements MessageService {
     private CursorPageResponse<MessageResponse> buildCursorResponse(
             List<Message> messages, int limit, boolean isJump) {
         
-        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+        String baseUrl = s3UtilV2.getS3BaseUrl();
         List<MessageResponse> dtos = messages.stream()
                 .map(msg -> messageMapper.mapToMessageResponse(msg, baseUrl))
                 .collect(Collectors.toList());
@@ -389,7 +387,7 @@ public class MessageServiceImpl implements MessageService {
         log.info("[Chat] Saved message & updated conversation state for room: {}", room.getId());
 
         // 6. Push notification qua Kafka cho từng thành viên
-        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+        String baseUrl = s3UtilV2.getS3BaseUrl();
         Conversation finalRoom = updatedRoom != null ? updatedRoom : room;
 
         List<ChatNotification> notifPrototypes = new ArrayList<>(
@@ -627,7 +625,7 @@ public class MessageServiceImpl implements MessageService {
         Map<String, ChatUser> userMap = chatUserRepository.findAllById(seenUserIds).stream()
                 .collect(Collectors.toMap(ChatUser::getId, u -> u));
 
-        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+        String baseUrl = s3UtilV2.getS3BaseUrl();
         return seenUserIds.stream()
                 .map(userId -> {
                     ChatUser user = userMap.get(userId);
@@ -665,7 +663,7 @@ public class MessageServiceImpl implements MessageService {
         List<Message> messages = messageRepository.findTop100ByConversationIdAndIdGreaterThanAndStatusNot(
                 conversationId, sinceId, MessageStatus.REVOKED);
 
-        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+        String baseUrl = s3UtilV2.getS3BaseUrl();
         List<MessageResponse> dtos = messages.stream()
                 .map(msg -> messageMapper.mapToMessageResponse(msg, baseUrl))
                 .collect(Collectors.toList());
@@ -704,7 +702,7 @@ public class MessageServiceImpl implements MessageService {
 
         Map<String, ChatUser> userMap = chatUserRepository.findAllById(userIds).stream()
                 .collect(Collectors.toMap(ChatUser::getId, u -> u));
-        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+        String baseUrl = s3UtilV2.getS3BaseUrl();
 
         for (int i = 0; i < dtos.size(); i++) {
             MessageResponse d = dtos.get(i);
@@ -735,7 +733,7 @@ public class MessageServiceImpl implements MessageService {
 
         Map<String, ChatUser> userMap = chatUserRepository.findAllById(userIds).stream()
                 .collect(Collectors.toMap(ChatUser::getId, u -> u));
-        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+        String baseUrl = s3UtilV2.getS3BaseUrl();
 
         for (int i = 0; i < notifs.size(); i++) {
             ChatNotification n = notifs.get(i);
@@ -824,7 +822,7 @@ public class MessageServiceImpl implements MessageService {
             Map<String, ChatUser> userCache = chatUserRepository.findAllById(memberIds).stream()
                     .collect(Collectors.toMap(ChatUser::getId, u -> u));
 
-            String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+            String baseUrl = s3UtilV2.getS3BaseUrl();
             List<LinkPreview.MemberSnapshot> previews = activeMembers.stream()
                     .map(ConversationMember::getUserId)
                     .limit(5)

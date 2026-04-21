@@ -12,6 +12,7 @@ import com.bondhub.messageservice.dto.response.LastMessageResponse;
 import com.bondhub.messageservice.repository.ChatUserRepository;
 import com.bondhub.messageservice.service.conversation.ConversationService;
 import com.bondhub.common.utils.S3Util;
+import com.bondhub.common.utils.S3UtilV2;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -36,15 +37,12 @@ public class FriendshipChangedConsumer {
     private final ConversationService conversationService;
     private final ChatUserRepository chatUserRepository;
     private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final S3UtilV2 s3UtilV2;
 
     @Value("${kafka.topics.socket-events}")
     private String socketEventsTopic;
 
-    @Value("${aws.s3.bucket.name}")
-    private String bucketName;
 
-    @Value("${cloud.aws.region.static}")
-    private String region;
 
     @KafkaListener(topics = "${kafka.topics.friend-events.friendship-changed}", groupId = "${spring.kafka.consumer.group-id}")
     public void handleFriendshipChanged(FriendshipChangedEvent event) {
@@ -63,7 +61,7 @@ public class FriendshipChangedConsumer {
                     .stream()
                     .collect(Collectors.toMap(ChatUser::getId, u -> u));
 
-            String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+            String baseUrl = s3UtilV2.getS3BaseUrl();
 
             ConversationResponse convForA = buildMinimalResponse(room, event.userA(), event.userB(), userCache, baseUrl);
             ConversationResponse convForB = buildMinimalResponse(room, event.userB(), event.userA(), userCache, baseUrl);
