@@ -2,6 +2,7 @@ package com.bondhub.searchservice.service.index.core;
 
 import com.bondhub.searchservice.dto.response.ReindexStatusResponse;
 import com.bondhub.searchservice.enums.ReindexTaskStatus;
+import com.bondhub.searchservice.enums.SearchIndexType;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
@@ -23,8 +24,8 @@ public class ReindexTaskTracker {
         tasks.remove(taskId);
     }
 
-    public boolean isReindexRunning() {
+    public boolean isReindexRunning(SearchIndexType type) {
         return tasks.values().stream()
-                .anyMatch(task -> task.status() == ReindexTaskStatus.RUNNING);
+                .anyMatch(task -> task.type() == type && task.status() == ReindexTaskStatus.RUNNING);
     }
 }

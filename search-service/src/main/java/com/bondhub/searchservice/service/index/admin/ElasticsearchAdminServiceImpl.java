@@ -175,7 +175,7 @@ public class ElasticsearchAdminServiceImpl implements ElasticsearchAdminService 
     @Override
     public DataComparisonResponse compareWithDatabase() {
         try {
-            if (reindexTaskTracker.isReindexRunning()) {
+            if (reindexTaskTracker.isReindexRunning(SearchIndexType.USER)) {
                 return DataComparisonResponse.builder()
                         .elasticsearchCount(0)
                         .databaseCount(0)
@@ -234,7 +234,7 @@ public class ElasticsearchAdminServiceImpl implements ElasticsearchAdminService 
 
     @Override
     public void reindexUser(String userId) {
-        if (reindexTaskTracker.isReindexRunning()) {
+        if (reindexTaskTracker.isReindexRunning(SearchIndexType.USER)) {
             throw new AppException(ErrorCode.EL_REINDEX_IN_PROGRESS);
         }
 

@@ -19,7 +19,7 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 
 @Slf4j
-public abstract class AbstractSyncService<T> extends AbstractSearchIndexService implements SearchIndexSynchronizer {
+public abstract class AbstractSyncService<T> extends AbstractBaseElasticsearchService implements SearchIndexSynchronizer {
 
     protected final ReindexTaskTracker taskTracker;
 
@@ -32,6 +32,12 @@ public abstract class AbstractSyncService<T> extends AbstractSearchIndexService 
         super(esOps, esClient, esProperties, localizationUtil);
         this.taskTracker = taskTracker;
     }
+
+    @Override
+    public abstract String getAlias();
+
+    @Override
+    public abstract SearchIndexType getType();
 
     @Override
     public abstract Class<T> getIndexClass();
@@ -51,7 +57,7 @@ public abstract class AbstractSyncService<T> extends AbstractSearchIndexService 
     }
 
     public String reindexAll() {
-        if (taskTracker.isReindexRunning()) {
+        if (taskTracker.isReindexRunning(getType())) {
             throw new AppException(ErrorCode.EL_REINDEX_IN_PROGRESS);
         }
 
@@ -67,7 +73,11 @@ public abstract class AbstractSyncService<T> extends AbstractSearchIndexService 
 
     @Override
     public ReindexStatusResponse getReindexStatus(String taskId) {
-        return taskTracker.getStatus(taskId);
+        ReindexStatusResponse status = taskTracker.getStatus(taskId);
+        if (status != null && status.type() != getType()) {
+            return null;
+        }
+        return status;
     }
 
     @Override
@@ -94,6 +104,7 @@ public abstract class AbstractSyncService<T> extends AbstractSearchIndexService 
     protected void updateTaskStatus(String taskId, ReindexTaskStatus status, ReindexStep step, long total, long processed) {
         taskTracker.updateStatus(taskId, ReindexStatusResponse.builder()
                 .taskId(taskId)
+                .type(getType())
                 .status(status)
                 .total(total)
                 .processed(processed)
