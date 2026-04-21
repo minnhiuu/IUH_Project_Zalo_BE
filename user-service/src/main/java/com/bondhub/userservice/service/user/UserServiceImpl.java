@@ -294,13 +294,20 @@ public class UserServiceImpl implements UserService {
 
         String oldAvatarKey = user.getAvatar();
 
-        String email = securityUtil.getCurrentEmail();
+        String newKey = null;
+        if (request.imageKey() != null && !request.imageKey().isBlank()) {
+            newKey = request.imageKey();
+        } else if (request.file() != null) {
+            String email = securityUtil.getCurrentEmail();
+            ApiResponse<FileUploadResponse> response = fileServiceClient
+                    .uploadFile(accountId, email, request.file(), "avatars");
+            if (response != null && response.data() != null) {
+                newKey = response.data().key();
+            }
+        }
 
-        ApiResponse<FileUploadResponse> response = fileServiceClient
-                .uploadFile(accountId, email, request.file(), "avatars");
-        if (response != null && response.data() != null) {
-            String key = response.data().key();
-            user.setAvatar(key);
+        if (newKey != null) {
+            user.setAvatar(newKey);
             userRepository.save(user);
 
             if (oldAvatarKey != null && !oldAvatarKey.isEmpty()) {
@@ -332,7 +339,7 @@ public class UserServiceImpl implements UserService {
             return userMapper.toAvatarResponse(user, baseUrl);
         }
 
-        throw new RuntimeException("Failed to upload avatar");
+        throw new AppException(ErrorCode.VALIDATION_ERROR);
     }
 
     @Override
@@ -345,13 +352,20 @@ public class UserServiceImpl implements UserService {
 
         String oldBackgroundKey = user.getBackground();
 
-        String email = securityUtil.getCurrentEmail();
+        String newKey = null;
+        if (request.imageKey() != null && !request.imageKey().isBlank()) {
+            newKey = request.imageKey();
+        } else if (request.file() != null) {
+            String email = securityUtil.getCurrentEmail();
+            ApiResponse<FileUploadResponse> response = fileServiceClient
+                    .uploadFile(accountId, email, request.file(), "backgrounds");
+            if (response != null && response.data() != null) {
+                newKey = response.data().key();
+            }
+        }
 
-        ApiResponse<FileUploadResponse> response = fileServiceClient
-                .uploadFile(accountId, email, request.file(), "backgrounds");
-        if (response != null && response.data() != null) {
-            String key = response.data().key();
-            user.setBackground(key);
+        if (newKey != null) {
+            user.setBackground(newKey);
             user.setBackgroundY(request.y());
             userRepository.save(user);
 

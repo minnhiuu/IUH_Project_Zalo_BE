@@ -87,10 +87,9 @@ public class PinServiceImpl implements PinService {
         Map<String, Object> meta = new HashMap<>();
         meta.put("messageId", messageId);
         meta.put("contentSnapshot", snapshot);
-        meta.put("originalSenderId", msg.getSenderId());
-        meta.put("originalSenderName", msg.getSenderName());
+        meta.put("originalSenderName", actorName);
         
-        meta.put("originalSenderAvatar", s3UtilV2.getFullUrl(msg.getSenderAvatar()));
+        meta.put("originalSenderAvatar", s3UtilV2.getFullUrl(actor != null ? actor.getAvatar() : null));
 
         meta.put("originalContent", msg.getContent());
         
@@ -131,9 +130,9 @@ public class PinServiceImpl implements PinService {
         
         if (msg != null) {
             meta.put("originalSenderId", msg.getSenderId());
-            meta.put("originalSenderName", msg.getSenderName());
+            meta.put("originalSenderName", actorName);
             
-            meta.put("originalSenderAvatar", s3UtilV2.getFullUrl(msg.getSenderAvatar()));
+            meta.put("originalSenderAvatar", s3UtilV2.getFullUrl(actor != null ? actor.getAvatar() : null));
 
             meta.put("originalContent", msg.getContent());
         }
