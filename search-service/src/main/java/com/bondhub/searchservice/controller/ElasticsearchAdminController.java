@@ -5,7 +5,7 @@ import com.bondhub.common.utils.LocalizationUtil;
 import com.bondhub.searchservice.dto.response.*;
 import com.bondhub.searchservice.model.elasticsearch.UserIndex;
 import com.bondhub.searchservice.service.ElasticsearchAdminService;
-import com.bondhub.searchservice.service.UserSyncService;
+import com.bondhub.searchservice.service.user.UserSyncService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;

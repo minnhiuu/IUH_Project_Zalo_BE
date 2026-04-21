@@ -7,7 +7,7 @@ import com.bondhub.searchservice.dto.request.MessageSearchRequest;
 import com.bondhub.searchservice.dto.response.MessageSearchOverviewResponse;
 import com.bondhub.searchservice.dto.response.MessageSearchResponse;
 import com.bondhub.searchservice.enums.MessageSearchSection;
-import com.bondhub.searchservice.service.MessageSearchService;
+import com.bondhub.searchservice.service.message.MessageSearchService;
 import jakarta.validation.Valid;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;

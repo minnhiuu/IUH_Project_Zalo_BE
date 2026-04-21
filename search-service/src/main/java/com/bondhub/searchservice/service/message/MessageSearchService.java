@@ -1,4 +1,4 @@
-package com.bondhub.searchservice.service;
+package com.bondhub.searchservice.service.message;
 
 import com.bondhub.common.dto.PageResponse;
 import com.bondhub.searchservice.dto.request.MessageSearchRequest;

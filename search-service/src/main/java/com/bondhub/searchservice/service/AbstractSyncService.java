@@ -1,21 +1,12 @@
 package com.bondhub.searchservice.service;
 
-import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
 import com.bondhub.common.utils.LocalizationUtil;
-import com.bondhub.searchservice.client.AuthServiceClient;
-import com.bondhub.searchservice.client.UserServiceClient;
 import com.bondhub.searchservice.config.ElasticsearchProperties;
-import com.bondhub.searchservice.dto.response.AccountResponse;
-import com.bondhub.searchservice.dto.response.UserSyncResponse;
 import com.bondhub.searchservice.dto.response.ReindexStatusResponse;
 import com.bondhub.searchservice.enums.ReindexStep;
 import com.bondhub.searchservice.enums.ReindexTaskStatus;
-import com.bondhub.searchservice.model.elasticsearch.UserIndex;
-import lombok.AccessLevel;
-import lombok.RequiredArgsConstructor;
-import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
 import org.springframework.data.elasticsearch.core.IndexOperations;
@@ -23,33 +14,44 @@ import org.springframework.data.elasticsearch.core.index.*;
 import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
 import org.springframework.data.elasticsearch.core.query.IndexQuery;
 import org.springframework.data.elasticsearch.core.query.IndexQueryBuilder;
-import org.springframework.stereotype.Service;
 
-import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
-import java.util.stream.Collectors;
 
-@Service
-@RequiredArgsConstructor
 @Slf4j
-@FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
-public class UserSyncServiceImpl implements UserSyncService {
-    ElasticsearchOperations esOps;
-    ElasticsearchProperties esProperties;
-    AuthServiceClient authServiceClient;
-    UserServiceClient userServiceClient;
-    ReindexTaskTracker taskTracker;
-    LocalizationUtil localizationUtil;
+public abstract class AbstractSyncService<T> {
 
-    @Override
+    protected final ElasticsearchOperations esOps;
+    protected final ElasticsearchProperties esProperties;
+    protected final ReindexTaskTracker taskTracker;
+    protected final LocalizationUtil localizationUtil;
+
+    protected AbstractSyncService(
+            ElasticsearchOperations esOps,
+            ElasticsearchProperties esProperties,
+            ReindexTaskTracker taskTracker,
+            LocalizationUtil localizationUtil) {
+        this.esOps = esOps;
+        this.esProperties = esProperties;
+        this.taskTracker = taskTracker;
+        this.localizationUtil = localizationUtil;
+    }
+
+    protected abstract String getAlias();
+    
+    protected abstract Class<T> getIndexClass();
+    
+    protected abstract long getTotalDocsCount();
+    
+    protected abstract void fullSyncToIndex(String indexName, String taskId, long totalDocs);
+
     public String reindexAll() {
         if (taskTracker.isReindexRunning()) {
             throw new AppException(ErrorCode.EL_REINDEX_IN_PROGRESS);
         }
 
         String taskId = UUID.randomUUID().toString();
-        long totalDocs = getUserCountFromUserService();
+        long totalDocs = getTotalDocsCount();
 
         updateTaskStatus(taskId, ReindexTaskStatus.RUNNING, ReindexStep.INITIALIZING, totalDocs, 0);
 
@@ -58,7 +60,7 @@ public class UserSyncServiceImpl implements UserSyncService {
         return taskId;
     }
 
-    private void updateTaskStatus(String taskId, ReindexTaskStatus status, ReindexStep step, long total, long processed) {
+    protected void updateTaskStatus(String taskId, ReindexTaskStatus status, ReindexStep step, long total, long processed) {
         taskTracker.updateStatus(taskId, ReindexStatusResponse.builder()
                 .taskId(taskId)
                 .status(status)
@@ -69,41 +71,41 @@ public class UserSyncServiceImpl implements UserSyncService {
                 .build());
     }
 
-    @Override
     public ReindexStatusResponse getReindexStatus(String taskId) {
         return taskTracker.getStatus(taskId);
     }
 
     private void performAsyncReindex(String taskId, long totalDocs) {
+        String alias = getAlias();
         try {
-            log.info("Starting async reindex for task: {}", taskId);
+            log.info("Starting async reindex for alias '{}', task: {}", alias, taskId);
 
-            deletePhysicalIndexIfConflict();
+            deletePhysicalIndexIfConflict(alias);
 
-            String newIndex = esProperties.getUserAlias() + "_" + System.currentTimeMillis();
+            String newIndex = alias + "_" + System.currentTimeMillis();
             createPhysicalIndex(newIndex);
 
             fullSyncToIndex(newIndex, taskId, totalDocs);
 
             updateTaskStatus(taskId, ReindexTaskStatus.RUNNING, ReindexStep.SWITCHING_ALIAS, totalDocs, totalDocs);
-            List<String> oldIndexes = switchAlias(newIndex);
+            List<String> oldIndexes = switchAlias(alias, newIndex);
             
             try {
-                esOps.indexOps(IndexCoordinates.of(esProperties.getUserAlias())).refresh();
-                log.info("Refreshed index alias '{}' after reindex", esProperties.getUserAlias());
+                esOps.indexOps(IndexCoordinates.of(alias)).refresh();
+                log.info("Refreshed index alias '{}' after reindex", alias);
             } catch (Exception e) {
                 log.warn("Failed to refresh index after switch: {}", e.getMessage());
             }
 
             updateTaskStatus(taskId, ReindexTaskStatus.RUNNING, ReindexStep.CLEANING_UP, totalDocs, totalDocs);
-            deleteOldIndexes(oldIndexes, newIndex);
+            deleteOldIndexes(alias, oldIndexes, newIndex);
 
             updateTaskStatus(taskId, ReindexTaskStatus.RUNNING, ReindexStep.FINALIZING, totalDocs, totalDocs);
 
             updateTaskStatus(taskId, ReindexTaskStatus.COMPLETED, ReindexStep.COMPLETED, totalDocs, totalDocs);
 
         } catch (Exception e) {
-            log.error("Reindex failed for task {}: {}", taskId, e.getMessage());
+            log.error("Reindex failed for alias '{}', task {}: {}", alias, taskId, e.getMessage());
             taskTracker.updateStatus(taskId, ReindexStatusResponse.builder()
                     .taskId(taskId)
                     .status(ReindexTaskStatus.FAILED)
@@ -112,113 +114,30 @@ public class UserSyncServiceImpl implements UserSyncService {
         }
     }
 
-    private void createPhysicalIndex(String indexName) {
+    protected void createPhysicalIndex(String indexName) {
         IndexOperations ops = esOps.indexOps(IndexCoordinates.of(indexName));
-        ops.create(ops.createSettings(UserIndex.class));
-        ops.putMapping(ops.createMapping(UserIndex.class));
+        ops.create(ops.createSettings(getIndexClass()));
+        ops.putMapping(ops.createMapping(getIndexClass()));
     }
 
-    private void fullSyncToIndex(String indexName, String taskId, long totalDocs) {
-        String lastId = null;
-        long processed = 0;
-        int batchSize = esProperties.getSync().getBatchSize();
-
-        log.info("Starting full sync for task {} to index {}", taskId, indexName);
-
-        while (true) {
-            ApiResponse<List<UserSyncResponse>> response = userServiceClient.getUsersBatch(lastId, batchSize);
-
-            if (response == null || response.data() == null || response.data().isEmpty()) {
-                break;
-            }
-
-            List<UserSyncResponse> users = response.data();
-
-            List<String> accountIds = users.stream()
-                    .map(UserSyncResponse::accountId)
-                    .filter(Objects::nonNull)
-                    .toList();
-            Map<String, AccountResponse> accountMap = fetchAccountsBatch(accountIds);
-
-            List<UserIndex> docs = users.stream()
-                    .map(user -> {
-                        AccountResponse account = user.accountId() != null
-                                ? accountMap.get(user.accountId()) : null;
-
-                        return UserIndex.builder()
-                                .id(user.id())
-                                .accountId(user.accountId())
-                                .fullName(user.fullName())
-                                .avatar(user.avatar())
-                                .phoneNumber(account != null ? account.phoneNumber() : null)
-                                .role(account != null ? account.role() : null)
-                                .createdAt(LocalDateTime.now())
-                                .build();
-                    })
-                    .toList();
-
-            bulkIndex(docs, indexName);
-
-            lastId = users.getLast().id();
-            processed += users.size();
-
-            // Determine current step based on progress ratio
-            ReindexStep currentStep = ReindexStep.SYNCING_START;
-            if (totalDocs > 0) {
-                double currentRatio = (double) processed / totalDocs;
-                if (currentRatio > 0.8) currentStep = ReindexStep.DATA_COMPLETE;
-                else if (currentRatio > 0.4) currentStep = ReindexStep.SYNCING_MID;
-            }
-
-            updateTaskStatus(taskId, ReindexTaskStatus.RUNNING, currentStep, totalDocs, processed);
-
-            if (processed % 5000 == 0) {
-                log.info("Task {}: Progress {}/{}", taskId, processed, totalDocs);
-            }
-        }
-    }
-
-    private void bulkIndex(List<UserIndex> docs, String indexName) {
+    protected void bulkIndex(List<T> docs, String indexName) {
         if (docs.isEmpty()) return;
 
         List<IndexQuery> queries = docs.stream()
-                .map(doc -> new IndexQueryBuilder()
-                        .withId(doc.getId())
-                        .withObject(doc)
-                        .build())
+                .map(doc -> {
+                    // We assume the model has an getId() method or use reflection/ObjectUtils
+                    // For safety in this generic context, we can use ElasticsearchOperations' default ID extraction
+                    return new IndexQueryBuilder()
+                            .withObject(doc)
+                            .build();
+                })
                 .toList();
 
         esOps.bulkIndex(queries, IndexCoordinates.of(indexName));
         log.debug("Bulk indexed {} documents to {}", docs.size(), indexName);
     }
 
-    private Map<String, AccountResponse> fetchAccountsBatch(List<String> accountIds) {
-        try {
-            ApiResponse<List<AccountResponse>> response = authServiceClient.getAccountsByIds(accountIds);
-            if (response != null && response.data() != null) {
-                return response.data().stream()
-                        .collect(Collectors.toMap(AccountResponse::id, acc -> acc));
-            }
-        } catch (Exception e) {
-            log.warn("Failed to fetch accounts batch: {}", e.getMessage());
-        }
-        return Map.of();
-    }
-
-    private long getUserCountFromUserService() {
-        try {
-            ApiResponse<Long> response = userServiceClient.getUserCount();
-            if (response != null && response.data() != null) {
-                return response.data();
-            }
-        } catch (Exception e) {
-            log.warn("Failed to get user count from user-service: {}", e.getMessage());
-        }
-        return 0;
-    }
-
-    private void deletePhysicalIndexIfConflict() {
-        String alias = esProperties.getUserAlias();
+    private void deletePhysicalIndexIfConflict(String alias) {
         IndexOperations indexOps = esOps.indexOps(IndexCoordinates.of(alias));
 
         if (!indexOps.exists()) {
@@ -238,12 +157,11 @@ public class UserSyncServiceImpl implements UserSyncService {
                 log.debug("'{}' is already an alias, no conflict to resolve", alias);
             }
         } catch (Exception e) {
-            log.error("Error while checking/deleting physical index '{}': {}", alias, e.getMessage(), e);
+            log.error("Error while checking/deleting physical index '{}': {}", alias, e.getMessage());
         }
     }
 
-    private List<String> switchAlias(String newIndex) {
-        String alias = esProperties.getUserAlias();
+    private List<String> switchAlias(String alias, String newIndex) {
         IndexOperations newIndexOps = esOps.indexOps(IndexCoordinates.of(newIndex));
         List<String> oldIndexes = new ArrayList<>();
 
@@ -267,7 +185,7 @@ public class UserSyncServiceImpl implements UserSyncService {
                 log.info("Removed alias '{}' from {} indices", alias, existingAliases.size());
             }
         } catch (Exception e) {
-            log.warn("Failed to remove existing aliases (might not exist): {}", e.getMessage());
+            log.warn("Failed to remove existing aliases for '{}' (might not exist): {}", alias, e.getMessage());
         }
 
         AliasActions addAction = new AliasActions();
@@ -283,14 +201,13 @@ public class UserSyncServiceImpl implements UserSyncService {
         return oldIndexes;
     }
 
-    private void deleteOldIndexes(List<String> oldIndexes, String currentIndex) {
+    private void deleteOldIndexes(String alias, List<String> oldIndexes, String currentIndex) {
         try {
             if (oldIndexes.isEmpty()) {
-                log.debug("No old indexes found to clean up");
                 return;
             }
 
-            String indexPrefix = esProperties.getUserAlias() + "_";
+            String indexPrefix = alias + "_";
 
             List<String> sortedIndexes = oldIndexes.stream()
                     .filter(idx -> idx.startsWith(indexPrefix) && !idx.equals(currentIndex))
@@ -309,23 +226,13 @@ public class UserSyncServiceImpl implements UserSyncService {
                     .skip(retainCount)
                     .toList();
 
-            if (indexesToDelete.isEmpty()) {
-                log.info("No old indexes to delete. Current count: {}, retain: {}",
-                        sortedIndexes.size(), retainCount);
-                return;
-            }
-
             for (String indexName : indexesToDelete) {
                 IndexOperations ops = esOps.indexOps(IndexCoordinates.of(indexName));
                 ops.delete();
                 log.info("Deleted old index: {}", indexName);
             }
-
-            log.info("Cleanup completed. Deleted {} old indexes, retained {} recent indexes",
-                    indexesToDelete.size(), Math.min(retainCount, sortedIndexes.size()));
-
         } catch (Exception e) {
-            log.warn("Failed to cleanup old indexes: {}", e.getMessage(), e);
+            log.warn("Failed to cleanup old indexes for alias '{}': {}", alias, e.getMessage());
         }
     }
 }
