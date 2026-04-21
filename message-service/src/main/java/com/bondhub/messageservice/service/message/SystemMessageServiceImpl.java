@@ -142,6 +142,10 @@ public class SystemMessageServiceImpl implements SystemMessageService {
             String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
 
             room.getMembers().forEach(member -> {
+                if (Boolean.FALSE.equals(member.getActive())) {
+                    return;
+                }
+
                 if (recipientUserIds != null && !recipientUserIds.contains(member.getUserId())) {
                     return;
                 }
