@@ -70,6 +70,27 @@ public abstract class AbstractSyncService<T> extends AbstractSearchIndexService 
         return taskTracker.getStatus(taskId);
     }
 
+    @Override
+    public Object getDocument(String id) {
+        Object doc = esOps.get(id, getIndexClass(), IndexCoordinates.of(getAlias()));
+        if (doc == null) {
+            throw new AppException(ErrorCode.EL_DOCUMENT_NOT_FOUND);
+        }
+        return doc;
+    }
+
+    @Override
+    public IndexOperationResponse switchAlias(String targetIndexName) {
+        String alias = getAlias();
+        try {
+            switchAlias(alias, targetIndexName);
+            return new IndexOperationResponse(localizationUtil.getMessage("search.alias.switch.success"), targetIndexName);
+        } catch (Exception e) {
+            log.error("Failed to switch alias '{}' to index '{}': {}", alias, targetIndexName, e.getMessage());
+            throw new AppException(ErrorCode.EL_CLUSTER_UNHEALTHY);
+        }
+    }
+
     protected void updateTaskStatus(String taskId, ReindexTaskStatus status, ReindexStep step, long total, long processed) {
         taskTracker.updateStatus(taskId, ReindexStatusResponse.builder()
                 .taskId(taskId)

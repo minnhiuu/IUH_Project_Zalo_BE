@@ -7,6 +7,7 @@ import com.bondhub.searchservice.enums.SearchIndexType;
 import com.bondhub.searchservice.service.index.core.SearchIndexSynchronizer;
 import com.bondhub.searchservice.service.index.admin.SearchIndexOrchestrator;
 import com.bondhub.searchservice.service.index.admin.ElasticsearchAdminService;
+import com.bondhub.searchservice.model.elasticsearch.UserIndex;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -76,6 +77,20 @@ public class ElasticsearchAdminController {
             "message", localizationUtil.getMessage("search.re-index.user.success"),
             "userId", userId
         )));
+    }
+
+    @GetMapping("/index/{type}/document/{id}")
+    public ResponseEntity<ApiResponse<Object>> getDocument(
+            @PathVariable SearchIndexType type,
+            @PathVariable String id) {
+        return ResponseEntity.ok(ApiResponse.success(orchestrator.getDocument(type, id)));
+    }
+
+    @PostMapping("/index/{type}/switch-alias/{indexName}")
+    public ResponseEntity<ApiResponse<IndexOperationResponse>> switchAlias(
+            @PathVariable SearchIndexType type,
+            @PathVariable String indexName) {
+        return ResponseEntity.ok(ApiResponse.success(orchestrator.switchAlias(type, indexName)));
     }
 
     @DeleteMapping("/indexes/{indexName}")

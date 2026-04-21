@@ -37,4 +37,12 @@ public class SearchIndexOrchestrator {
     public ReindexStatusResponse getStatus(SearchIndexType type, String taskId) {
         return getHandler(type).getReindexStatus(taskId);
     }
+
+    public Object getDocument(SearchIndexType type, String id) {
+        return getHandler(type).getDocument(id);
+    }
+
+    public com.bondhub.searchservice.dto.response.IndexOperationResponse switchAlias(SearchIndexType type, String indexName) {
+        return getHandler(type).switchAlias(indexName);
+    }
 }
