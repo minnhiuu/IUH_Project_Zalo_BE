@@ -41,6 +41,36 @@ public class KafkaTopicConfig {
         return createTopic(topicProperties.getUserEvents().getIndexDeleted() + ".dlq");
     }
 
+    @Bean
+    public NewTopic postCreatedEvents() {
+        return createTopic(topicProperties.getSocialFeedEvents().getPostCreated());
+    }
+
+    @Bean
+    public NewTopic postUpdatedEvents() {
+        return createTopic(topicProperties.getSocialFeedEvents().getPostUpdated());
+    }
+
+    @Bean
+    public NewTopic postDeletedEvents() {
+        return createTopic(topicProperties.getSocialFeedEvents().getPostDeleted());
+    }
+
+    @Bean
+    public NewTopic reactionToggleCommandRequested() {
+        return createTopic(topicProperties.getSocialFeedEvents().getReactionToggleCommandRequested());
+    }
+
+    @Bean
+    public NewTopic postCommentCountProjectionRequested() {
+        return createTopic(topicProperties.getSocialFeedEvents().getPostCommentCountProjectionRequested());
+    }
+
+    @Bean
+    public NewTopic userInteractionEvents() {
+        return createTopic(topicProperties.getInteractionEvents().getUserInteraction());
+    }
+
     private NewTopic createTopic(String topicName) {
         log.info("Creating Kafka topic: {}", topicName);
         return TopicBuilder.name(topicName)

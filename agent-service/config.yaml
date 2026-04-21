@@ -1,0 +1,4 @@
+app_name: "agent-service"
+app_port: 8082
+max_web_retries: 1
+api_gateway_url: "http://localhost:8080"
