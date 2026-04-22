@@ -144,6 +144,8 @@ public class UserInternalServiceImpl implements UserInternalService {
                 .fullName(user.getFullName())
                 .avatar(user.getAvatar())
                 .accountId(user.getAccountId())
+                .bio(user.getBio())
+                .initialInterests(user.getInitialInterests())
                 .build();
     }
 }

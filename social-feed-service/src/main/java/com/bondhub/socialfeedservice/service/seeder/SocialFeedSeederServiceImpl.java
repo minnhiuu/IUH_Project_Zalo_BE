@@ -579,7 +579,7 @@ public class SocialFeedSeederServiceImpl implements SocialFeedSeederService {
                 String userId = accountIdToUserId.get(account.id());
                 if (userId != null && !userId.isBlank()) {
                     try {
-                        postRecommendationClient.revectorizeUser(userId);
+                        postRecommendationClient.seedUserInterests(userId, new UserInterestSeedUpdateRequest(interests));
                     } catch (Exception ex) {
                         log.warn("⚠️  Re-vectorization failed for userId={}: {}", userId, ex.getMessage());
                     }

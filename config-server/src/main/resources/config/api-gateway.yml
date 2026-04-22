@@ -173,6 +173,28 @@ spring:
                     name: socialFeedServiceCircuitBreaker
                     fallbackUri: forward:/fallback/general
 
+            - id: post-recommendation-service-admin
+              uri: lb://post-recommendation-service
+              predicates:
+                - Path=/api/admin/recommendations/**
+              filters:
+                - RewritePath=/api/admin/recommendations/(?<segment>.*), /internal/recommendations/${segment}
+                - name: CircuitBreaker
+                  args:
+                    name: postRecommendationServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/general
+
+            - id: post-recommendation-service-admin-stats
+              uri: lb://post-recommendation-service
+              predicates:
+                - Path=/api/admin/vector-store/**
+              filters:
+                - RewritePath=/api/admin/vector-store/(?<segment>.*), /internal/vector-store/${segment}
+                - name: CircuitBreaker
+                  args:
+                    name: postRecommendationServiceCircuitBreaker
+                    fallbackUri: forward:/fallback/general
+
             - id: user-service-admin
               uri: lb://user-service
               predicates:
@@ -563,6 +585,10 @@ resilience4j:
         base-config: default
       socialFeedServiceCircuitBreaker:
         base-config: default
+      postRecommendationServiceCircuitBreaker:
+        base-config: default
+        failure-rate-threshold: 70
+        wait-duration-in-open-state: 30s
 
   timelimiter:
     configs:
@@ -587,6 +613,10 @@ resilience4j:
       friendServiceCircuitBreaker:
         base-config: default
       socialFeedServiceCircuitBreaker:
+        base-config: default
+      postRecommendationServiceCircuitBreaker:
+        timeout-duration: 120s
+        cancel-running-future: false
         base-config: default
 
   # Retry Configuration
