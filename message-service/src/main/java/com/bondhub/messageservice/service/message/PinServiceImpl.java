@@ -3,6 +3,7 @@ package com.bondhub.messageservice.service.message;
 import com.bondhub.common.enums.SystemActionType;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
+import com.bondhub.common.utils.S3UtilV2;
 import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.messageservice.model.*;
 import com.bondhub.messageservice.repository.ConversationRepository;
@@ -32,6 +33,7 @@ public class PinServiceImpl implements PinService {
     private final SystemMessageService systemMessageService;
     private final MongoTemplate mongoTemplate;
     private final SecurityUtil securityUtil;
+    private final S3UtilV2 s3UtilV2;
 
     @Override
     public List<PinnedMessageInfo> getPins(String conversationId) {
@@ -85,9 +87,10 @@ public class PinServiceImpl implements PinService {
         Map<String, Object> meta = new HashMap<>();
         meta.put("messageId", messageId);
         meta.put("contentSnapshot", snapshot);
-        meta.put("originalSenderId", msg.getSenderId());
-        meta.put("originalSenderName", msg.getSenderName());
-        meta.put("originalSenderAvatar", msg.getSenderAvatar());
+        meta.put("originalSenderName", actorName);
+        
+        meta.put("originalSenderAvatar", s3UtilV2.getFullUrl(actor != null ? actor.getAvatar() : null));
+
         meta.put("originalContent", msg.getContent());
         
         systemMessageService.sendSystemMessage(conversationId, actorId, actorName,
@@ -127,8 +130,10 @@ public class PinServiceImpl implements PinService {
         
         if (msg != null) {
             meta.put("originalSenderId", msg.getSenderId());
-            meta.put("originalSenderName", msg.getSenderName());
-            meta.put("originalSenderAvatar", msg.getSenderAvatar());
+            meta.put("originalSenderName", actorName);
+            
+            meta.put("originalSenderAvatar", s3UtilV2.getFullUrl(actor != null ? actor.getAvatar() : null));
+
             meta.put("originalContent", msg.getContent());
         }
 

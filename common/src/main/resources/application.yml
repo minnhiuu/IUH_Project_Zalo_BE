@@ -22,3 +22,12 @@ jwt:
     expiration-web: ${JWT_REFRESH_WEB_EXPIRATION} # 14 days in milliseconds
     expiration-mobile: ${JWT_REFRESH_MOBILE_EXPIRATION} # 365 days in milliseconds
 
+# AWS S3 Configuration
+cloud:
+  aws:
+    region:
+      static: ${AWS_REGION}
+aws:
+  s3:
+    bucket:
+      name: ${AWS_S3_BUCKET_NAME}

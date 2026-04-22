@@ -6,6 +6,7 @@ import com.bondhub.common.dto.client.messageservice.MessageSendRequest;
 import com.bondhub.messageservice.dto.request.ReactionRequest;
 import com.bondhub.messageservice.dto.response.MessageContextResponse;
 import com.bondhub.messageservice.dto.response.MessageResponse;
+import com.bondhub.messageservice.dto.response.CursorPageResponse;
 import com.bondhub.messageservice.dto.response.MessageSeenResponse;
 import com.bondhub.messageservice.service.message.MessageService;
 import jakarta.validation.Valid;
@@ -42,6 +43,18 @@ public class MessageController {
             @RequestParam(defaultValue = "20") int size) {
         return ResponseEntity.ok(ApiResponse.success(
                 messageService.findChatMessages(conversationId, page, size)));
+    }
+
+    @GetMapping("/v2/conversations/{conversationId}/messages")
+    @Operation(summary = "Get messages of a conversation with cursor-based pagination (V2)")
+    public ResponseEntity<ApiResponse<CursorPageResponse<MessageResponse>>> getChatMessagesV2(
+            @PathVariable String conversationId,
+            @RequestParam(required = false) String cursor,
+            @RequestParam(defaultValue = "20") int limit,
+            @RequestParam(defaultValue = "OLDER") String direction,
+            @RequestParam(required = false) String aroundMessageId) {
+        return ResponseEntity.ok(ApiResponse.success(
+                messageService.findChatMessagesV2(conversationId, cursor, limit, direction, aroundMessageId)));
     }
 
     @GetMapping("/conversations/{conversationId}/media")

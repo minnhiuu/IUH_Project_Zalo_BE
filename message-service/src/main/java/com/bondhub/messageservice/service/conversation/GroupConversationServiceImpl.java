@@ -10,6 +10,7 @@ import com.bondhub.common.model.kafka.EventType;
 import com.bondhub.common.publisher.OutboxEventPublisher;
 import com.bondhub.common.dto.client.fileservice.FileUploadResponse;
 import com.bondhub.common.utils.PhoneUtil;
+import com.bondhub.common.utils.S3UtilV2;
 import com.bondhub.messageservice.dto.request.GroupConversationCreateRequest;
 import com.bondhub.messageservice.dto.request.LeaveGroupRequest;
 import com.bondhub.messageservice.dto.request.UpdateGroupSettingsRequest;
@@ -65,6 +66,7 @@ public class GroupConversationServiceImpl implements GroupConversationService {
     private final GroupInviteAsyncService groupInviteAsyncService;
 
     private final OutboxEventPublisher outboxEventPublisher;
+    private final S3UtilV2 s3UtilV2;
 
     @Override
     public ConversationResponse createGroupConversation(GroupConversationCreateRequest request) {
@@ -684,7 +686,7 @@ public class GroupConversationServiceImpl implements GroupConversationService {
     @Override
     public Map<String, List<SearchMemberResponse>> getFriendsDirectory(String conversationId) {
         String currentUserId = helper.getSecurityUtil().getCurrentUserId();
-        String baseUrl = helper.getBaseUrl();
+        String baseUrl = s3UtilV2.getS3BaseUrl();
         final Set<String> memberIds = getActiveMemberIds(conversationId);
 
         ChatUser currentUser = chatUserRepository.findById(currentUserId).orElse(null);
@@ -749,7 +751,7 @@ public class GroupConversationServiceImpl implements GroupConversationService {
         List<ChatUser> pagedCandidates = (start < candidateList.size()) ? candidateList.subList(start, end) : Collections.emptyList();
         Page<ChatUser> candidatesPage = new PageImpl<>(pagedCandidates, pageable, candidateList.size());
 
-        String baseUrl = helper.getBaseUrl();
+        String baseUrl = s3UtilV2.getS3BaseUrl();
         return PageResponse.fromPage(candidatesPage, u -> {
             String phoneNumber = (u.getPhoneNumber() != null && phoneTokens.contains(u.getPhoneNumber()))
                     ? u.getPhoneNumber() : null;
@@ -774,7 +776,7 @@ public class GroupConversationServiceImpl implements GroupConversationService {
 
         String normalizedQuery = query == null ? "" : query.trim();
         boolean hasQuery = !normalizedQuery.isBlank();
-        String baseUrl = helper.getBaseUrl();
+        String baseUrl = s3UtilV2.getS3BaseUrl();
         List<String> friendIdList = new ArrayList<>(friendIds);
 
         Pageable pageable = PageRequest.of(Math.max(page, 0), Math.max(size, 1));
@@ -879,7 +881,7 @@ public class GroupConversationServiceImpl implements GroupConversationService {
         Conversation conversation = helper.findGroupConversation(conversationId);
         helper.assertMember(conversation, currentUserId);
 
-        String baseUrl = helper.getBaseUrl();
+        String baseUrl = s3UtilV2.getS3BaseUrl();
         Pageable pageable = PageRequest.of(Math.max(page, 0), Math.max(size, 1));
 
         List<AggregationOperation> pipeline = new ArrayList<>();
@@ -956,7 +958,7 @@ public class GroupConversationServiceImpl implements GroupConversationService {
 
         String normalizedQuery = query == null ? "" : query.trim();
         boolean hasQuery = !normalizedQuery.isBlank();
-        String baseUrl = helper.getBaseUrl();
+        String baseUrl = s3UtilV2.getS3BaseUrl();
         Pageable pageable = PageRequest.of(Math.max(page, 0), Math.max(size, 1));
 
         List<AggregationOperation> pipeline = new ArrayList<>();
@@ -1231,7 +1233,7 @@ public class GroupConversationServiceImpl implements GroupConversationService {
         }
 
         List<ChatUser> blockedUsers = chatUserRepository.findAllById(blockedIds);
-        String baseUrl = helper.getBaseUrl();
+        String baseUrl = s3UtilV2.getS3BaseUrl();
 
         List<SearchMemberResponse> all = blockedUsers.stream()
                 .map(u -> SearchMemberResponse.builder()
@@ -1263,7 +1265,7 @@ public class GroupConversationServiceImpl implements GroupConversationService {
         Set<String> blockedIds = getBlockedUserIds(conversation);
         String normalizedQuery = query == null ? "" : query.trim();
         boolean hasQuery = !normalizedQuery.isBlank();
-        String baseUrl = helper.getBaseUrl();
+        String baseUrl = s3UtilV2.getS3BaseUrl();
         Pageable pageable = PageRequest.of(Math.max(page, 0), Math.max(size, 1));
 
         List<AggregationOperation> pipeline = new ArrayList<>();
@@ -1383,7 +1385,7 @@ public class GroupConversationServiceImpl implements GroupConversationService {
 
         Map<String, ChatUser> userCache = chatUserRepository.findAllById(allUserIds).stream()
                 .collect(Collectors.toMap(ChatUser::getId, u -> u));
-        String baseUrl = helper.getBaseUrl();
+        String baseUrl = s3UtilV2.getS3BaseUrl();
         boolean viewerCanSee = helper.canViewerSeeStatus(currentUserId, userCache);
 
         List<ConversationResponse> responses = conversations.stream()

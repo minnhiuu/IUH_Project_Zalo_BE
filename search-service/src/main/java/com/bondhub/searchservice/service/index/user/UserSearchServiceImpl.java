@@ -5,16 +5,14 @@ import co.elastic.clients.elasticsearch._types.query_dsl.TextQueryType;
 import com.bondhub.common.dto.PageResponse;
 import com.bondhub.common.dto.client.userservice.user.response.UserSummaryResponse;
 import com.bondhub.common.enums.Role;
-import com.bondhub.common.utils.S3Util;
+import com.bondhub.common.utils.S3UtilV2;
 import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.searchservice.config.ElasticsearchProperties;
 import com.bondhub.searchservice.model.elasticsearch.UserIndex;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
-import lombok.experimental.NonFinal;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.*;
 import org.springframework.data.elasticsearch.client.elc.NativeQuery;
 import org.springframework.data.elasticsearch.core.*;
@@ -32,158 +30,133 @@ import java.util.List;
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public class UserSearchServiceImpl implements UserSearchService {
 
-    ElasticsearchOperations esOps;
-    SecurityUtil securityUtil;
-    ElasticsearchProperties esProperties;
+        ElasticsearchOperations esOps;
+        SecurityUtil securityUtil;
+        ElasticsearchProperties esProperties;
+        S3UtilV2 s3UtilV2;
 
-    @NonFinal
-    @Value("${aws.s3.bucket.name}")
-    String bucketName;
+        @Override
+        public PageResponse<List<UserSummaryResponse>> searchUsers(String keyword, Pageable pageable) {
 
-    @NonFinal
-    @Value("${cloud.aws.region.static}")
-    String region;
+                if (!StringUtils.hasText(keyword)) {
+                        return PageResponse.empty(pageable);
+                }
 
+                String searchTerm = keyword.trim();
+                String currentUserId = securityUtil.getCurrentUserId();
 
-    @Override
-    public PageResponse<List<UserSummaryResponse>> searchUsers(String keyword, Pageable pageable) {
+                Query query = Query.of(q -> q.bool(b -> {
+                        b.should(s -> s.term(t -> t.field("phoneNumber")
+                                        .value(searchTerm)));
 
-        if (!StringUtils.hasText(keyword)) {
-            return PageResponse.empty(pageable);
+                        b.should(s -> s.match(m -> m.field("fullName")
+                                        .query(searchTerm)
+                                        .boost(5.0f)));
+
+                        b.should(s -> s.match(m -> m.field("fullName.fuzzy")
+                                        .query(searchTerm)
+                                        .fuzziness("1")
+                                        .prefixLength(0)
+                                        .maxExpansions(50)
+                                        .fuzzyTranspositions(true)
+                                        .boost(2.0f)));
+
+                        b.should(s -> s.multiMatch(mm -> mm.fields("fullName", "fullName.fuzzy")
+                                        .query(searchTerm)
+                                        .fuzziness("1")
+                                        .prefixLength(0)
+                                        .maxExpansions(50)
+                                        .type(TextQueryType.BestFields)
+                                        .boost(1.5f)));
+
+                        b.minimumShouldMatch("1");
+
+                        b.filter(f -> f.term(t -> t.field("role")
+                                        .value(Role.USER.name())));
+
+                        if (currentUserId != null) {
+                                b.filter(f -> f.bool(fb -> fb
+                                                .should(s -> s.bool(nb -> nb.mustNot(mn -> mn
+                                                                .term(t -> t.field("id").value(currentUserId)))))
+                                                .should(s -> s.term(t -> t.field("phoneNumber").value(searchTerm)))
+                                                .minimumShouldMatch("1")));
+                        }
+
+                        return b;
+                }));
+
+                Pageable finalPageable = PageRequest.of(
+                                pageable.getPageNumber(),
+                                pageable.getPageSize(),
+                                Sort.by(
+                                                Sort.Order.desc("_score"),
+                                                Sort.Order.desc("createdAt")));
+
+                NativeQuery nativeQuery = NativeQuery.builder()
+                                .withQuery(query)
+                                .withPageable(finalPageable)
+                                .build();
+
+                SearchHits<UserIndex> hits = esOps.search(
+                                nativeQuery,
+                                UserIndex.class,
+                                IndexCoordinates.of(esProperties.getUserAlias()));
+
+                SearchPage<UserIndex> page = SearchHitSupport.searchPageFor(hits, finalPageable);
+
+                return PageResponse.fromPage(
+                                page,
+                                hit -> toUserSummaryResponse(hit.getContent(), searchTerm));
         }
 
-        String searchTerm = keyword.trim();
-        String currentUserId = securityUtil.getCurrentUserId();
-
-        Query query = Query.of(q -> q.bool(b -> {
-            b.should(s -> s.term(t ->
-                    t.field("phoneNumber")
-                            .value(searchTerm)
-            ));
-
-            b.should(s -> s.match(m ->
-                    m.field("fullName")
-                            .query(searchTerm)
-                            .boost(5.0f)
-            ));
-
-            b.should(s -> s.match(m ->
-                    m.field("fullName.fuzzy")
-                            .query(searchTerm)
-                            .fuzziness("1")
-                            .prefixLength(0)
-                            .maxExpansions(50)
-                            .fuzzyTranspositions(true)
-                            .boost(2.0f)
-            ));
-
-            b.should(s -> s.multiMatch(mm ->
-                    mm.fields("fullName", "fullName.fuzzy")
-                            .query(searchTerm)
-                            .fuzziness("1")
-                            .prefixLength(0)
-                            .maxExpansions(50)
-                            .type(TextQueryType.BestFields)
-                            .boost(1.5f)
-            ));
-
-            b.minimumShouldMatch("1");
-
-            b.filter(f -> f.term(t ->
-                    t.field("role")
-                            .value(Role.USER.name())
-            ));
-
-            if (currentUserId != null) {
-                b.filter(f -> f.bool(fb -> fb
-                        .should(s -> s.bool(nb -> nb.mustNot(mn -> mn.term(t -> t.field("id").value(currentUserId)))))
-                        .should(s -> s.term(t -> t.field("phoneNumber").value(searchTerm)))
-                        .minimumShouldMatch("1")
-                ));
-            }
-
-            return b;
-        }));
-
-        Pageable finalPageable = PageRequest.of(
-                pageable.getPageNumber(),
-                pageable.getPageSize(),
-                Sort.by(
-                        Sort.Order.desc("_score"),
-                        Sort.Order.desc("createdAt")
-                )
-        );
-
-        NativeQuery nativeQuery = NativeQuery.builder()
-                .withQuery(query)
-                .withPageable(finalPageable)
-                .build();
-
-        SearchHits<UserIndex> hits = esOps.search(
-                nativeQuery,
-                UserIndex.class,
-                IndexCoordinates.of(esProperties.getUserAlias())
-        );
-
-        SearchPage<UserIndex> page =
-                SearchHitSupport.searchPageFor(hits, finalPageable);
-
-        return PageResponse.fromPage(
-                page,
-                hit -> toUserSummaryResponse(hit.getContent(), searchTerm)
-        );
-    }
-
-    private UserSummaryResponse toUserSummaryResponse(UserIndex userIndex, String searchTerm) {
-        boolean isPhoneMatch = searchTerm.equals(userIndex.getPhoneNumber());
-        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
-        return UserSummaryResponse.builder()
-                .id(userIndex.getId())
-                .fullName(userIndex.getFullName())
-                .avatar(userIndex.getAvatar() != null ? baseUrl + userIndex.getAvatar() : null)
-                .phoneNumber(isPhoneMatch ? userIndex.getPhoneNumber() : null)
-                .build();
-    }
-
-    @Override
-    public List<UserSummaryResponse> findUsersByPhones(List<String> phones) {
-        if (phones == null || phones.isEmpty()) {
-            return Collections.emptyList();
+        private UserSummaryResponse toUserSummaryResponse(UserIndex userIndex, String searchTerm) {
+                boolean isPhoneMatch = searchTerm.equals(userIndex.getPhoneNumber());
+                String baseUrl = s3UtilV2.getS3BaseUrl();
+                return UserSummaryResponse.builder()
+                                .id(userIndex.getId())
+                                .fullName(userIndex.getFullName())
+                                .avatar(userIndex.getAvatar() != null ? baseUrl + userIndex.getAvatar() : null)
+                                .phoneNumber(isPhoneMatch ? userIndex.getPhoneNumber() : null)
+                                .build();
         }
 
-        // ES terms query for exact match on phoneNumber keyword field
-        Query query = Query.of(q -> q.bool(b -> {
-            b.filter(f -> f.terms(t -> t
-                    .field("phoneNumber")
-                    .terms(tv -> tv.value(phones.stream()
-                            .map(co.elastic.clients.elasticsearch._types.FieldValue::of)
-                            .toList()))
-            ));
-            b.filter(f -> f.term(t -> t.field("role").value(Role.USER.name())));
-            return b;
-        }));
+        @Override
+        public List<UserSummaryResponse> findUsersByPhones(List<String> phones) {
+                if (phones == null || phones.isEmpty()) {
+                        return Collections.emptyList();
+                }
 
-        NativeQuery nativeQuery = NativeQuery.builder()
-                .withQuery(query)
-                .withPageable(PageRequest.of(0, phones.size()))
-                .build();
+                // ES terms query for exact match on phoneNumber keyword field
+                Query query = Query.of(q -> q.bool(b -> {
+                        b.filter(f -> f.terms(t -> t
+                                        .field("phoneNumber")
+                                        .terms(tv -> tv.value(phones.stream()
+                                                        .map(co.elastic.clients.elasticsearch._types.FieldValue::of)
+                                                        .toList()))));
+                        b.filter(f -> f.term(t -> t.field("role").value(Role.USER.name())));
+                        return b;
+                }));
 
-        SearchHits<UserIndex> hits = esOps.search(
-                nativeQuery,
-                UserIndex.class,
-                IndexCoordinates.of(esProperties.getUserAlias())
-        );
+                NativeQuery nativeQuery = NativeQuery.builder()
+                                .withQuery(query)
+                                .withPageable(PageRequest.of(0, phones.size()))
+                                .build();
 
-        List<UserSummaryResponse> results = new ArrayList<>();
-        for (SearchHit<UserIndex> hit : hits.getSearchHits()) {
-            UserIndex u = hit.getContent();
-            results.add(UserSummaryResponse.builder()
-                    .id(u.getId())
-                    .fullName(u.getFullName())
-                    .avatar(u.getAvatar())
-                    .phoneNumber(u.getPhoneNumber())
-                    .build());
+                SearchHits<UserIndex> hits = esOps.search(
+                                nativeQuery,
+                                UserIndex.class,
+                                IndexCoordinates.of(esProperties.getUserAlias()));
+
+                List<UserSummaryResponse> results = new ArrayList<>();
+                for (SearchHit<UserIndex> hit : hits.getSearchHits()) {
+                        UserIndex u = hit.getContent();
+                        results.add(UserSummaryResponse.builder()
+                                        .id(u.getId())
+                                        .fullName(u.getFullName())
+                                        .avatar(u.getAvatar())
+                                        .phoneNumber(u.getPhoneNumber())
+                                        .build());
+                }
+                return results;
         }
-        return results;
-    }
 }
