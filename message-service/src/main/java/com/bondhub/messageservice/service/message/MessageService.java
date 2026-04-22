@@ -2,7 +2,6 @@ package com.bondhub.messageservice.service.message;
 
 import com.bondhub.common.dto.PageResponse;
 import com.bondhub.common.dto.client.messageservice.MessageSendRequest;
-import com.bondhub.messageservice.dto.response.MessageContextResponse;
 import com.bondhub.messageservice.dto.response.MessageResponse;
 import com.bondhub.messageservice.dto.response.CursorPageResponse;
 import com.bondhub.messageservice.dto.response.MessageSeenResponse;
@@ -73,14 +72,4 @@ public interface MessageService {
     CursorPageResponse<MessageResponse> findChatMessagesV2(
             String conversationId, String cursor, int limit, String direction, String aroundMessageId);
 
-    /**
-     * Lấy page index (0-based) của một message trong conversation.
-     * Dùng cho tính năng scroll-to khi click vào search result.
-     *
-     * @param conversationId ObjectId của conversation
-     * @param messageId      ObjectId của message cần tìm
-     * @param pageSize       Kích thước trang (phải khớp với pageSize FE dùng)
-     * @return {@link MessageContextResponse} chứa page, size, totalElements
-     */
-    MessageContextResponse getMessageContext(String conversationId, String messageId, int pageSize);
 }
