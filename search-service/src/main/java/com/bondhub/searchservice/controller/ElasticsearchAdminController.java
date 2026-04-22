@@ -1,13 +1,14 @@
 package com.bondhub.searchservice.controller;
 
 import com.bondhub.common.dto.ApiResponse;
+import com.bondhub.common.dto.PageResponse;
 import com.bondhub.common.utils.LocalizationUtil;
 import com.bondhub.searchservice.dto.response.*;
 import com.bondhub.searchservice.enums.SearchIndexType;
+import com.bondhub.searchservice.service.index.core.SearchIndexMonitor;
 import com.bondhub.searchservice.service.index.core.SearchIndexSynchronizer;
 import com.bondhub.searchservice.service.index.admin.SearchIndexOrchestrator;
 import com.bondhub.searchservice.service.index.admin.ElasticsearchAdminService;
-import com.bondhub.searchservice.model.elasticsearch.UserIndex;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -46,23 +47,33 @@ public class ElasticsearchAdminController {
 
     @GetMapping("/index/{type}/summary")
     public ResponseEntity<ApiResponse<ElasticsearchSummaryResponse>> getIndexSummary(@PathVariable SearchIndexType type) {
-        SearchIndexSynchronizer handler = orchestrator.getHandler(type);
+        SearchIndexSynchronizer syncHandler = orchestrator.getSyncHandler(type);
+        SearchIndexMonitor monitorHandler = orchestrator.getMonitorHandler(type);
+        
         return ResponseEntity.ok(ApiResponse.success(ElasticsearchSummaryResponse.builder()
-
-                .health(handler.getHealth())
-                .stats(handler.getStats())
-                .compare(handler.compareWithDatabase())
+                .health(monitorHandler.getHealth())
+                .stats(monitorHandler.getStats())
+                .compare(syncHandler.compareWithDatabase())
+                .failedEventsCount(monitorHandler.getFailedEventsCount())
                 .build()));
+    }
+
+    @GetMapping("/index/{type}/failed-events")
+    public ResponseEntity<ApiResponse<PageResponse<List<FailedEventResponse>>>> getFailedEvents(
+            @PathVariable SearchIndexType type,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        return ResponseEntity.ok(ApiResponse.success(orchestrator.getMonitorHandler(type).getFailedEvents(page, size)));
     }
 
     @GetMapping("/index/{type}/stats")
     public ResponseEntity<ApiResponse<IndexStatsResponse>> getIndexStats(@PathVariable SearchIndexType type) {
-        return ResponseEntity.ok(ApiResponse.success(orchestrator.getHandler(type).getStats()));
+        return ResponseEntity.ok(ApiResponse.success(orchestrator.getMonitorHandler(type).getStats()));
     }
 
     @GetMapping("/index/{type}/physical-indexes")
     public ResponseEntity<ApiResponse<List<IndexDetailResponse>>> getPhysicalIndexes(@PathVariable SearchIndexType type) {
-        return ResponseEntity.ok(ApiResponse.success(orchestrator.getHandler(type).getAllPhysicalIndexes()));
+        return ResponseEntity.ok(ApiResponse.success(orchestrator.getMonitorHandler(type).getAllPhysicalIndexes()));
     }
 
     @GetMapping("/health")

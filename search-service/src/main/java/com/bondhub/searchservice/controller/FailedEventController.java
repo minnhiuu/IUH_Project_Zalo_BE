@@ -3,11 +3,11 @@ package com.bondhub.searchservice.controller;
 import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.common.dto.PageResponse;
 import com.bondhub.common.utils.LocalizationUtil;
+import com.bondhub.searchservice.dto.request.FailedEventFilter;
 import com.bondhub.searchservice.dto.response.FailedEventResponse;
+import com.bondhub.searchservice.enums.SearchIndexType;
 import com.bondhub.searchservice.service.failevent.FailedEventService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -26,13 +26,8 @@ public class FailedEventController {
 
     @GetMapping("/paged")
     public ResponseEntity<ApiResponse<PageResponse<List<FailedEventResponse>>>> getFailedEventsPaged(
-            @RequestParam(required = false) Boolean resolved,
-            @RequestParam(required = false) String keyword,
-            @RequestParam(required = false) Integer hours,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size) {
-        Pageable pageable = PageRequest.of(page, size);
-        return ResponseEntity.ok(ApiResponse.success(failedEventService.getEventsByResolved(resolved, keyword, hours, pageable)));
+            FailedEventFilter filter) {
+        return ResponseEntity.ok(ApiResponse.success(failedEventService.getEventsPaged(filter)));
     }
 
     @GetMapping("/{id}")
@@ -67,8 +62,9 @@ public class FailedEventController {
     }
 
     @PostMapping("/retry-all")
-    public ResponseEntity<ApiResponse<Map<String, String>>> retryAllEvents() {
-        failedEventService.retryAllEvents();
+    public ResponseEntity<ApiResponse<Map<String, String>>> retryAllEvents(
+            @RequestParam(required = false) SearchIndexType type) {
+        failedEventService.retryAllEvents(type != null ? type.getTopics() : null);
         return ResponseEntity.ok(ApiResponse.success(Map.of(
             "message", localizationUtil.getMessage("search.retry.all.success")
         )));

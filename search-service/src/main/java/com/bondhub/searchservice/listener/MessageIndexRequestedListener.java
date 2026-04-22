@@ -86,6 +86,9 @@ public class MessageIndexRequestedListener {
         String stackTrace = stackTraceBytes != null ? new String(stackTraceBytes) : "No stacktrace available";
 
         String finalTopic = (originalTopic != null) ? originalTopic : dlqTopic;
+        if (finalTopic != null && finalTopic.endsWith(".dlq")) {
+            finalTopic = finalTopic.substring(0, finalTopic.length() - 4);
+        }
         int finalPartition = (originalPartition != null) ? originalPartition : dlqPartition;
         long finalOffset = (originalOffset != null) ? originalOffset : dlqOffset;
 
