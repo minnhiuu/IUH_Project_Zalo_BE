@@ -1,7 +1,10 @@
 package com.bondhub.socialfeedservice.service.reaction;
 
+import com.bondhub.common.enums.NotificationType;
+import com.bondhub.common.event.notification.RawNotificationEvent;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
+import com.bondhub.common.publisher.RawNotificationEventPublisher;
 import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.socialfeedservice.dto.request.reaction.ToggleReactionRequest;
 import com.bondhub.socialfeedservice.dto.response.post.AuthorInfo;
@@ -21,9 +24,12 @@ import com.bondhub.socialfeedservice.repository.UserSummaryRepository;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
@@ -33,6 +39,7 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
+@Slf4j
 public class ReactionServiceImpl implements ReactionService {
 
     ReactionRepository reactionRepository;
@@ -40,7 +47,8 @@ public class ReactionServiceImpl implements ReactionService {
     CommentRepository commentRepository;
     SecurityUtil securityUtil;
     ReactionEventPublisher reactionEventPublisher;
-    UserSummaryRepository userSummaryRepository;
+        UserSummaryRepository userSummaryRepository;
+        RawNotificationEventPublisher rawNotificationEventPublisher;
 
     @Override
     @Transactional
@@ -87,6 +95,8 @@ public class ReactionServiceImpl implements ReactionService {
                 request.type(),
                 desiredActive,
                 groupId);
+
+        publishPostReactionNotification(currentUserId, request.targetId(), request.targetType(), request.type(), desiredActive);
 
         UserSummary author = userSummaryRepository.findById(currentUserId).orElse(null);
         return ReactionResponse.builder()
@@ -248,4 +258,56 @@ public class ReactionServiceImpl implements ReactionService {
                 .orElseThrow(() -> new AppException(ErrorCode.COMMENT_NOT_FOUND));
         return comment.getReactionCount();
     }
+
+        private void publishPostReactionNotification(
+                        String actorId,
+                        String targetId,
+                        ReactionTargetType targetType,
+                        ReactionType reactionType,
+                        boolean desiredActive) {
+
+                if (!desiredActive || targetType != ReactionTargetType.POST) {
+                        log.debug("[ReactionNotification] Skip publish: targetType={}, desiredActive={}", targetType, desiredActive);
+                        return;
+                }
+
+                Post post = postRepository.findByIdAndActiveTrueAndIsCurrentTrue(targetId).orElse(null);
+                if (post == null || post.getAuthorId() == null || post.getAuthorId().equals(actorId)) {
+                        log.debug("[ReactionNotification] Skip publish: post missing or self-reaction, targetId={}, actorId={}, postAuthorId={}",
+                                        targetId,
+                                        actorId,
+                                        post != null ? post.getAuthorId() : null);
+                        return;
+                }
+
+                UserSummary actorSummary = userSummaryRepository.findById(actorId).orElse(null);
+                String actorName = actorSummary != null && actorSummary.getFullName() != null && !actorSummary.getFullName().isBlank()
+                                ? actorSummary.getFullName()
+                                : "Unknown User";
+                String actorAvatar = actorSummary != null ? actorSummary.getAvatar() : null;
+
+                try {
+                        Map<String, Object> payload = new HashMap<>();
+                        payload.put("postId", post.getId());
+                        payload.put("reactionType", reactionType.name());
+
+                        RawNotificationEvent notificationEvent = RawNotificationEvent.builder()
+                                        .recipientId(post.getAuthorId())
+                                        .actorId(actorId)
+                                        .actorName(actorName)
+                                        .actorAvatar(actorAvatar)
+                                        .type(NotificationType.POST_LIKE)
+                                        .referenceId(post.getId())
+                                        .payload(payload)
+                                        .occurredAt(LocalDateTime.now())
+                                        .build();
+
+                        rawNotificationEventPublisher.publish(notificationEvent);
+                        log.info("[ReactionNotification] Published POST_LIKE: actorId={}, recipientId={}, postId={}, reactionType={}",
+                                        actorId, post.getAuthorId(), post.getId(), reactionType);
+                } catch (Exception e) {
+                        log.warn("[ReactionNotification] Failed to publish POST_LIKE: actorId={}, targetId={}",
+                                        actorId, targetId, e);
+                }
+        }
 }

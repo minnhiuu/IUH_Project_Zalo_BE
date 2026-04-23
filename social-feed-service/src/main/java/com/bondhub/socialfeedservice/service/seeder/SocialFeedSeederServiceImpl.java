@@ -64,13 +64,13 @@ public class SocialFeedSeederServiceImpl implements SocialFeedSeederService {
     // ── Tuning knobs ─────────────────────────────────────────────────────────
 
     /** Total posts to generate (excluding auto-generated SHARE posts). */
-    static final int TARGET_POSTS         = 9_400;
+    static final int TARGET_POSTS         = 700;
     /** SHARE posts are generated as a fraction of saved base posts. */
-    static final int SHARE_POST_TARGET    = 600;
+    static final int SHARE_POST_TARGET    = 200;
     /** Mongo saveAll chunk size — keeps heap pressure low. */
-    static final int BATCH_SIZE           = 500;
+    static final int BATCH_SIZE           = 100;
 
-    static final int MAX_ACCOUNTS         = 50;
+    static final int MAX_ACCOUNTS         = 20;
     static final int INTERESTS_PER_USER   = 5;
 
     static final int COMMENTS_PER_POST    = 3;

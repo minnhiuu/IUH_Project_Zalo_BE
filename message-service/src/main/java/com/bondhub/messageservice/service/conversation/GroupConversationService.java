@@ -19,7 +19,7 @@ public interface GroupConversationService {
 
     ConversationResponse addMembersToGroup(String conversationId, List<String> memberIds);
 
-    ConversationResponse removeMemberFromGroup(String conversationId, String targetUserId);
+    ConversationResponse removeMemberFromGroup(String conversationId, String targetUserId, boolean blockFromGroup);
 
     ConversationResponse promoteToAdmin(String conversationId, String targetUserId);
 

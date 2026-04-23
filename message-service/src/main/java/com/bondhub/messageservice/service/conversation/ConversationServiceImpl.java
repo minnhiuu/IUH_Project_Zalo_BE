@@ -1,5 +1,6 @@
 package com.bondhub.messageservice.service.conversation;
 
+import com.bondhub.common.utils.S3UtilV2;
 import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
@@ -49,6 +50,7 @@ public class ConversationServiceImpl implements ConversationService {
     private final MongoTemplate mongoTemplate;
     private final FriendServiceClient friendServiceClient;
     private final ConversationHelper helper;
+    private final S3UtilV2 s3UtilV2;
 
     // ─────────────────────────── Core: Tạo / Lấy phòng chat ───────────────────────────
 
@@ -95,7 +97,7 @@ public class ConversationServiceImpl implements ConversationService {
 
         ChatUser partner = helper.resolvePartner(partnerId, currentUserId, userCache);
         boolean viewerCanSee = helper.canViewerSeeStatus(currentUserId, userCache);
-        String baseUrl = helper.getBaseUrl();
+        String baseUrl = s3UtilV2.getS3BaseUrl();
 
         String friendshipStatus = null;
         try {
@@ -146,7 +148,7 @@ public class ConversationServiceImpl implements ConversationService {
         final Map<String, String> friendshipStatusMap = tempMap;
 
         boolean viewerCanSee = helper.canViewerSeeStatus(currentUserId, userCache);
-        String baseUrl = helper.getBaseUrl();
+        String baseUrl = s3UtilV2.getS3BaseUrl();
 
         return PageResponse.fromPage(roomsPage, room -> {
             String partnerId = room.getMembers().stream()

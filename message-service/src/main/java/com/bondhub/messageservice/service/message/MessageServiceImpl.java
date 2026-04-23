@@ -1,10 +1,13 @@
 package com.bondhub.messageservice.service.message;
 
 import com.bondhub.common.utils.S3Util;
+import com.bondhub.common.utils.S3UtilV2;
 import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
 import com.bondhub.messageservice.dto.response.ChatNotification;
+import com.bondhub.messageservice.dto.response.CursorPageResponse;
+import com.bondhub.messageservice.dto.response.MessageResponse;
 import com.bondhub.messageservice.dto.response.MessageSeenResponse;
 import com.bondhub.messageservice.dto.response.ReplyMetadataResponse;
 import com.bondhub.messageservice.model.Conversation;
@@ -44,6 +47,7 @@ import org.springframework.data.mongodb.core.FindAndModifyOptions;
 
 import com.bondhub.messageservice.model.GroupSettings;
 import com.bondhub.messageservice.model.LinkPreview;
+import com.bondhub.messageservice.model.enums.MemberRole;
 import com.bondhub.messageservice.service.conversation.ConversationHelper;
 
 import java.time.LocalDateTime;
@@ -68,12 +72,9 @@ public class MessageServiceImpl implements MessageService {
     private final MessageMapper messageMapper;
     private final ConversationService conversationService;
     private final ConversationHelper conversationHelper;
+    private final S3UtilV2 s3UtilV2;
 
-    @Value("${aws.s3.bucket.name}")
-    private String bucketName;
 
-    @Value("${cloud.aws.region.static}")
-    private String region;
 
     @Value("${kafka.topics.socket-events}")
     private String socketEventsTopic;
@@ -111,7 +112,7 @@ public class MessageServiceImpl implements MessageService {
                 PageRequest.of(0, 1, Sort.by(Sort.Direction.DESC, "createdAt"))
             );
 
-        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+        String baseUrl = s3UtilV2.getS3BaseUrl();
         List<MessageResponse> dtos = messagePage.getContent().stream()
                 .map(msg -> messageMapper.mapToMessageResponse(msg, baseUrl))
                 .collect(Collectors.toList());
@@ -148,12 +149,158 @@ public class MessageServiceImpl implements MessageService {
         Page<Message> messagePage = messageRepository.findByConversationIdAndTypesAndNotDeleted(
                 conversationId, currentUserId, messageTypes, deletedBefore, pageable);
 
-        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+        String baseUrl = s3UtilV2.getS3BaseUrl();
         List<MessageResponse> dtos = messagePage.getContent().stream()
                 .map(msg -> messageMapper.mapToMessageResponse(msg, baseUrl))
                 .collect(Collectors.toList());
 
         return PageResponse.fromPageData(messagePage, dtos);
+    }
+
+    @Override
+    public CursorPageResponse<MessageResponse> findChatMessagesV2(
+            String conversationId, String cursor, int limit, String direction, String aroundMessageId) {
+        
+        String currentUserId = securityUtil.getCurrentUserId();
+        Conversation room = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
+        assertConversationMember(room, currentUserId);
+
+        if (aroundMessageId != null) {
+            Message target = messageRepository.findById(aroundMessageId)
+                    .orElseThrow(() -> new AppException(ErrorCode.MESSAGE_NOT_FOUND));
+            
+            if (!target.getConversationId().equals(conversationId)) {
+                throw new AppException(ErrorCode.MESSAGE_NOT_FOUND);
+            }
+
+            List<Message> older = findOlder(room, target.getCreatedAt(), limit / 2, currentUserId);
+            List<Message> newer = findNewer(room, target.getCreatedAt(), limit / 2, currentUserId);
+
+            List<Message> combined = new ArrayList<>();
+            combined.addAll(newer);
+            combined.add(target);
+            combined.addAll(older);
+
+            return buildCursorResponse(combined, limit, true);
+        }
+
+        return standardCursorPagination(room, cursor, direction, limit, currentUserId);
+    }
+
+    private CursorPageResponse<MessageResponse> standardCursorPagination(
+            Conversation room, String cursor, String direction, int limit, String currentUserId) {
+        
+        Query query = new Query();
+        List<Criteria> allCriteria = new ArrayList<>();
+        allCriteria.add(Criteria.where("conversationId").is(room.getId()));
+
+        LocalDateTime cursorTime = (cursor != null && !cursor.isBlank())
+                ? LocalDateTime.parse(cursor)
+                : LocalDateTime.now();
+
+        if ("NEWER".equalsIgnoreCase(direction)) {
+            allCriteria.add(Criteria.where("createdAt").gt(cursorTime));
+            query.with(Sort.by(Sort.Direction.ASC, "createdAt"));
+        } else {
+            allCriteria.add(Criteria.where("createdAt").lt(cursorTime));
+            query.with(Sort.by(Sort.Direction.DESC, "createdAt"));
+        }
+
+        allCriteria.addAll(getSecurityCriteria(room, currentUserId));
+        query.addCriteria(new Criteria().andOperator(allCriteria.toArray(new Criteria[0])));
+
+        query.limit(limit);
+        List<Message> messages = mongoTemplate.find(query, Message.class);
+
+        // FE expects DESC order (newest first)
+        if ("NEWER".equalsIgnoreCase(direction)) {
+            Collections.reverse(messages);
+        }
+
+        return buildCursorResponse(messages, limit, false);
+    }
+
+    private List<Message> findOlder(Conversation room, LocalDateTime time, int limit, String currentUserId) {
+        Query query = new Query();
+        List<Criteria> allCriteria = new ArrayList<>();
+        allCriteria.add(Criteria.where("conversationId").is(room.getId()));
+        allCriteria.add(Criteria.where("createdAt").lt(time));
+        allCriteria.addAll(getSecurityCriteria(room, currentUserId));
+        
+        query.addCriteria(new Criteria().andOperator(allCriteria.toArray(new Criteria[0])));
+        query.with(Sort.by(Sort.Direction.DESC, "createdAt"));
+        query.limit(limit);
+        
+        List<Message> messages = mongoTemplate.find(query, Message.class);
+        return messages; // Already DESC
+    }
+
+    private List<Message> findNewer(Conversation room, LocalDateTime time, int limit, String currentUserId) {
+        Query query = new Query();
+        List<Criteria> allCriteria = new ArrayList<>();
+        allCriteria.add(Criteria.where("conversationId").is(room.getId()));
+        allCriteria.add(Criteria.where("createdAt").gt(time));
+        allCriteria.addAll(getSecurityCriteria(room, currentUserId));
+        
+        query.addCriteria(new Criteria().andOperator(allCriteria.toArray(new Criteria[0])));
+        query.with(Sort.by(Sort.Direction.ASC, "createdAt"));
+        query.limit(limit);
+        
+        List<Message> messages = mongoTemplate.find(query, Message.class);
+        Collections.reverse(messages); // Reverse to make it DESC
+        return messages;
+    }
+
+    private List<Criteria> getSecurityCriteria(Conversation room, String currentUserId) {
+        List<Criteria> securityCriteria = new ArrayList<>();
+        
+        ConversationMember currentMember = room.getMembers().stream()
+                .filter(m -> m.getUserId().equals(currentUserId))
+                .findFirst().orElse(null);
+        boolean isActive = currentMember != null && isActiveMember(currentMember);
+
+        // Xác định mốc thời gian sớm nhất mà User có quyền xem tin nhắn
+        LocalDateTime memberJoinedAt = (currentMember != null && currentMember.getJoinedAt() != null)
+                ? currentMember.getJoinedAt()
+                : LocalDateTime.of(1970, 1, 1, 0, 0);
+        LocalDateTime deletedBefore = (room.getDeletedBefore() != null)
+                ? room.getDeletedBefore().getOrDefault(currentUserId, LocalDateTime.of(1970, 1, 1, 0, 0))
+                : LocalDateTime.of(1970, 1, 1, 0, 0);
+
+        LocalDateTime effectiveStartTime = memberJoinedAt.isAfter(deletedBefore) ? memberJoinedAt : deletedBefore;
+
+        securityCriteria.add(Criteria.where("deletedBy").ne(currentUserId));
+        securityCriteria.add(Criteria.where("createdAt").gt(effectiveStartTime));
+
+        if (!isActive) {
+            securityCriteria.add(Criteria.where("type").is(MessageType.SYSTEM));
+        }
+        
+        return securityCriteria;
+    }
+
+    private CursorPageResponse<MessageResponse> buildCursorResponse(
+            List<Message> messages, int limit, boolean isJump) {
+        
+        String baseUrl = s3UtilV2.getS3BaseUrl();
+        List<MessageResponse> dtos = messages.stream()
+                .map(msg -> messageMapper.mapToMessageResponse(msg, baseUrl))
+                .collect(Collectors.toList());
+        enrichMessages(dtos);
+
+        // List is DESC (newest at 0, oldest at size-1)
+        String newerCursor = messages.isEmpty() ? null : messages.get(0).getCreatedAt().toString();
+        String olderCursor = messages.isEmpty() ? null : messages.get(messages.size() - 1).getCreatedAt().toString();
+
+        return CursorPageResponse.<MessageResponse>builder()
+                .data(dtos)
+                .olderCursor(olderCursor)
+                .newerCursor(newerCursor)
+                .hasMoreOlder(messages.size() >= limit) 
+                .hasMoreNewer(isJump || messages.size() >= limit)
+                .isJumpResult(isJump)
+                .build();
     }
 
     // ─────────────────────────── Gửi tin nhắn ───────────────────────────
@@ -240,7 +387,7 @@ public class MessageServiceImpl implements MessageService {
         log.info("[Chat] Saved message & updated conversation state for room: {}", room.getId());
 
         // 6. Push notification qua Kafka cho từng thành viên
-        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+        String baseUrl = s3UtilV2.getS3BaseUrl();
         Conversation finalRoom = updatedRoom != null ? updatedRoom : room;
 
         List<ChatNotification> notifPrototypes = new ArrayList<>(
@@ -301,7 +448,7 @@ public class MessageServiceImpl implements MessageService {
                 .set("replyTo.type", MessageType.CHAT);
         mongoTemplate.updateMulti(replyQuery, replyUpdate, Message.class);
 
-        updateLastMessageIfRevoked(message);
+        updateLastMessageStatus(message, MessageStatus.REVOKED);
         broadcastStatusChange(message.getConversationId(), messageId, MessageStatus.REVOKED);
     }
 
@@ -311,6 +458,63 @@ public class MessageServiceImpl implements MessageService {
         Query query = new Query(Criteria.where("id").is(messageId));
         Update update = new Update().addToSet("deletedBy", currentUserId);
         mongoTemplate.updateFirst(query, update, Message.class);
+    }
+
+    @Override
+    public void deleteGroupMemberMessage(String conversationId, String messageId) {
+        String currentUserId = securityUtil.getCurrentUserId();
+
+        Conversation room = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
+        if (!room.isGroup()) throw new AppException(ErrorCode.CHAT_NOT_A_GROUP);
+
+        ConversationMember actor = room.getMembers().stream()
+                .filter(m -> m.getUserId().equals(currentUserId) && isActiveMember(m))
+                .findFirst()
+                .orElseThrow(() -> new AppException(ErrorCode.CHAT_MEMBER_NOT_FOUND));
+
+        MemberRole actorRole = actor.getRole() != null ? actor.getRole() : MemberRole.MEMBER;
+        if (actorRole == MemberRole.MEMBER) {
+            throw new AppException(ErrorCode.CHAT_NOT_GROUP_MANAGER);
+        }
+
+        Message message = messageRepository.findById(messageId)
+                .orElseThrow(() -> new AppException(ErrorCode.MESSAGE_NOT_FOUND));
+
+        if (!message.getConversationId().equals(conversationId)) {
+            throw new AppException(ErrorCode.MESSAGE_NOT_FOUND);
+        }
+
+        if (message.getCreatedAt().isBefore(LocalDateTime.now().minusHours(24))) {
+            throw new AppException(ErrorCode.MESSAGE_REVOKE_TIME_EXCEEDED);
+        }
+
+        if (actorRole == MemberRole.ADMIN) {
+            room.getMembers().stream()
+                    .filter(m -> m.getUserId().equals(message.getSenderId()))
+                    .findFirst()
+                    .ifPresent(sender -> {
+                        MemberRole senderRole = sender.getRole() != null ? sender.getRole() : MemberRole.MEMBER;
+                        if (senderRole == MemberRole.OWNER) {
+                            throw new AppException(ErrorCode.CHAT_ADMIN_CANNOT_DELETE_OWNER_MESSAGE);
+                        }
+                    });
+        }
+
+        message.setStatus(MessageStatus.DELETED_BY_ADMIN);
+        message.setDeletedByAdminId(currentUserId);
+        message.setContent(null);
+        message.setReplyTo(null);
+        messageRepository.save(message);
+
+        Query replyQuery = new Query(Criteria.where("replyTo.messageId").is(messageId));
+        Update replyUpdate = new Update()
+                .set("replyTo.content", null)
+                .set("replyTo.type", MessageType.CHAT);
+        mongoTemplate.updateMulti(replyQuery, replyUpdate, Message.class);
+
+        updateLastMessageStatus(message, MessageStatus.DELETED_BY_ADMIN);
+        broadcastStatusChange(conversationId, messageId, MessageStatus.DELETED_BY_ADMIN, currentUserId);
     }
 
     @Override
@@ -421,7 +625,7 @@ public class MessageServiceImpl implements MessageService {
         Map<String, ChatUser> userMap = chatUserRepository.findAllById(seenUserIds).stream()
                 .collect(Collectors.toMap(ChatUser::getId, u -> u));
 
-        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+        String baseUrl = s3UtilV2.getS3BaseUrl();
         return seenUserIds.stream()
                 .map(userId -> {
                     ChatUser user = userMap.get(userId);
@@ -442,6 +646,32 @@ public class MessageServiceImpl implements MessageService {
      * Kiểm tra user có trong members của conversation không.
      * Nếu không → throw UNAUTHORIZED (403).
      */
+    @Override
+    public List<MessageResponse> getMessagesSince(String conversationId, String sinceId, String userId) {
+        // 1. Kiểm tra quyền membership
+        Conversation room = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
+        
+        boolean isMember = room.getMembers().stream()
+                .anyMatch(m -> m.getUserId().equals(userId) && isActiveMember(m));
+        
+        if (!isMember) {
+            throw new AppException(ErrorCode.CHAT_NOT_A_MEMBER);
+        }
+
+        // 2. Lấy 100 tin nhắn gần nhất tính từ sinceId
+        List<Message> messages = messageRepository.findTop100ByConversationIdAndIdGreaterThanAndStatusNot(
+                conversationId, sinceId, MessageStatus.REVOKED);
+
+        String baseUrl = s3UtilV2.getS3BaseUrl();
+        List<MessageResponse> dtos = messages.stream()
+                .map(msg -> messageMapper.mapToMessageResponse(msg, baseUrl))
+                .collect(Collectors.toList());
+
+        enrichMessages(dtos);
+        return dtos;
+    }
+
     private void assertConversationMember(Conversation room, String userId) {
         boolean isMember = room.getMembers().stream()
                 .anyMatch(m -> m.getUserId().equals(userId));
@@ -472,7 +702,7 @@ public class MessageServiceImpl implements MessageService {
 
         Map<String, ChatUser> userMap = chatUserRepository.findAllById(userIds).stream()
                 .collect(Collectors.toMap(ChatUser::getId, u -> u));
-        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+        String baseUrl = s3UtilV2.getS3BaseUrl();
 
         for (int i = 0; i < dtos.size(); i++) {
             MessageResponse d = dtos.get(i);
@@ -503,7 +733,7 @@ public class MessageServiceImpl implements MessageService {
 
         Map<String, ChatUser> userMap = chatUserRepository.findAllById(userIds).stream()
                 .collect(Collectors.toMap(ChatUser::getId, u -> u));
-        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+        String baseUrl = s3UtilV2.getS3BaseUrl();
 
         for (int i = 0; i < notifs.size(); i++) {
             ChatNotification n = notifs.get(i);
@@ -525,16 +755,20 @@ public class MessageServiceImpl implements MessageService {
         }
     }
 
-    private void updateLastMessageIfRevoked(Message revokedMsg) {
-        Query query = new Query(Criteria.where("id").is(revokedMsg.getConversationId())
-                .and("lastMessage.messageId").is(revokedMsg.getId()));
+    private void updateLastMessageStatus(Message msg, MessageStatus newStatus) {
+        Query query = new Query(Criteria.where("id").is(msg.getConversationId())
+                .and("lastMessage.messageId").is(msg.getId()));
         Update update = new Update()
                 .set("lastMessage.content", null)
-                .set("lastMessage.status", MessageStatus.REVOKED);
+                .set("lastMessage.status", newStatus);
         mongoTemplate.updateFirst(query, update, Conversation.class);
     }
 
     private void broadcastStatusChange(String conversationId, String messageId, MessageStatus newStatus) {
+        broadcastStatusChange(conversationId, messageId, newStatus, null);
+    }
+
+    private void broadcastStatusChange(String conversationId, String messageId, MessageStatus newStatus, String deletedByAdminId) {
         Conversation conversation = conversationRepository.findById(conversationId).orElse(null);
         if (conversation == null) return;
 
@@ -546,6 +780,9 @@ public class MessageServiceImpl implements MessageService {
             payload.put("conversationId", conversationId);
             payload.put("messageId", messageId);
             payload.put("newStatus", newStatus);
+            if (deletedByAdminId != null) {
+                payload.put("deletedByAdminId", deletedByAdminId);
+            }
 
             kafkaTemplate.send(socketEventsTopic,
                     new SocketEvent(SocketEventType.MESSAGE, member.getUserId(),
@@ -585,7 +822,7 @@ public class MessageServiceImpl implements MessageService {
             Map<String, ChatUser> userCache = chatUserRepository.findAllById(memberIds).stream()
                     .collect(Collectors.toMap(ChatUser::getId, u -> u));
 
-            String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+            String baseUrl = s3UtilV2.getS3BaseUrl();
             List<LinkPreview.MemberSnapshot> previews = activeMembers.stream()
                     .map(ConversationMember::getUserId)
                     .limit(5)

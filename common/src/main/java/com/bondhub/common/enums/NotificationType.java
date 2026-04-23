@@ -11,6 +11,7 @@ public enum NotificationType {
 
     POST_LIKE,
     POST_COMMENT,
+    POST_PUBLISHED,
     COMMENT_LIKE,
     COMMENT_REPLY,
 

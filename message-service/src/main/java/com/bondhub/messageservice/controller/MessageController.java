@@ -5,6 +5,7 @@ import com.bondhub.common.dto.PageResponse;
 import com.bondhub.common.dto.client.messageservice.MessageSendRequest;
 import com.bondhub.messageservice.dto.request.ReactionRequest;
 import com.bondhub.messageservice.dto.response.MessageResponse;
+import com.bondhub.messageservice.dto.response.CursorPageResponse;
 import com.bondhub.messageservice.dto.response.MessageSeenResponse;
 import com.bondhub.messageservice.service.message.MessageService;
 import jakarta.validation.Valid;
@@ -43,6 +44,18 @@ public class MessageController {
                 messageService.findChatMessages(conversationId, page, size)));
     }
 
+    @GetMapping("/v2/conversations/{conversationId}/messages")
+    @Operation(summary = "Get messages of a conversation with cursor-based pagination (V2)")
+    public ResponseEntity<ApiResponse<CursorPageResponse<MessageResponse>>> getChatMessagesV2(
+            @PathVariable String conversationId,
+            @RequestParam(required = false) String cursor,
+            @RequestParam(defaultValue = "20") int limit,
+            @RequestParam(defaultValue = "OLDER") String direction,
+            @RequestParam(required = false) String aroundMessageId) {
+        return ResponseEntity.ok(ApiResponse.success(
+                messageService.findChatMessagesV2(conversationId, cursor, limit, direction, aroundMessageId)));
+    }
+
     @GetMapping("/conversations/{conversationId}/media")
     @Operation(summary = "Get messages filtered by type (IMAGE, VIDEO, FILE, LINK)")
     public ResponseEntity<ApiResponse<PageResponse<List<MessageResponse>>>> getMediaMessages(
@@ -65,6 +78,15 @@ public class MessageController {
     @Operation(summary = "Delete a message for current user only")
     public ResponseEntity<ApiResponse<Void>> deleteMessageForMe(@PathVariable String messageId) {
         messageService.deleteMessageForMe(messageId);
+        return ResponseEntity.ok(ApiResponse.success(null));
+    }
+
+    @DeleteMapping("/conversations/{conversationId}/messages/{messageId}/admin")
+    @Operation(summary = "Delete a member's message in group (Admin/Owner only; Admin cannot delete Owner's message)")
+    public ResponseEntity<ApiResponse<Void>> deleteGroupMemberMessage(
+            @PathVariable String conversationId,
+            @PathVariable String messageId) {
+        messageService.deleteGroupMemberMessage(conversationId, messageId);
         return ResponseEntity.ok(ApiResponse.success(null));
     }
 

@@ -146,6 +146,7 @@ public enum ErrorCode {
         CHAT_GROUP_DUPLICATE(HttpStatus.CONFLICT, 4035, "error.chat.group.duplicate"),
         CHAT_NEED_AT_LEAST_ONE_FRIEND(HttpStatus.BAD_REQUEST, 4036, "error.chat.group.need.at.least.one.friend"),
         CHAT_INVALID_INVITE_TARGET(HttpStatus.BAD_REQUEST, 4037, "error.chat.invalid.invite.target"),
+        CHAT_ADMIN_CANNOT_DELETE_OWNER_MESSAGE(HttpStatus.FORBIDDEN, 4038, "error.chat.admin.cannot.delete.owner.message"),
 
         //  NOTIFICATION_TEMPLATE (23xx)
         NOTIFICATION_TEMPLATE_NOT_FOUND(HttpStatus.NOT_FOUND, 2300, "error.notification.template.not.found"),
@@ -173,6 +174,7 @@ public enum ErrorCode {
         CALL_ALREADY_IN_PROGRESS(HttpStatus.CONFLICT, 5004, "error.call.already.in.progress"),
         CALL_SELF_NOT_ALLOWED(HttpStatus.BAD_REQUEST, 5005, "error.call.self.not.allowed"),
         CALL_TOKEN_GENERATION_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, 5006, "error.call.token.generation.failed"),
+        CHAT_NOT_A_MEMBER(HttpStatus.FORBIDDEN, 4036, "error.chat.not.a.member"),
 
         ;
 
