@@ -71,7 +71,7 @@ public class JoinRequestServiceImpl implements JoinRequestService {
         boolean isInvited = conversation.getInvitedUserIds() != null
                 && conversation.getInvitedUserIds().contains(currentUserId);
 
-        if (!isInvited && (settings.isMembershipApprovalEnabled() || settings.getJoinQuestion() != null)) {
+        if (!isInvited && settings.isMembershipApprovalEnabled()) {
             String joinAnswer = request != null ? request.joinAnswer() : null;
             return handleJoinRequest(conversation, currentUserId, joinAnswer);
         }
@@ -133,7 +133,8 @@ public class JoinRequestServiceImpl implements JoinRequestService {
             groupName = helper.getDynamicGroupName(conversation, currentUserId, userCache);
         }
 
-        boolean hasPendingRequest = joinRequestRepository.existsByConversationIdAndUserIdAndStatus(
+        boolean hasPendingRequest = settings.isMembershipApprovalEnabled() &&
+            joinRequestRepository.existsByConversationIdAndUserIdAndStatus(
                 conversation.getId(), currentUserId, JoinRequestStatus.PENDING);
 
         return JoinGroupPreviewResponse.builder()
@@ -147,7 +148,7 @@ public class JoinRequestServiceImpl implements JoinRequestService {
                 .isBlockedFromGroup(conversation.getBlockedUserIds() != null && conversation.getBlockedUserIds().contains(currentUserId))
                 .membershipApprovalEnabled(settings.isMembershipApprovalEnabled())
                 .hasPendingRequest(hasPendingRequest)
-                .joinQuestion(settings.getJoinQuestion())
+                .joinQuestion(settings.isMembershipApprovalEnabled() ? settings.getJoinQuestion() : null)
                 .build();
     }
 
