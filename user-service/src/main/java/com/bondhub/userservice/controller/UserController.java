@@ -14,6 +14,7 @@ import com.bondhub.userservice.service.user.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -59,21 +60,33 @@ public class UserController {
         return ResponseEntity.ok(ApiResponse.success(userService.getMyUserWithAccountInfo()));
     }
 
-    @PatchMapping("/profile/avatar")
-    public ResponseEntity<ApiResponse<UserImageResponse>> updateAvatar(
+    @PatchMapping(value = "/profile/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ApiResponse<UserImageResponse>> updateAvatarMultipart(
             @RequestPart("file") MultipartFile file) {
         AvatarUpdateRequest request = AvatarUpdateRequest.builder().file(file).build();
         return ResponseEntity.ok(ApiResponse.success(userService.updateAvatar(request)));
     }
 
-    @PatchMapping("/profile/background")
-    public ResponseEntity<ApiResponse<UserImageResponse>> updateBackground(
+    @PatchMapping(value = "/profile/avatar", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<ApiResponse<UserImageResponse>> updateAvatarJson(
+            @RequestBody AvatarUpdateRequest request) {
+        return ResponseEntity.ok(ApiResponse.success(userService.updateAvatar(request)));
+    }
+
+    @PatchMapping(value = "/profile/background", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ApiResponse<UserImageResponse>> updateBackgroundMultipart(
             @RequestPart("file") MultipartFile file,
             @RequestParam("y") Double y) {
         BackgroundUpdateRequest request = BackgroundUpdateRequest.builder()
                 .file(file)
                 .y(y)
                 .build();
+        return ResponseEntity.ok(ApiResponse.success(userService.updateBackground(request)));
+    }
+
+    @PatchMapping(value = "/profile/background", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<ApiResponse<UserImageResponse>> updateBackgroundJson(
+            @RequestBody BackgroundUpdateRequest request) {
         return ResponseEntity.ok(ApiResponse.success(userService.updateBackground(request)));
     }
 

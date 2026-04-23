@@ -8,6 +8,7 @@ import com.bondhub.common.event.user.UserCreatedEvent;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
 import com.bondhub.common.utils.S3Util;
+import com.bondhub.common.utils.S3UtilV2;
 import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.common.event.user.UserProfileUpdatedEvent;
 import com.bondhub.common.model.kafka.EventType;
@@ -56,12 +57,9 @@ public class UserServiceImpl implements UserService {
     final FileServiceClient fileServiceClient;
     final UserIndexEventPublisher userIndexEventPublisher;
     final OutboxEventPublisher outboxEventPublisher;
+    final S3UtilV2 s3UtilV2;
 
-    @Value("${aws.s3.bucket.name}")
-    String bucketName;
 
-    @Value("${cloud.aws.region.static}")
-    String region;
 
     @Override
     @Transactional
@@ -175,7 +173,7 @@ public class UserServiceImpl implements UserService {
     @Override
     public List<UserResponse> getAllUsers() {
         log.info("Fetching all users");
-        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+        String baseUrl = s3UtilV2.getS3BaseUrl();
 
         return userRepository.findAll().stream()
                 .filter(User::isActive)
@@ -254,7 +252,7 @@ public class UserServiceImpl implements UserService {
 
     private UserProfileResponse getUserProfileResponseWithUrl(User user, AccountResponse accountResponse) {
         UserProfileResponse response = userProfileMapper.toUserProfileResponse(user, accountResponse);
-        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+        String baseUrl = s3UtilV2.getS3BaseUrl();
 
         return UserProfileResponse.builder()
                 .id(response.id())
@@ -273,7 +271,7 @@ public class UserServiceImpl implements UserService {
     }
 
     private UserResponse getUserResponseWithUrl(User user, AccountResponse accountResponse) {
-        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+        String baseUrl = s3UtilV2.getS3BaseUrl();
 
         return UserResponse.builder()
                 .id(user.getId())
@@ -299,13 +297,20 @@ public class UserServiceImpl implements UserService {
 
         String oldAvatarKey = user.getAvatar();
 
-        String email = securityUtil.getCurrentEmail();
+        String newKey = null;
+        if (request.imageKey() != null && !request.imageKey().isBlank()) {
+            newKey = request.imageKey();
+        } else if (request.file() != null) {
+            String email = securityUtil.getCurrentEmail();
+            ApiResponse<FileUploadResponse> response = fileServiceClient
+                    .uploadFile(accountId, email, request.file(), "avatars");
+            if (response != null && response.data() != null) {
+                newKey = response.data().key();
+            }
+        }
 
-        ApiResponse<FileUploadResponse> response = fileServiceClient
-                .uploadFile(accountId, email, request.file(), "avatars");
-        if (response != null && response.data() != null) {
-            String key = response.data().key();
-            user.setAvatar(key);
+        if (newKey != null) {
+            user.setAvatar(newKey);
             userRepository.save(user);
 
             if (oldAvatarKey != null && !oldAvatarKey.isEmpty()) {
@@ -329,14 +334,15 @@ public class UserServiceImpl implements UserService {
                 log.warn("Failed to fetch account info for updated avatar: {}", accountId, e);
             }
 
+
             publishUserIndexEvent(user, accountResponse);
             publishUserProfileUpdatedEvent(user, accountResponse != null ? accountResponse.phoneNumber() : null);
-
-            String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+            
+            String baseUrl = s3UtilV2.getS3BaseUrl();
             return userMapper.toAvatarResponse(user, baseUrl);
         }
 
-        throw new RuntimeException("Failed to upload avatar");
+        throw new AppException(ErrorCode.VALIDATION_ERROR);
     }
 
     @Override
@@ -348,13 +354,20 @@ public class UserServiceImpl implements UserService {
 
         String oldBackgroundKey = user.getBackground();
 
-        String email = securityUtil.getCurrentEmail();
+        String newKey = null;
+        if (request.imageKey() != null && !request.imageKey().isBlank()) {
+            newKey = request.imageKey();
+        } else if (request.file() != null) {
+            String email = securityUtil.getCurrentEmail();
+            ApiResponse<FileUploadResponse> response = fileServiceClient
+                    .uploadFile(accountId, email, request.file(), "backgrounds");
+            if (response != null && response.data() != null) {
+                newKey = response.data().key();
+            }
+        }
 
-        ApiResponse<FileUploadResponse> response = fileServiceClient
-                .uploadFile(accountId, email, request.file(), "backgrounds");
-        if (response != null && response.data() != null) {
-            String key = response.data().key();
-            user.setBackground(key);
+        if (newKey != null) {
+            user.setBackground(newKey);
             user.setBackgroundY(request.y());
             userRepository.save(user);
 
@@ -367,11 +380,12 @@ public class UserServiceImpl implements UserService {
                 }
             }
 
+
             log.info("Background updated successfully for user: {}", accountId);
 
             publishUserIndexEvent(user, null);
 
-            String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+            String baseUrl = s3UtilV2.getS3BaseUrl();
             return userMapper.toBackgroundResponse(user, baseUrl);
         }
 
@@ -393,7 +407,7 @@ public class UserServiceImpl implements UserService {
         userRepository.save(user);
 
         log.info("Background position updated successfully for user: {}", accountId);
-        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+        String baseUrl = s3UtilV2.getS3BaseUrl();
         return userMapper.toBackgroundResponse(user, baseUrl);
     }
 
@@ -541,7 +555,7 @@ public class UserServiceImpl implements UserService {
         }
 
         List<User> users = userRepository.findAllById(userIds);
-        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+        String baseUrl = s3UtilV2.getS3BaseUrl();
 
         return users.stream()
             .filter(User::isActive)

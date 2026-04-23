@@ -3,6 +3,7 @@ package com.bondhub.messageservice.service.message;
 import com.bondhub.common.enums.MessageType;
 import com.bondhub.common.enums.SystemActionType;
 import com.bondhub.common.utils.S3Util;
+import com.bondhub.common.utils.S3UtilV2;
 import com.bondhub.common.dto.client.socketservice.SocketEvent;
 import com.bondhub.common.enums.SocketEventType;
 import com.bondhub.messageservice.dto.response.ChatNotification;
@@ -34,12 +35,9 @@ public class SystemMessageServiceImpl implements SystemMessageService {
     private final MongoTemplate mongoTemplate;
     private final MessageMapper messageMapper;
     private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final S3UtilV2 s3UtilV2;
 
-    @Value("${aws.s3.bucket.name}")
-    private String bucketName;
 
-    @Value("${cloud.aws.region.static}")
-    private String region;
 
     @Value("${kafka.topics.socket-events}")
     private String socketEventsTopic;
@@ -139,7 +137,7 @@ public class SystemMessageServiceImpl implements SystemMessageService {
         }
 
         if (room != null) {
-            String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+            String baseUrl = s3UtilV2.getS3BaseUrl();
 
             room.getMembers().forEach(member -> {
                 if (recipientUserIds != null && !recipientUserIds.contains(member.getUserId())) {

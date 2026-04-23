@@ -3,7 +3,7 @@ package com.bondhub.userservice.service.user;
 import com.bondhub.common.dto.client.userservice.user.response.UserSummaryResponse;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
-import com.bondhub.common.utils.S3Util;
+import com.bondhub.common.utils.S3UtilV2;
 import com.bondhub.userservice.dto.request.user.UserInterestSeedUpdateRequest;
 import com.bondhub.userservice.dto.response.UserSyncResponse;
 import com.bondhub.userservice.mapper.UserMapper;
@@ -13,7 +13,6 @@ import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,12 +30,7 @@ public class UserInternalServiceImpl implements UserInternalService {
 
     final UserRepository userRepository;
     final UserMapper userMapper;
-
-    @Value("${aws.s3.bucket.name}")
-    String bucketName;
-
-    @Value("${cloud.aws.region.static}")
-    String region;
+    final S3UtilV2 s3UtilV2;
 
     @Override
     public UserSummaryResponse getUserSummaryByAccountId(String accountId) {
@@ -46,7 +40,7 @@ public class UserInternalServiceImpl implements UserInternalService {
 
         UserSummaryResponse response = userMapper.toUserSummaryResponse(user);
         if (response.avatar() != null) {
-            String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+            String baseUrl = s3UtilV2.getS3BaseUrl();
             return UserSummaryResponse.builder()
                     .id(response.id())
                     .fullName(response.fullName())
@@ -115,7 +109,7 @@ public class UserInternalServiceImpl implements UserInternalService {
 
         UserSummaryResponse response = userMapper.toUserSummaryResponse(user);
         if (response.avatar() != null && !response.avatar().isEmpty()) {
-            String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+            String baseUrl = s3UtilV2.getS3BaseUrl();
             return UserSummaryResponse.builder()
                     .id(response.id())
                     .fullName(response.fullName())

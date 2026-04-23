@@ -13,6 +13,7 @@ import com.bondhub.messageservice.dto.response.ChatNotification;
 import com.bondhub.common.dto.client.socketservice.SocketEvent;
 import com.bondhub.common.enums.SocketEventType;
 import com.bondhub.common.utils.S3Util;
+import com.bondhub.common.utils.S3UtilV2;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.mongodb.core.FindAndModifyOptions;
 import org.springframework.data.mongodb.core.MongoTemplate;
@@ -37,12 +38,9 @@ public class AiMessageSaveConsumer {
     private final MessageMapper messageMapper;
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final MongoTemplate mongoTemplate;
+    private final S3UtilV2 s3UtilV2;
 
-    @Value("${aws.s3.bucket.name}")
-    private String bucketName;
 
-    @Value("${cloud.aws.region.static}")
-    private String region;
 
     @Value("${kafka.topics.socket-events}")
     private String socketEventsTopic;
@@ -114,7 +112,7 @@ public class AiMessageSaveConsumer {
         log.info("[AI-Consumer] Persisted AI message and updated room state: {}", event.getChatId());
 
         // 5. FAN-OUT Real-time via WebSocket to ALL active members
-        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+        String baseUrl = s3UtilV2.getS3BaseUrl();
         ChatNotification baseNotif = messageMapper.mapToChatNotification(savedMsg, baseUrl, 0);
 
         conversation.getMembers().stream()
