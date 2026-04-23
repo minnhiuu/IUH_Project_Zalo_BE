@@ -238,11 +238,11 @@ public class ConversationServiceImpl implements ConversationService {
 
         String lastReadMessageId = currentMember.getLastReadMessageId();
 
-        // Determine anchor and count by querying actual messages —
-        // do NOT rely on unreadCounts cache, which may already be zeroed by markAsRead
         if (lastReadMessageId == null) {
-            // Never read — oldest visible message is the anchor, count all visible messages
-            Criteria base = buildMessageVisibilityCriteria(conversationId, currentUserId, memberJoinedAt, deletedBefore);
+            Criteria base = new Criteria().andOperator(
+                buildMessageVisibilityCriteria(conversationId, currentUserId, memberJoinedAt, deletedBefore),
+                Criteria.where("type").ne("SYSTEM")
+            );
             Query firstQ = new Query(base).with(Sort.by(Sort.Direction.ASC, "createdAt")).limit(1);
             Message firstMsg = mongoTemplate.findOne(firstQ, Message.class);
             long count = mongoTemplate.count(new Query(base), Message.class);
@@ -263,6 +263,7 @@ public class ConversationServiceImpl implements ConversationService {
         // First visible message strictly after lastReadMsg, respecting all visibility rules
         Criteria afterLastRead = new Criteria().andOperator(
                 buildMessageVisibilityCriteria(conversationId, currentUserId, memberJoinedAt, deletedBefore),
+                Criteria.where("type").ne("SYSTEM"),
                 Criteria.where("createdAt").gt(lastReadMsg.getCreatedAt())
         );
         Query afterQ = new Query(afterLastRead);

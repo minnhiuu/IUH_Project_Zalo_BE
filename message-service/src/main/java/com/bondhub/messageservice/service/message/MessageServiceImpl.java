@@ -373,10 +373,13 @@ public class MessageServiceImpl implements MessageService {
         // 5. Cập nhật lastMessage + tăng unreadCount cho tất cả member trừ sender
         Query query = new Query(Criteria.where("id").is(room.getId()));
         Update update = new Update().set("lastMessage", lastInfo);
-        room.getMembers().stream()
-            .filter(this::isActiveMember)
+        
+        if (message.getType() != MessageType.SYSTEM) {
+            room.getMembers().stream()
+                .filter(this::isActiveMember)
                 .filter(m -> !m.getUserId().equals(currentUserId))
                 .forEach(m -> update.inc("unreadCounts." + m.getUserId(), 1));
+        }
 
         Conversation updatedRoom = mongoTemplate.findAndModify(
                 query, update,
