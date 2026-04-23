@@ -1,4 +1,4 @@
-package com.bondhub.searchservice.service;
+package com.bondhub.searchservice.service.recentsearch;
 
 import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.searchservice.dto.request.RecentSearchRequest;

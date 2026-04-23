@@ -10,6 +10,7 @@ import com.bondhub.messageservice.dto.response.CursorPageResponse;
 import com.bondhub.messageservice.dto.response.MessageResponse;
 import com.bondhub.messageservice.dto.response.MessageSeenResponse;
 import com.bondhub.messageservice.dto.response.ReplyMetadataResponse;
+import com.bondhub.messageservice.dto.response.*;
 import com.bondhub.messageservice.model.Conversation;
 import com.bondhub.messageservice.model.ConversationMember;
 import com.bondhub.messageservice.model.LastMessageInfo;
@@ -22,11 +23,11 @@ import com.bondhub.messageservice.repository.ConversationRepository;
 import com.bondhub.messageservice.repository.MessageRepository;
 import com.bondhub.messageservice.repository.ChatUserRepository;
 import com.bondhub.messageservice.service.conversation.ConversationService;
-import com.bondhub.common.dto.client.messageservice.AttachmentRequest;
 import com.bondhub.common.dto.client.messageservice.MessageSendRequest;
 import com.bondhub.common.event.ai.AiMessageSaveEvent;
 import com.bondhub.common.dto.client.socketservice.SocketEvent;
 import com.bondhub.common.enums.SocketEventType;
+import com.bondhub.messageservice.publisher.MessageIndexEventPublisher;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -35,7 +36,6 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import com.bondhub.common.dto.PageResponse;
-import com.bondhub.messageservice.dto.response.MessageResponse;
 import com.bondhub.messageservice.mapper.MessageMapper;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
@@ -73,8 +73,7 @@ public class MessageServiceImpl implements MessageService {
     private final ConversationService conversationService;
     private final ConversationHelper conversationHelper;
     private final S3UtilV2 s3UtilV2;
-
-
+    private final MessageIndexEventPublisher messageIndexEventPublisher;
 
     @Value("${kafka.topics.socket-events}")
     private String socketEventsTopic;
@@ -160,7 +159,7 @@ public class MessageServiceImpl implements MessageService {
     @Override
     public CursorPageResponse<MessageResponse> findChatMessagesV2(
             String conversationId, String cursor, int limit, String direction, String aroundMessageId) {
-        
+
         String currentUserId = securityUtil.getCurrentUserId();
         Conversation room = conversationRepository.findById(conversationId)
                 .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
@@ -169,7 +168,7 @@ public class MessageServiceImpl implements MessageService {
         if (aroundMessageId != null) {
             Message target = messageRepository.findById(aroundMessageId)
                     .orElseThrow(() -> new AppException(ErrorCode.MESSAGE_NOT_FOUND));
-            
+
             if (!target.getConversationId().equals(conversationId)) {
                 throw new AppException(ErrorCode.MESSAGE_NOT_FOUND);
             }
@@ -190,7 +189,7 @@ public class MessageServiceImpl implements MessageService {
 
     private CursorPageResponse<MessageResponse> standardCursorPagination(
             Conversation room, String cursor, String direction, int limit, String currentUserId) {
-        
+
         Query query = new Query();
         List<Criteria> allCriteria = new ArrayList<>();
         allCriteria.add(Criteria.where("conversationId").is(room.getId()));
@@ -227,11 +226,11 @@ public class MessageServiceImpl implements MessageService {
         allCriteria.add(Criteria.where("conversationId").is(room.getId()));
         allCriteria.add(Criteria.where("createdAt").lt(time));
         allCriteria.addAll(getSecurityCriteria(room, currentUserId));
-        
+
         query.addCriteria(new Criteria().andOperator(allCriteria.toArray(new Criteria[0])));
         query.with(Sort.by(Sort.Direction.DESC, "createdAt"));
         query.limit(limit);
-        
+
         List<Message> messages = mongoTemplate.find(query, Message.class);
         return messages; // Already DESC
     }
@@ -242,11 +241,11 @@ public class MessageServiceImpl implements MessageService {
         allCriteria.add(Criteria.where("conversationId").is(room.getId()));
         allCriteria.add(Criteria.where("createdAt").gt(time));
         allCriteria.addAll(getSecurityCriteria(room, currentUserId));
-        
+
         query.addCriteria(new Criteria().andOperator(allCriteria.toArray(new Criteria[0])));
         query.with(Sort.by(Sort.Direction.ASC, "createdAt"));
         query.limit(limit);
-        
+
         List<Message> messages = mongoTemplate.find(query, Message.class);
         Collections.reverse(messages); // Reverse to make it DESC
         return messages;
@@ -254,7 +253,7 @@ public class MessageServiceImpl implements MessageService {
 
     private List<Criteria> getSecurityCriteria(Conversation room, String currentUserId) {
         List<Criteria> securityCriteria = new ArrayList<>();
-        
+
         ConversationMember currentMember = room.getMembers().stream()
                 .filter(m -> m.getUserId().equals(currentUserId))
                 .findFirst().orElse(null);
@@ -276,13 +275,13 @@ public class MessageServiceImpl implements MessageService {
         if (!isActive) {
             securityCriteria.add(Criteria.where("type").is(MessageType.SYSTEM));
         }
-        
+
         return securityCriteria;
     }
 
     private CursorPageResponse<MessageResponse> buildCursorResponse(
             List<Message> messages, int limit, boolean isJump) {
-        
+
         String baseUrl = s3UtilV2.getS3BaseUrl();
         List<MessageResponse> dtos = messages.stream()
                 .map(msg -> messageMapper.mapToMessageResponse(msg, baseUrl))
@@ -297,7 +296,7 @@ public class MessageServiceImpl implements MessageService {
                 .data(dtos)
                 .olderCursor(olderCursor)
                 .newerCursor(newerCursor)
-                .hasMoreOlder(messages.size() >= limit) 
+                .hasMoreOlder(messages.size() >= limit)
                 .hasMoreNewer(isJump || messages.size() >= limit)
                 .isJumpResult(isJump)
                 .build();
@@ -374,10 +373,13 @@ public class MessageServiceImpl implements MessageService {
         // 5. Cập nhật lastMessage + tăng unreadCount cho tất cả member trừ sender
         Query query = new Query(Criteria.where("id").is(room.getId()));
         Update update = new Update().set("lastMessage", lastInfo);
-        room.getMembers().stream()
-            .filter(this::isActiveMember)
+        
+        if (message.getType() != MessageType.SYSTEM) {
+            room.getMembers().stream()
+                .filter(this::isActiveMember)
                 .filter(m -> !m.getUserId().equals(currentUserId))
                 .forEach(m -> update.inc("unreadCounts." + m.getUserId(), 1));
+        }
 
         Conversation updatedRoom = mongoTemplate.findAndModify(
                 query, update,
@@ -418,6 +420,8 @@ public class MessageServiceImpl implements MessageService {
                 .chatId(room.getId())
                 .content(message.getContent())
                 .build());
+
+        messageIndexEventPublisher.publishIndexRequest(message);
     }
 
     // ─────────────────────────── Thu hồi / Xóa ───────────────────────────
@@ -450,6 +454,8 @@ public class MessageServiceImpl implements MessageService {
 
         updateLastMessageStatus(message, MessageStatus.REVOKED);
         broadcastStatusChange(message.getConversationId(), messageId, MessageStatus.REVOKED);
+
+        messageIndexEventPublisher.publishIndexRequest(message);
     }
 
     @Override
@@ -458,6 +464,8 @@ public class MessageServiceImpl implements MessageService {
         Query query = new Query(Criteria.where("id").is(messageId));
         Update update = new Update().addToSet("deletedBy", currentUserId);
         mongoTemplate.updateFirst(query, update, Message.class);
+
+        messageRepository.findById(messageId).ifPresent(messageIndexEventPublisher::publishIndexRequest);
     }
 
     @Override
@@ -515,6 +523,7 @@ public class MessageServiceImpl implements MessageService {
 
         updateLastMessageStatus(message, MessageStatus.DELETED_BY_ADMIN);
         broadcastStatusChange(conversationId, messageId, MessageStatus.DELETED_BY_ADMIN, currentUserId);
+        messageIndexEventPublisher.publishIndexRequest(message);
     }
 
     @Override
@@ -707,6 +716,11 @@ public class MessageServiceImpl implements MessageService {
         for (int i = 0; i < dtos.size(); i++) {
             MessageResponse d = dtos.get(i);
             MessageResponse enriched = d;
+
+            if (d.type() == MessageType.SYSTEM && d.metadata() != null) {
+                enriched = enriched.withMetadata(enrichSystemMetadata(d.metadata(), baseUrl));
+            }
+
             ChatUser sender = userMap.get(d.senderId());
             if (sender != null) {
                 enriched = enriched.withSenderName(sender.getFullName())
@@ -738,6 +752,13 @@ public class MessageServiceImpl implements MessageService {
         for (int i = 0; i < notifs.size(); i++) {
             ChatNotification n = notifs.get(i);
             ChatNotification enriched = n;
+
+            if (n.type() == MessageType.SYSTEM && n.metadata() != null) {
+                enriched = enriched.toBuilder()
+                        .metadata(enrichSystemMetadata(n.metadata(), baseUrl))
+                        .build();
+            }
+
             ChatUser sender = userMap.get(n.senderId());
             if (sender != null) {
                 enriched = enriched.withSenderName(sender.getFullName())
@@ -753,6 +774,34 @@ public class MessageServiceImpl implements MessageService {
             }
             notifs.set(i, enriched);
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> enrichSystemMetadata(Map<String, Object> metadata, String baseUrl) {
+        if (metadata == null) return null;
+        Map<String, Object> newMetadata = new HashMap<>(metadata);
+
+        if (newMetadata.get("targetAvatar") instanceof String avatar && !avatar.isBlank() && !avatar.startsWith("http")) {
+            newMetadata.put("targetAvatar", baseUrl + avatar);
+        }
+
+        if (newMetadata.get("payload") instanceof Map<?, ?> payload) {
+            Map<String, Object> newPayload = new HashMap<>((Map<String, Object>) payload);
+            if (newPayload.get("targetAvatars") instanceof List<?> avatars) {
+                List<String> enrichedAvatars = avatars.stream()
+                        .map(obj -> {
+                            if (obj instanceof String avatar && !avatar.isBlank() && !avatar.startsWith("http")) {
+                                return baseUrl + avatar;
+                            }
+                            return (String) obj;
+                        })
+                        .toList();
+                newPayload.put("targetAvatars", enrichedAvatars);
+            }
+            newMetadata.put("payload", newPayload);
+        }
+
+        return newMetadata;
     }
 
     private void updateLastMessageStatus(Message msg, MessageStatus newStatus) {

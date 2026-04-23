@@ -1,4 +1,4 @@
-package com.bondhub.searchservice.service;
+package com.bondhub.searchservice.service.index.admin;
 
 import com.bondhub.searchservice.dto.response.*;
 import com.bondhub.searchservice.model.elasticsearch.UserIndex;

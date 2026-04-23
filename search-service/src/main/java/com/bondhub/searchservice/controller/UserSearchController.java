@@ -3,7 +3,7 @@ package com.bondhub.searchservice.controller;
 import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.common.dto.PageResponse;
 import com.bondhub.common.dto.client.userservice.user.response.UserSummaryResponse;
-import com.bondhub.searchservice.service.UserSearchService;
+import com.bondhub.searchservice.service.index.user.UserSearchService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;

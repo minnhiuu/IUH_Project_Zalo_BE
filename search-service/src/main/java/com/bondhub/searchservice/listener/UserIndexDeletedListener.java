@@ -6,7 +6,6 @@ import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
 import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
 import org.springframework.kafka.annotation.DltHandler;
@@ -19,7 +18,7 @@ import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.retry.annotation.Backoff;
 import org.springframework.stereotype.Component;
-import com.bondhub.searchservice.service.FailedEventService;
+import com.bondhub.searchservice.service.failevent.FailedEventService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 @Component
@@ -84,6 +83,10 @@ public class UserIndexDeletedListener {
 
         // Final topic info to save
         String finalTopic = (originalTopic != null) ? originalTopic : dlqTopic;
+        if (finalTopic != null && finalTopic.endsWith(".dlq")) {
+            finalTopic = finalTopic.substring(0, finalTopic.length() - 4);
+        }
+        
         int finalPartition = (originalPartition != null) ? originalPartition : dlqPartition;
         long finalOffset = (originalOffset != null) ? originalOffset : dlqOffset;
 

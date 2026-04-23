@@ -77,7 +77,9 @@ public class SystemMessageServiceImpl implements SystemMessageService {
         boolean isRestricted = recipientUserIds != null && !recipientUserIds.isEmpty();
 
         boolean isNegativeAction = action == SystemActionType.LEAVE_GROUP
-                || action == SystemActionType.DISBAND_GROUP;
+                || action == SystemActionType.DISBAND_GROUP
+                || action == SystemActionType.REMOVE_MEMBER
+                || action == SystemActionType.BLOCK_MEMBER;
 
         Conversation room;
         Query query = new Query(Criteria.where("id").is(conversationId));
@@ -140,6 +142,18 @@ public class SystemMessageServiceImpl implements SystemMessageService {
             String baseUrl = s3UtilV2.getS3BaseUrl();
 
             room.getMembers().forEach(member -> {
+                boolean isInactive = Boolean.FALSE.equals(member.getActive());
+                if (isInactive) {
+                    boolean isTarget = false;
+                    if (metadata.get("targetIds") instanceof Collection<?> tIds) {
+                        isTarget = tIds.stream().map(String::valueOf).anyMatch(id -> id.equals(member.getUserId()));
+                    }
+                    boolean isActor = member.getUserId().equals(actorId);
+                    if (!isTarget && !isActor) {
+                        return;
+                    }
+                }
+
                 if (recipientUserIds != null && !recipientUserIds.contains(member.getUserId())) {
                     return;
                 }

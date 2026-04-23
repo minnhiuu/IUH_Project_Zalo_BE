@@ -1,4 +1,4 @@
-package com.bondhub.searchservice.service;
+package com.bondhub.searchservice.service.recentsearch;
 
 import com.bondhub.searchservice.dto.request.RecentSearchRequest;
 import com.bondhub.searchservice.dto.response.RecentHistoryResponse;

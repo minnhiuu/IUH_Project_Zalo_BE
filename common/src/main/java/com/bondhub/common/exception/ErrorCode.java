@@ -61,6 +61,8 @@ public enum ErrorCode {
         INVALID_OPERATION(HttpStatus.BAD_REQUEST, 2305, "error.invalid.operation"),
         INVALID_PROMOTION_CONDITION(HttpStatus.BAD_REQUEST, 2306, "error.invalid.promotion.condition"),
         ACC_PASSWORD_MISMATCH(HttpStatus.BAD_REQUEST, 2307, "error.acc.password.mismatch"),
+        INVALID_TYPE(HttpStatus.BAD_REQUEST, 2308, "error.invalid.type"),
+
 
         // Friendship errors (3xxx)
         FRIEND_REQUEST_NOT_FOUND(HttpStatus.NOT_FOUND, 3001, "error.friend.request.not.found"),
