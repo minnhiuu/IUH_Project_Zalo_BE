@@ -15,6 +15,8 @@ public interface UserInteractionRepository extends MongoRepository<UserInteracti
 
     Page<UserInteraction> findByPostIdOrderByCreatedAtDesc(String postId, Pageable pageable);
 
+    Page<UserInteraction> findByPostIdAndInteractionTypeOrderByCreatedAtDesc(String postId, InteractionType interactionType, Pageable pageable);
+
     List<UserInteraction> findTopByUserIdOrderByCreatedAtDesc(String userId, Pageable pageable);
 
     Optional<UserInteraction> findByUserIdAndPostIdAndInteractionType(
