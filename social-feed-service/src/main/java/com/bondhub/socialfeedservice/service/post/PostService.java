@@ -16,6 +16,8 @@ public interface PostService {
 
     PageResponse<List<PostResponse>> getMyPosts(int page, int size);
 
+    PageResponse<List<PostResponse>> getPostsByUserId(String userId, int page, int size);
+
     PageResponse<List<PostResponse>> getFeedAndSharePosts(int page, int size);
 
     List<StoryGroupResponse> getStoryPosts(int page, int size);

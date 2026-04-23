@@ -106,18 +106,18 @@ public class SocialFeedSeederServiceImpl implements SocialFeedSeederService {
     };
 
     static final String[] VIDEO_URLS = {
-            "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_1MB.mp4",
-            "https://filesamples.com/samples/video/mp4/sample_640x360.mp4",
-            "https://filesamples.com/samples/video/mp4/sample_1280x720_surfing_with_audio.mp4",
-            "https://filesamples.com/samples/video/mp4/sample_960x400_ocean_with_audio.mp4",
-            "https://samplelib.com/lib/preview/mp4/sample-5s.mp4",
-            "https://samplelib.com/lib/preview/mp4/sample-10s.mp4",
-            "https://samplelib.com/lib/preview/mp4/sample-15s.mp4",
-            "https://samplelib.com/lib/preview/mp4/sample-20s.mp4",
+            "https://raw.githubusercontent.com/intel-iot-devkit/sample-videos/master/person-bicycle-car-detection.mp4",
+            "https://raw.githubusercontent.com/intel-iot-devkit/sample-videos/master/bottle-detection.mp4",
+            "https://raw.githubusercontent.com/intel-iot-devkit/sample-videos/master/car-detection.mp4",
+            "https://raw.githubusercontent.com/intel-iot-devkit/sample-videos/master/head-pose-face-detection-female-and-male.mp4",
+            "https://raw.githubusercontent.com/intel-iot-devkit/sample-videos/master/face-demographics-walking-and-pause.mp4",
+            "https://raw.githubusercontent.com/intel-iot-devkit/sample-videos/master/classroom.mp4",
             "https://www.w3schools.com/html/mov_bbb.mp4",
             "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
-            "https://download.samplelib.com/mp4/sample-5s.mp4",
-            "https://download.samplelib.com/mp4/sample-10s.mp4",
+            "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/friday.mp4",
+            "https://raw.githubusercontent.com/intel-iot-devkit/sample-videos/master/person-bicycle-car-detection.mp4",
+            "https://raw.githubusercontent.com/intel-iot-devkit/sample-videos/master/bottle-detection.mp4",
+            "https://raw.githubusercontent.com/intel-iot-devkit/sample-videos/master/car-detection.mp4",
     };
 
     // ── Comment pool ─────────────────────────────────────────────────────────

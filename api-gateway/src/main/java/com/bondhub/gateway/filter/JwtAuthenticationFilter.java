@@ -51,6 +51,10 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
         String token = authHeader.substring(7);
 
         return tokenValidationService.validateToken(token)
+                .onErrorResume(e -> {
+                    log.error("Error communicating with token validation service: {}", e.getMessage());
+                    return Mono.just(false);
+                })
                 .flatMap(isValid -> {
                     if (!isValid) {
                         log.warn("Token validation failed for path: {}", path);
@@ -84,11 +88,6 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
                         exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
                         return exchange.getResponse().setComplete();
                     }
-                })
-                .onErrorResume(e -> {
-                    log.error("Error during token validation: {}", e.getMessage());
-                    exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
-                    return exchange.getResponse().setComplete();
                 });
     }
 

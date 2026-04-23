@@ -89,7 +89,13 @@ public class PostServiceImpl implements PostService {
         Post post = getActivePost(postId);
         String currentUserId = securityUtil.getCurrentUserId();
         UserSummary author = userSummaryRepository.findById(post.getAuthorId()).orElse(null);
-        return postMapper.toPostResponse(post, getS3BaseUrl(), getCurrentUserReaction(currentUserId, postId), author);
+        java.util.Map<String, UserSummary> authorMap = new java.util.HashMap<>();
+        if (author != null) {
+            authorMap.put(post.getAuthorId(), author);
+        }
+        Map<String, Post> sharedPostMap = buildSharedPostMap(List.of(post));
+        SharedPostPreview preview = buildSharedPostPreview(post, sharedPostMap, authorMap, getS3BaseUrl());
+        return postMapper.toPostResponse(post, getS3BaseUrl(), getCurrentUserReaction(currentUserId, postId), author, preview);
     }
 
     @Override
@@ -102,9 +108,32 @@ public class PostServiceImpl implements PostService {
                 pageable);
 
         String s3BaseUrl = getS3BaseUrl();
-        Map<String, UserSummary> authorMap = buildAuthorMap(posts);
-        return PageResponse.fromPage(posts, post -> postMapper.toPostResponse(post, s3BaseUrl,
-                getCurrentUserReaction(currentUserId, post.getId()), authorMap.get(post.getAuthorId())));
+        Map<String, UserSummary> authorMap = buildAuthorMap(posts.getContent());
+        Map<String, Post> sharedPostMap = buildSharedPostMap(posts.getContent());
+        return PageResponse.fromPage(posts, post -> {
+            SharedPostPreview preview = buildSharedPostPreview(post, sharedPostMap, authorMap, s3BaseUrl);
+            return postMapper.toPostResponse(post, s3BaseUrl,
+                    getCurrentUserReaction(currentUserId, post.getId()), authorMap.get(post.getAuthorId()), preview);
+        });
+    }
+
+    @Override
+    public PageResponse<List<PostResponse>> getPostsByUserId(String userId, int page, int size) {
+        String currentUserId = securityUtil.getCurrentUserId();
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "uploadedAt"));
+
+        Page<Post> posts = postRepository.findByAuthorIdAndActiveTrueAndIsCurrentTrueOrderByUploadedAtDesc(
+                userId,
+                pageable);
+
+        String s3BaseUrl = getS3BaseUrl();
+        Map<String, UserSummary> authorMap = buildAuthorMap(posts.getContent());
+        Map<String, Post> sharedPostMap = buildSharedPostMap(posts.getContent());
+        return PageResponse.fromPage(posts, post -> {
+            SharedPostPreview preview = buildSharedPostPreview(post, sharedPostMap, authorMap, s3BaseUrl);
+            return postMapper.toPostResponse(post, s3BaseUrl,
+                    getCurrentUserReaction(currentUserId, post.getId()), authorMap.get(post.getAuthorId()), preview);
+        });
     }
 
     @Override
@@ -117,18 +146,8 @@ public class PostServiceImpl implements PostService {
 
         String s3BaseUrl = getS3BaseUrl();
         String currentUserId = securityUtil.getCurrentUserId();
-        Map<String, UserSummary> authorMap = buildAuthorMap(posts);
-
-        // Bulk-fetch all original posts referenced by SHARE posts in a single DB query
-        Set<String> sharedPostIds = posts.stream()
-                .filter(p -> p.getPostType() == PostType.SHARE && p.getSharedPostId() != null)
-                .map(Post::getSharedPostId)
-                .collect(Collectors.toSet());
-
-        Map<String, Post> sharedPostMap = sharedPostIds.isEmpty()
-                ? Map.of()
-                : postRepository.findAllById(sharedPostIds).stream()
-                        .collect(Collectors.toMap(Post::getId, p -> p));
+        Map<String, UserSummary> authorMap = buildAuthorMap(posts.getContent());
+        Map<String, Post> sharedPostMap = buildSharedPostMap(posts.getContent());
 
         return PageResponse.fromPage(posts, post -> {
             SharedPostPreview preview = buildSharedPostPreview(post, sharedPostMap, authorMap, s3BaseUrl);
@@ -150,7 +169,7 @@ public class PostServiceImpl implements PostService {
 
         String s3BaseUrl = getS3BaseUrl();
         String currentUserId = securityUtil.getCurrentUserId();
-        Map<String, UserSummary> authorMap = buildAuthorMap(posts);
+        Map<String, UserSummary> authorMap = buildAuthorMap(posts.getContent());
 
         // Group stories by authorId, preserving insertion order (most-recent story
         // first per group).
@@ -191,7 +210,7 @@ public class PostServiceImpl implements PostService {
 
         String s3BaseUrl = getS3BaseUrl();
         String currentUserId = securityUtil.getCurrentUserId();
-        Map<String, UserSummary> authorMap = buildAuthorMap(posts);
+        Map<String, UserSummary> authorMap = buildAuthorMap(posts.getContent());
         return PageResponse.fromPage(posts, post -> postMapper.toPostResponse(post, s3BaseUrl,
                 getCurrentUserReaction(currentUserId, post.getId()), authorMap.get(post.getAuthorId())));
     }
@@ -257,12 +276,14 @@ public class PostServiceImpl implements PostService {
             posts = postRepository.findByAuthorIdInAndActiveTrueAndIsCurrentTrue(authorIds, pageable);
         }
 
-        List<String> allAuthorIds = posts.stream().map(Post::getAuthorId).distinct().toList();
-        Map<String, UserSummary> authorMap = userSummaryRepository.findAllById(allAuthorIds).stream()
-                .collect(Collectors.toMap(UserSummary::getId, s -> s));
+        Map<String, UserSummary> authorMap = buildAuthorMap(posts);
+        Map<String, Post> sharedPostMap = buildSharedPostMap(posts);
 
         return posts.stream()
-                .map(post -> postMapper.toPostResponse(post, s3BaseUrl, null, authorMap.get(post.getAuthorId())))
+                .map(post -> {
+                    SharedPostPreview preview = buildSharedPostPreview(post, sharedPostMap, authorMap, s3BaseUrl);
+                    return postMapper.toPostResponse(post, s3BaseUrl, null, authorMap.get(post.getAuthorId()), preview);
+                })
                 .toList();
     }
 
@@ -279,9 +300,8 @@ public class PostServiceImpl implements PostService {
         Map<String, Post> postMap = posts.stream()
                 .collect(Collectors.toMap(Post::getId, p -> p));
 
-        List<String> authorIds = posts.stream().map(Post::getAuthorId).distinct().toList();
-        Map<String, UserSummary> authorMap = userSummaryRepository.findAllById(authorIds).stream()
-                .collect(Collectors.toMap(UserSummary::getId, s -> s));
+        Map<String, UserSummary> authorMap = buildAuthorMap(posts);
+        Map<String, Post> sharedPostMap = buildSharedPostMap(posts);
 
         String s3BaseUrl = getS3BaseUrl();
 
@@ -290,7 +310,10 @@ public class PostServiceImpl implements PostService {
         return postIds.stream()
                 .map(postMap::get)
                 .filter(java.util.Objects::nonNull)
-                .map(post -> postMapper.toPostResponse(post, s3BaseUrl, null, authorMap.get(post.getAuthorId())))
+                .map(post -> {
+                    SharedPostPreview preview = buildSharedPostPreview(post, sharedPostMap, authorMap, s3BaseUrl);
+                    return postMapper.toPostResponse(post, s3BaseUrl, null, authorMap.get(post.getAuthorId()), preview);
+                })
                 .toList();
     }
 
@@ -519,12 +542,24 @@ public class PostServiceImpl implements PostService {
                 .build();
     }
 
-    private Map<String, UserSummary> buildAuthorMap(Page<Post> posts) {
+    private Map<String, UserSummary> buildAuthorMap(java.util.Collection<Post> posts) {
         List<String> authorIds = posts.stream()
                 .map(Post::getAuthorId)
                 .distinct()
                 .toList();
         return userSummaryRepository.findAllById(authorIds).stream()
                 .collect(Collectors.toMap(UserSummary::getId, s -> s));
+    }
+
+    private Map<String, Post> buildSharedPostMap(java.util.Collection<Post> posts) {
+        Set<String> sharedPostIds = posts.stream()
+                .filter(p -> p.getPostType() == PostType.SHARE && p.getSharedPostId() != null)
+                .map(Post::getSharedPostId)
+                .collect(Collectors.toSet());
+
+        return sharedPostIds.isEmpty()
+                ? Map.of()
+                : postRepository.findAllById(sharedPostIds).stream()
+                        .collect(Collectors.toMap(Post::getId, p -> p));
     }
 }
