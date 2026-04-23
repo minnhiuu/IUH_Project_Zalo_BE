@@ -26,7 +26,7 @@ public class OpenApiConfig {
                                 .name("BondHub Team")
                                 .email("dev@bondhub.com")))
                 .servers(List.of(
-                        new Server().url("/api").description("API Gateway"),
+                        new Server().url("/search").description("Gateway Path"),
                         new Server().url("http://localhost:8086").description("Search Service Direct")))
                 .addSecurityItem(new SecurityRequirement().addList("Bearer Authentication"))
                 .components(new Components()
