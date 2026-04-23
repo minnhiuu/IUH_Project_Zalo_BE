@@ -6,6 +6,7 @@ import com.bondhub.common.enums.Role;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
 import com.bondhub.common.utils.S3Util;
+import com.bondhub.common.utils.S3UtilV2;
 import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.userservice.client.AuthServiceClient;
 import com.bondhub.userservice.dto.response.user.AccountResponse;
@@ -48,18 +49,15 @@ public class AdminUserServiceImpl implements AdminUserService {
     final AdminUserMapper adminUserMapper;
     final UserActivityLogMapper userActivityLogMapper;
     final SecurityUtil securityUtil;
+    final S3UtilV2 s3UtilV2;
 
-    @Value("${aws.s3.bucket.name}")
-    String bucketName;
 
-    @Value("${cloud.aws.region.static}")
-    String region;
 
     @Override
     public PageResponse<List<UserAdminResponse>> getAllUsers(String name, String phone, String email, String status, Pageable pageable) {
         log.info("[Admin] Fetching users - name='{}', phone='{}', email='{}', status='{}'", name, phone, email, status);
 
-        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+        String baseUrl = s3UtilV2.getS3BaseUrl();
         UserStatus userStatus = UserStatus.fromString(status);
 
         // Phone or email: exact lookup via auth-service → find user by accountId
@@ -120,7 +118,7 @@ public class AdminUserServiceImpl implements AdminUserService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
 
-        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+        String baseUrl = s3UtilV2.getS3BaseUrl();
         AccountResponse account = fetchAccountSafe(user.getAccountId());
         long totalLogs = activityLogRepository.countByUserId(userId);
 

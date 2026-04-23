@@ -10,6 +10,7 @@ import com.bondhub.common.model.kafka.EventType;
 import com.bondhub.common.publisher.OutboxEventPublisher;
 import com.bondhub.common.dto.client.fileservice.FileUploadResponse;
 import com.bondhub.common.utils.PhoneUtil;
+import com.bondhub.common.utils.S3UtilV2;
 import com.bondhub.messageservice.dto.request.GroupConversationCreateRequest;
 import com.bondhub.messageservice.dto.request.LeaveGroupRequest;
 import com.bondhub.messageservice.dto.request.UpdateGroupSettingsRequest;
@@ -65,6 +66,7 @@ public class GroupConversationServiceImpl implements GroupConversationService {
     private final GroupInviteAsyncService groupInviteAsyncService;
 
     private final OutboxEventPublisher outboxEventPublisher;
+    private final S3UtilV2 s3UtilV2;
 
     @Override
     public ConversationResponse createGroupConversation(GroupConversationCreateRequest request) {
@@ -85,15 +87,13 @@ public class GroupConversationServiceImpl implements GroupConversationService {
             throw new AppException(ErrorCode.USER_NOT_FOUND);
         }
 
-        // Check for duplicate group: same name and same active members → return existing group
-        if (groupName != null) {
-            Set<String> allMemberIds = new LinkedHashSet<>(memberIds);
-            allMemberIds.add(currentUserId);
-            Optional<Conversation> existingGroup = findDuplicateGroup(groupName, allMemberIds);
-            if (existingGroup.isPresent()) {
-                log.info("[Group] Duplicate group '{}' detected, returning existing group {}", groupName, existingGroup.get().getId());
-                return helper.buildConversationResponseForCurrentUser(existingGroup.get(), currentUserId);
-            }
+        // Check for duplicate group: same name (or both nameless) and same active members → return existing group
+        Set<String> allMemberIds = new LinkedHashSet<>(memberIds);
+        allMemberIds.add(currentUserId);
+        Optional<Conversation> existingGroup = findDuplicateGroup(groupName, allMemberIds);
+        if (existingGroup.isPresent()) {
+            log.info("[Group] Duplicate group '{}' detected, returning existing group {}", groupName, existingGroup.get().getId());
+            return helper.buildConversationResponseForCurrentUser(existingGroup.get(), currentUserId);
         }
 
         // Separate friends and non-friends
@@ -117,7 +117,7 @@ public class GroupConversationServiceImpl implements GroupConversationService {
                 .joinMethod(JoinMethod.ADDED_BY_MEMBER).addedBy(currentUserId).build());
         friendMemberIds.forEach(id -> members.add(
                 ConversationMember.builder().userId(id).role(MemberRole.MEMBER).joinedAt(now)
-                .joinMethod(JoinMethod.ADDED_BY_MEMBER).addedBy(currentUserId).build()));
+                        .joinMethod(JoinMethod.ADDED_BY_MEMBER).addedBy(currentUserId).build()));
 
         Map<String, Integer> unreadCounts = new HashMap<>();
         members.forEach(m -> unreadCounts.put(m.getUserId(), 0));
@@ -286,7 +286,7 @@ public class GroupConversationServiceImpl implements GroupConversationService {
             }
             conversation.getMembers().add(
                     ConversationMember.builder().userId(id).role(MemberRole.MEMBER).joinedAt(now)
-                    .joinMethod(JoinMethod.ADDED_BY_MEMBER).addedBy(currentUserId).build());
+                            .joinMethod(JoinMethod.ADDED_BY_MEMBER).addedBy(currentUserId).build());
         });
 
         if (conversation.getUnreadCounts() == null) conversation.setUnreadCounts(new HashMap<>());
@@ -686,7 +686,7 @@ public class GroupConversationServiceImpl implements GroupConversationService {
     @Override
     public Map<String, List<SearchMemberResponse>> getFriendsDirectory(String conversationId) {
         String currentUserId = helper.getSecurityUtil().getCurrentUserId();
-        String baseUrl = helper.getBaseUrl();
+        String baseUrl = s3UtilV2.getS3BaseUrl();
         final Set<String> memberIds = getActiveMemberIds(conversationId);
 
         ChatUser currentUser = chatUserRepository.findById(currentUserId).orElse(null);
@@ -751,16 +751,16 @@ public class GroupConversationServiceImpl implements GroupConversationService {
         List<ChatUser> pagedCandidates = (start < candidateList.size()) ? candidateList.subList(start, end) : Collections.emptyList();
         Page<ChatUser> candidatesPage = new PageImpl<>(pagedCandidates, pageable, candidateList.size());
 
-        String baseUrl = helper.getBaseUrl();
+        String baseUrl = s3UtilV2.getS3BaseUrl();
         return PageResponse.fromPage(candidatesPage, u -> {
-            String phoneNumber = (u.getPhoneNumber() != null && phoneTokens.contains(u.getPhoneNumber())) 
+            String phoneNumber = (u.getPhoneNumber() != null && phoneTokens.contains(u.getPhoneNumber()))
                     ? u.getPhoneNumber() : null;
-            
+
             return SearchMemberResponse.builder()
-                .userId(u.getId()).fullName(u.getFullName())
-                .avatar(u.getAvatar() != null ? baseUrl + u.getAvatar() : null)
-                .phoneNumber(phoneNumber)
-                .isAlreadyMember(memberIds.contains(u.getId())).build();
+                    .userId(u.getId()).fullName(u.getFullName())
+                    .avatar(u.getAvatar() != null ? baseUrl + u.getAvatar() : null)
+                    .phoneNumber(phoneNumber)
+                    .isAlreadyMember(memberIds.contains(u.getId())).build();
         });
     }
 
@@ -776,7 +776,7 @@ public class GroupConversationServiceImpl implements GroupConversationService {
 
         String normalizedQuery = query == null ? "" : query.trim();
         boolean hasQuery = !normalizedQuery.isBlank();
-        String baseUrl = helper.getBaseUrl();
+        String baseUrl = s3UtilV2.getS3BaseUrl();
         List<String> friendIdList = new ArrayList<>(friendIds);
 
         Pageable pageable = PageRequest.of(Math.max(page, 0), Math.max(size, 1));
@@ -845,7 +845,7 @@ public class GroupConversationServiceImpl implements GroupConversationService {
                 .map(doc -> doc.getString("addedBy")).filter(Objects::nonNull).collect(Collectors.toSet());
         Map<String, String> addedByNameMap = addedByIds.isEmpty() ? Collections.emptyMap()
                 : chatUserRepository.findAllById(addedByIds).stream()
-                    .collect(Collectors.toMap(ChatUser::getId, ChatUser::getFullName));
+                .collect(Collectors.toMap(ChatUser::getId, ChatUser::getFullName));
 
         List<GroupMemberListItemResponse> pageData = dataDocs.stream().map(doc -> {
             String userId = doc.getString("userId");
@@ -881,7 +881,7 @@ public class GroupConversationServiceImpl implements GroupConversationService {
         Conversation conversation = helper.findGroupConversation(conversationId);
         helper.assertMember(conversation, currentUserId);
 
-        String baseUrl = helper.getBaseUrl();
+        String baseUrl = s3UtilV2.getS3BaseUrl();
         Pageable pageable = PageRequest.of(Math.max(page, 0), Math.max(size, 1));
 
         List<AggregationOperation> pipeline = new ArrayList<>();
@@ -958,7 +958,7 @@ public class GroupConversationServiceImpl implements GroupConversationService {
 
         String normalizedQuery = query == null ? "" : query.trim();
         boolean hasQuery = !normalizedQuery.isBlank();
-        String baseUrl = helper.getBaseUrl();
+        String baseUrl = s3UtilV2.getS3BaseUrl();
         Pageable pageable = PageRequest.of(Math.max(page, 0), Math.max(size, 1));
 
         List<AggregationOperation> pipeline = new ArrayList<>();
@@ -1233,7 +1233,7 @@ public class GroupConversationServiceImpl implements GroupConversationService {
         }
 
         List<ChatUser> blockedUsers = chatUserRepository.findAllById(blockedIds);
-        String baseUrl = helper.getBaseUrl();
+        String baseUrl = s3UtilV2.getS3BaseUrl();
 
         List<SearchMemberResponse> all = blockedUsers.stream()
                 .map(u -> SearchMemberResponse.builder()
@@ -1265,7 +1265,7 @@ public class GroupConversationServiceImpl implements GroupConversationService {
         Set<String> blockedIds = getBlockedUserIds(conversation);
         String normalizedQuery = query == null ? "" : query.trim();
         boolean hasQuery = !normalizedQuery.isBlank();
-        String baseUrl = helper.getBaseUrl();
+        String baseUrl = s3UtilV2.getS3BaseUrl();
         Pageable pageable = PageRequest.of(Math.max(page, 0), Math.max(size, 1));
 
         List<AggregationOperation> pipeline = new ArrayList<>();
@@ -1385,7 +1385,7 @@ public class GroupConversationServiceImpl implements GroupConversationService {
 
         Map<String, ChatUser> userCache = chatUserRepository.findAllById(allUserIds).stream()
                 .collect(Collectors.toMap(ChatUser::getId, u -> u));
-        String baseUrl = helper.getBaseUrl();
+        String baseUrl = s3UtilV2.getS3BaseUrl();
         boolean viewerCanSee = helper.canViewerSeeStatus(currentUserId, userCache);
 
         List<ConversationResponse> responses = conversations.stream()

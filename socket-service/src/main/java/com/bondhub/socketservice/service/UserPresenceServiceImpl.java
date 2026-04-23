@@ -2,8 +2,8 @@ package com.bondhub.socketservice.service;
 
 import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.common.enums.Status;
-import com.bondhub.common.utils.S3UrlUtil;
 import com.bondhub.common.utils.S3Util;
+import com.bondhub.common.utils.S3UtilV2;
 import com.bondhub.socketservice.client.FriendServiceClient;
 import com.bondhub.socketservice.dto.PresenceEvent;
 import com.bondhub.socketservice.model.ChatUser;
@@ -27,17 +27,12 @@ public class UserPresenceServiceImpl implements UserPresenceService {
     private final ChatUserRepository repository;
     private final SimpMessagingTemplate messagingTemplate;
     private final FriendServiceClient friendServiceClient;
+    private final S3UtilV2 s3UtilV2;
 
-    @Value("${aws.s3.bucket.name}")
-    private String bucketName;
 
-    @Value("${cloud.aws.region.static}")
-    private String region;
 
     @Override
     public ChatUser saveUser(ChatUser user) {
-        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
-
         ChatUser savedUser = repository.findById(user.getId())
                 .map(stored -> {
                     stored.setStatus(Status.ONLINE);
@@ -48,7 +43,7 @@ public class UserPresenceServiceImpl implements UserPresenceService {
                         stored.setEmail(user.getEmail());
                     }
                     if (user.getAvatar() != null && !user.getAvatar().isBlank()) {
-                        stored.setAvatar(S3UrlUtil.extractStorageKey(user.getAvatar(), baseUrl));
+                        stored.setAvatar(s3UtilV2.extractStorageKey(user.getAvatar()));
                     }
                     if (user.getAccountId() != null && !user.getAccountId().isBlank()) {
                         stored.setAccountId(user.getAccountId());
@@ -64,7 +59,7 @@ public class UserPresenceServiceImpl implements UserPresenceService {
                             ? user.getFullName()
                             : "Người dùng");
                     if (user.getAvatar() != null && !user.getAvatar().isBlank()) {
-                        user.setAvatar(S3UrlUtil.extractStorageKey(user.getAvatar(), baseUrl));
+                        user.setAvatar(s3UtilV2.extractStorageKey(user.getAvatar()));
                     }
                     if (user.getFriendIds() == null) {
                         user.setFriendIds(new HashSet<>());

@@ -3,6 +3,7 @@ package com.bondhub.messageservice.service.message;
 import com.bondhub.common.dto.PageResponse;
 import com.bondhub.common.dto.client.messageservice.MessageSendRequest;
 import com.bondhub.messageservice.dto.response.MessageResponse;
+import com.bondhub.messageservice.dto.response.CursorPageResponse;
 import com.bondhub.messageservice.dto.response.MessageSeenResponse;
 import com.bondhub.messageservice.model.Message;
 import java.util.List;
@@ -42,6 +43,12 @@ public interface MessageService {
     void toggleReaction(String messageId, String emoji);
 
     /**
+     * Lấy danh sách tin nhắn từ một mốc thời gian (sinceId).
+     * Phục vụ chức năng tóm tắt AI.
+     */
+    List<MessageResponse> getMessagesSince(String conversationId, String sinceId, String userId);
+
+    /**
      * Xóa toàn bộ reaction của current user khỏi tin nhắn.
      */
     void removeAllMyReactions(String messageId);
@@ -57,4 +64,12 @@ public interface MessageService {
      * Loại trừ người gửi tin nhắn.
      */
     List<MessageSeenResponse> getSeenMembers(String conversationId, String messageId);
+
+    /**
+     * Lấy tin nhắn theo conversationId với Cursor-based pagination (V2).
+     * Hỗ trợ lướt lên, lướt xuống và nhảy tới tin nhắn cụ thể.
+     */
+    CursorPageResponse<MessageResponse> findChatMessagesV2(
+            String conversationId, String cursor, int limit, String direction, String aroundMessageId);
+
 }

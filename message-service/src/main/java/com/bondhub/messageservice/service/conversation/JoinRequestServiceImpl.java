@@ -4,6 +4,7 @@ import com.bondhub.common.dto.PageResponse;
 import com.bondhub.common.enums.SystemActionType;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
+import com.bondhub.common.utils.S3UtilV2;
 import com.bondhub.messageservice.dto.request.JoinByLinkRequest;
 import com.bondhub.messageservice.dto.response.ConversationResponse;
 import com.bondhub.messageservice.dto.response.JoinGroupPreviewResponse;
@@ -41,6 +42,7 @@ public class JoinRequestServiceImpl implements JoinRequestService {
     private final JoinRequestRepository joinRequestRepository;
     private final SystemMessageService systemMessageService;
     private final ConversationHelper helper;
+    private final S3UtilV2 s3UtilV2;
 
     @Override
     public ConversationResponse joinByLink(String token, JoinByLinkRequest request) {
@@ -116,7 +118,7 @@ public class JoinRequestServiceImpl implements JoinRequestService {
         String createdByName = ownerUserId != null && userCache.containsKey(ownerUserId)
                 ? userCache.get(ownerUserId).getFullName() : null;
 
-        String baseUrl = helper.getBaseUrl();
+        String baseUrl = s3UtilV2.getS3BaseUrl();
         List<JoinGroupPreviewResponse.MemberPreview> memberPreviews = activeMembers.stream()
                 .map(ConversationMember::getUserId)
                 .limit(5)
@@ -165,7 +167,7 @@ public class JoinRequestServiceImpl implements JoinRequestService {
 
         Set<String> userIds = requestPage.getContent().stream()
                 .map(JoinRequest::getUserId).collect(Collectors.toSet());
-        String baseUrl = helper.getBaseUrl();
+        String baseUrl = s3UtilV2.getS3BaseUrl();
         Map<String, ChatUser> userCache = chatUserRepository.findAllById(userIds).stream()
                 .collect(Collectors.toMap(ChatUser::getId, u -> u));
 
