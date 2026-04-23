@@ -125,6 +125,106 @@ public class FallbackController {
                 .body(ApiResponse.error(503, errorTitle, errorDetails)));
     }
 
+    @RequestMapping("/file-service")
+    public Mono<ResponseEntity<ApiResponse<Object>>> fileServiceFallback(ServerHttpRequest request) {
+        log.error("File service fallback triggered for request: {} {}", 
+                request.getMethod(), request.getPath());
+        
+        Locale locale = getLocaleFromRequest(request);
+        
+        Map<String, String> errorDetails = createErrorDetails(
+                messageSource.getMessage("fallback.file.service.name", null, locale),
+                messageSource.getMessage("fallback.file.service.message", null, locale),
+                request,
+                locale
+        );
+        
+        String errorTitle = messageSource.getMessage("fallback.file.service.unavailable", null, locale);
+        
+        return Mono.just(ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(ApiResponse.error(503, errorTitle, errorDetails)));
+    }
+
+    @RequestMapping("/friend-service")
+    public Mono<ResponseEntity<ApiResponse<Object>>> friendServiceFallback(ServerHttpRequest request) {
+        log.error("Friend service fallback triggered for request: {} {}", 
+                request.getMethod(), request.getPath());
+        
+        Locale locale = getLocaleFromRequest(request);
+        
+        Map<String, String> errorDetails = createErrorDetails(
+                messageSource.getMessage("fallback.friend.service.name", null, locale),
+                messageSource.getMessage("fallback.friend.service.message", null, locale),
+                request,
+                locale
+        );
+        
+        String errorTitle = messageSource.getMessage("fallback.friend.service.unavailable", null, locale);
+        
+        return Mono.just(ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(ApiResponse.error(503, errorTitle, errorDetails)));
+    }
+
+    @RequestMapping("/search-service")
+    public Mono<ResponseEntity<ApiResponse<Object>>> searchServiceFallback(ServerHttpRequest request) {
+        log.error("Search service fallback triggered for request: {} {}", 
+                request.getMethod(), request.getPath());
+        
+        Locale locale = getLocaleFromRequest(request);
+        
+        Map<String, String> errorDetails = createErrorDetails(
+                messageSource.getMessage("fallback.search.service.name", null, locale),
+                messageSource.getMessage("fallback.search.service.message", null, locale),
+                request,
+                locale
+        );
+        
+        String errorTitle = messageSource.getMessage("fallback.search.service.unavailable", null, locale);
+        
+        return Mono.just(ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(ApiResponse.error(503, errorTitle, errorDetails)));
+    }
+
+    @RequestMapping("/socket-service")
+    public Mono<ResponseEntity<ApiResponse<Object>>> socketServiceFallback(ServerHttpRequest request) {
+        log.error("Socket service fallback triggered for request: {} {}", 
+                request.getMethod(), request.getPath());
+        
+        Locale locale = getLocaleFromRequest(request);
+        
+        Map<String, String> errorDetails = createErrorDetails(
+                messageSource.getMessage("fallback.socket.service.name", null, locale),
+                messageSource.getMessage("fallback.socket.service.message", null, locale),
+                request,
+                locale
+        );
+        
+        String errorTitle = messageSource.getMessage("fallback.socket.service.unavailable", null, locale);
+        
+        return Mono.just(ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(ApiResponse.error(503, errorTitle, errorDetails)));
+    }
+
+    @RequestMapping("/ai-service")
+    public Mono<ResponseEntity<ApiResponse<Object>>> aiServiceFallback(ServerHttpRequest request) {
+        log.error("AI service fallback triggered for request: {} {}", 
+                request.getMethod(), request.getPath());
+        
+        Locale locale = getLocaleFromRequest(request);
+        
+        Map<String, String> errorDetails = createErrorDetails(
+                messageSource.getMessage("fallback.ai.service.name", null, locale),
+                messageSource.getMessage("fallback.ai.service.message", null, locale),
+                request,
+                locale
+        );
+        
+        String errorTitle = messageSource.getMessage("fallback.ai.service.unavailable", null, locale);
+        
+        return Mono.just(ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(ApiResponse.error(503, errorTitle, errorDetails)));
+    }
+
     /**
      * Fallback for general gateway errors
      */

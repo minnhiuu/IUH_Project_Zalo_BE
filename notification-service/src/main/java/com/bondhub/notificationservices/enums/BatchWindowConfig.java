@@ -31,7 +31,10 @@ public enum BatchWindowConfig {
     // --- KIỂM DUYỆT NỘI DUNG ---
     CONTENT_REMOVED (NotificationType.CONTENT_REMOVED, 0,   false),
     CONTENT_HIDDEN  (NotificationType.CONTENT_HIDDEN,  0,   false),
-    USER_WARNED     (NotificationType.USER_WARNED,     0,   false);
+    USER_WARNED     (NotificationType.USER_WARNED,     0,   false),
+
+    // --- BẢO MẬT (SECURITY) ---
+    NEW_DEVICE_LOGIN(NotificationType.NEW_DEVICE_LOGIN,0,   false);
 
     private final NotificationType type;
     private final int windowSeconds;

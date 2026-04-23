@@ -1,5 +1,6 @@
 package com.bondhub.notificationservices.service.delivery.strategy;
 
+import com.bondhub.common.enums.NotificationType;
 import com.bondhub.notificationservices.enums.NotificationChannel;
 import com.bondhub.notificationservices.enums.Platform;
 import com.bondhub.notificationservices.model.Notification;
@@ -22,6 +23,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @Component
 @Slf4j
@@ -46,6 +48,12 @@ public class FcmDeliveryStrategy implements NotificationStrategy {
     @Override
     public void execute(Notification persisted) {
         String recipientId = persisted.getUserId();
+
+        // NEW_DEVICE_LOGIN: target only the user's root mobile device
+        if (persisted.getType() == NotificationType.NEW_DEVICE_LOGIN) {
+            executeForRootDevice(persisted, recipientId);
+            return;
+        }
 
         List<UserDevice> devices = userDeviceRepository.findByUserId(recipientId);
         if (devices.isEmpty()) {
@@ -160,11 +168,12 @@ public class FcmDeliveryStrategy implements NotificationStrategy {
         dataPayload.put("requestId", requestId != null ? requestId : "");
         dataPayload.put("url", url);
 
-        // For CALL and moderation notifications, include custom payload fields
+        // For CALL, moderation, and login notifications, include custom payload fields
         boolean includeCustomPayload = "CALL".equals(type)
                 || "CONTENT_REMOVED".equals(type)
                 || "CONTENT_HIDDEN".equals(type)
-                || "USER_WARNED".equals(type);
+                || "USER_WARNED".equals(type)
+                || "NEW_DEVICE_LOGIN".equals(type);
         if (includeCustomPayload && notificationPayload != null) {
             for (Map.Entry<String, Object> entry : notificationPayload.entrySet()) {
                 String key = entry.getKey();
@@ -248,6 +257,56 @@ public class FcmDeliveryStrategy implements NotificationStrategy {
             log.error("FCM failed after max retries: recipientId={}, deviceId={}, error={}",
                     recipientId, device.getId(), e.getMessage());
         }
+    }
+
+    /**
+     * Delivers a {@code NEW_DEVICE_LOGIN} push notification exclusively to the
+     * user's root mobile device. The {@code rootDeviceId} is set by the auth-service
+     * in the notification payload at publish time (taken from the auth-service
+     * {@code Device} record marked {@code isRootDevice=true}).
+     * If the root device has no registered FCM token, delivery is silently skipped.
+     */
+    private void executeForRootDevice(Notification persisted, String recipientId) {
+        String rootDeviceId = getStr(persisted, "rootDeviceId");
+        if (rootDeviceId == null || rootDeviceId.isBlank()) {
+            log.debug("[FCM] NEW_DEVICE_LOGIN skip: rootDeviceId absent in payload for recipientId={}", recipientId);
+            return;
+        }
+
+        Optional<UserDevice> deviceOpt = userDeviceRepository.findByUserIdAndDeviceId(recipientId, rootDeviceId);
+        if (deviceOpt.isEmpty()) {
+            log.debug("[FCM] NEW_DEVICE_LOGIN skip: no FCM registration found for recipientId={}, rootDeviceId={}",
+                    recipientId, rootDeviceId);
+            return;
+        }
+
+        UserDevice rootDevice = deviceOpt.get();
+        var userPrefs = userPreferenceService.getPreferences(recipientId);
+
+        if (!userPreferenceService.allow(userPrefs, rootDevice.getDeviceId(), persisted.getType())) {
+            log.debug("[FCM] NEW_DEVICE_LOGIN skip: filtered by preference for recipientId={}", recipientId);
+            return;
+        }
+
+        String globalLocale = (userPrefs != null) ? userPrefs.getLanguage() : "vi";
+        String deviceLocale = rootDevice.getLocale() != null ? rootDevice.getLocale() : globalLocale;
+        if (deviceLocale == null) deviceLocale = "vi";
+
+        Map<String, Object> renderData = new HashMap<>(
+                persisted.getPayload() != null ? persisted.getPayload() : Collections.emptyMap());
+
+        var template = templateService.getTemplate(persisted.getType(), NotificationChannel.FCM, deviceLocale);
+        String title = templateService.render(template.titleTemplate(), renderData);
+        String body  = templateService.render(template.bodyTemplate(),  renderData);
+
+        String collapseKey = persisted.getType().name() + "_" + recipientId;
+
+        log.info("[FCM] NEW_DEVICE_LOGIN → root device: recipientId={}, rootDeviceId={}, fcmDevice={}, platform={}",
+                recipientId, rootDeviceId, rootDevice.getId(), rootDevice.getPlatform());
+
+        sendToDevice(rootDevice, title, body, collapseKey,
+                recipientId, null, null, null, 0, 0,
+                persisted.getType().name(), null, persisted.getPayload());
     }
 
     private String getStr(Notification n, String key) {

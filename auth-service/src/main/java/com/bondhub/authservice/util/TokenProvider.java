@@ -7,7 +7,9 @@ import com.bondhub.authservice.enums.DeviceType;
 import com.bondhub.authservice.model.Account;
 import com.bondhub.authservice.service.device.DeviceService;
 import com.bondhub.authservice.service.token.TokenStoreService;
-
+import com.bondhub.common.enums.NotificationType;
+import com.bondhub.common.event.notification.RawNotificationEvent;
+import com.bondhub.common.publisher.RawNotificationEventPublisher;
 import com.bondhub.common.utils.JwtUtil;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
@@ -16,6 +18,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
 
 @Component
@@ -28,6 +32,7 @@ public class TokenProvider {
     TokenStoreService tokenStoreService;
     UserServiceClient userServiceClient;
     DeviceService deviceService;
+    RawNotificationEventPublisher rawNotificationEventPublisher;
 
     public TokenResponse generateFullTokenResponse(Account account, String deviceId, DeviceType deviceType,
             String userAgent, String ipAddress) {
@@ -84,6 +89,11 @@ public class TokenProvider {
 
             deviceService.saveOrUpdateDevice(deviceRequest);
             log.info("Device saved/updated in MongoDB for accountId: {}, sessionId: {}", account.getId(), sessionId);
+
+            // Notify root mobile device about a new WEB login (best-effort, fire-and-forget)
+            if (deviceType == DeviceType.WEB && userId != null) {
+                publishNewWebLoginNotification(userId, account.getId(), sessionId, deviceName, ipAddress);
+            }
         } catch (Exception e) {
             log.warn("Failed to save device in MongoDB for accountId: {}, reason: {}", account.getId(), e.getMessage());
         }
@@ -93,5 +103,45 @@ public class TokenProvider {
                 System.currentTimeMillis() + (accessTokenTtlSeconds * 1000));
 
         return TokenResponse.of(accessToken, refreshToken, refreshExpirationMs);
+    }
+
+    /**
+     * Publishes a {@code NEW_DEVICE_LOGIN} raw notification event to the pipeline.
+     * The event includes {@code rootDeviceId} — the auth-service Device.deviceId of
+     * the account's designated root mobile device — so that {@code FcmDeliveryStrategy}
+     * can look up the exact FCM record in notification-service without any cross-service
+     * calls at delivery time. This is fire-and-forget; failures are logged and swallowed.
+     */
+    private void publishNewWebLoginNotification(String userId, String accountId, String sessionId,
+                                                String deviceName, String ipAddress) {
+        try {
+            // Resolve the root mobile device's deviceId (from auth-service's Device collection)
+            String rootDeviceId = deviceService.getRootMobileDeviceId(accountId).orElse(null);
+            if (rootDeviceId == null) {
+                log.debug("[Auth] NEW_DEVICE_LOGIN skip: no root mobile device for accountId={}", accountId);
+                return;
+            }
+
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("deviceName", deviceName);
+            payload.put("ipAddress", ipAddress != null ? ipAddress : "Unknown");
+            payload.put("loginTime", LocalDateTime.now().toString());
+            payload.put("rootDeviceId", rootDeviceId);   // used by FcmDeliveryStrategy to find the FCM record
+            payload.put("sessionId", sessionId);
+
+            RawNotificationEvent event = RawNotificationEvent.builder()
+                    .recipientId(userId)
+                    .type(NotificationType.NEW_DEVICE_LOGIN)
+                    .referenceId(sessionId)
+                    .payload(payload)
+                    .occurredAt(LocalDateTime.now())
+                    .build();
+
+            rawNotificationEventPublisher.publish(event);
+            log.info("[Auth] Published NEW_DEVICE_LOGIN event: userId={}, rootDeviceId={}, sessionId={}",
+                    userId, rootDeviceId, sessionId);
+        } catch (Exception e) {
+            log.warn("[Auth] Failed to publish NEW_DEVICE_LOGIN for userId={}: {}", userId, e.getMessage());
+        }
     }
 }

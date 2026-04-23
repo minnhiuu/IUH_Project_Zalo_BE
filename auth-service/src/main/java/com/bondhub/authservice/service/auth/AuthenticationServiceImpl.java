@@ -395,6 +395,10 @@ public class AuthenticationServiceImpl implements AuthenticationService {
             throw new AppException(ErrorCode.JWT_INVALID_TOKEN);
         }
 
+        // --- NEW: enforce root device ---
+        enforceRootDeviceAccess(currentSessionId, userId, "logout all other devices");
+        // --------------------------------
+
         log.info("Logging out all other devices for user: {}, currentSessionId: {}", userId, currentSessionId);
 
         // Revoke all other refresh sessions in Redis (marks revoked=true, keeps the
@@ -434,11 +438,17 @@ public class AuthenticationServiceImpl implements AuthenticationService {
     }
 
     @Override
-    public void logoutDevice(String targetSessionId) {
+    public void logoutDevice(String targetSessionId, String currentSessionToken) {
+        String currentSessionId = currentSessionToken != null ? jwtUtil.extractSessionId(currentSessionToken) : null;
+        
         // Use the security context (populated by gateway via access token) for caller identity
         String userId = securityUtil.getCurrentAccountId();
 
         log.info("Request to logout device session {} by user {}", targetSessionId, userId);
+
+        // --- NEW: enforce root device ---
+        String rootDeviceId = enforceRootDeviceAccess(currentSessionId, userId, "logout session " + targetSessionId);
+        // --------------------------------
 
         // Verify ownership and existence via TokenStoreService
         RefreshTokenSession session = tokenStoreService
@@ -450,6 +460,13 @@ public class AuthenticationServiceImpl implements AuthenticationService {
                     session.getAccountId());
             throw new AppException(ErrorCode.AUTH_UNAUTHORIZED);
         }
+
+        // --- NEW: exclude the root ---
+        if (rootDeviceId != null && rootDeviceId.equals(session.getDeviceId())) {
+            log.warn("Attempted to explicitly logout root device {}", rootDeviceId);
+            throw new AppException(ErrorCode.AUTH_UNAUTHORIZED);
+        }
+        // -----------------------------
 
         // Revoke the refresh session AND blacklist the paired access token immediately
         long accessTokenTtlMs = jwtUtil.getAccessTokenExpirationSeconds() * 1000;
@@ -509,5 +526,22 @@ public class AuthenticationServiceImpl implements AuthenticationService {
 
     private Set<String> copyInitialInterests(Set<String> initialInterests) {
         return initialInterests == null ? new HashSet<>() : new HashSet<>(initialInterests);
+    }
+
+    private String enforceRootDeviceAccess(String currentSessionId, String userId, String actionDescription) {
+        String rootDeviceId = deviceService.getRootMobileDeviceId(userId).orElse(null);
+
+        if (currentSessionId != null && rootDeviceId != null) {
+            String currentDeviceId = tokenStoreService.findRefreshSession(currentSessionId)
+                    .map(RefreshTokenSession::getDeviceId)
+                    .orElse(null);
+
+            if (!rootDeviceId.equals(currentDeviceId)) {
+                log.warn("Non-root device {} attempted to {}", currentDeviceId, actionDescription);
+                throw new AppException(ErrorCode.AUTH_UNAUTHORIZED);
+            }
+        }
+        
+        return rootDeviceId;
     }
 }

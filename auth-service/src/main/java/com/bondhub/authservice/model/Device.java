@@ -42,4 +42,12 @@ public class Device extends BaseModel {
     DeviceType deviceType;
     String ipAddress;
     LocalDateTime lastActiveTime;
+
+    /**
+     * Marks this as the user's primary (root) mobile device.
+     * The first MOBILE login for an account designates this device as root.
+     * Account-security push alerts (e.g. new web login) are sent to this device.
+     * Only one root device exists per account at any time.
+     */
+    Boolean isRootDevice;
 }

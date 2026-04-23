@@ -22,6 +22,9 @@ public enum NotificationType {
 
     DLQ_ALERT,
 
+    // --- ACCOUNT SECURITY ---
+    NEW_DEVICE_LOGIN,
+
     // --- MODERATION ---
     CONTENT_REMOVED,
     CONTENT_HIDDEN,
