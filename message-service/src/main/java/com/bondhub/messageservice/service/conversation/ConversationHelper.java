@@ -395,6 +395,10 @@ public class ConversationHelper {
                                     ? baseUrl + memberInfo.getAvatar() : null)
                             .lastReadMessageId(canSeeStatus ? m.getLastReadMessageId() : null)
                             .role(m.getRole() != null ? m.getRole() : null)
+                            .pinned(m.getPinned())
+                            .muted(m.getMuted())
+                            .hidden(m.getHidden())
+                            .manuallyMarkedUnread(m.getManuallyMarkedUnread())
                             .build();
                 })
                 .collect(Collectors.toList());
