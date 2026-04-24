@@ -193,7 +193,7 @@ public class ConversationHelper {
 
         String partnerDisplayName = safeDisplayName(partner != null ? partner.getFullName() : null);
         String displayName = room.getName();
-        if (room.isGroup() && (displayName == null || displayName.isBlank())) {
+        if (room.isGroup() && (displayName == null || displayName.isBlank() || "Nhóm mới".equalsIgnoreCase(displayName))) {
             displayName = getDynamicGroupName(room, currentUserId, userCache);
         } else if (!room.isGroup()) {
             displayName = partnerDisplayName;
@@ -206,6 +206,19 @@ public class ConversationHelper {
                 : (partner != null && partner.getAvatar() != null ? baseUrl + partner.getAvatar() : null);
 
         boolean isFriend = !room.isGroup() && "ACCEPTED".equals(friendshipStatus);
+
+        ConversationMember currentMember = room.getMembers().stream()
+                .filter(m -> m.getUserId().equals(currentUserId))
+                .findFirst()
+                .orElse(null);
+
+        boolean isPinned = currentMember != null && Boolean.TRUE.equals(currentMember.getPinned());
+        boolean isMuted = currentMember != null && Boolean.TRUE.equals(currentMember.getMuted());
+        boolean isHidden = currentMember != null && Boolean.TRUE.equals(currentMember.getHidden());
+        boolean manuallyMarkedUnread = currentMember != null && Boolean.TRUE.equals(currentMember.getManuallyMarkedUnread());
+
+        int unreadCount = room.getUnreadCounts() != null
+                ? room.getUnreadCounts().getOrDefault(currentUserId, 0) : 0;
 
         Status displayStatus = room.isGroup()
                 ? (room.getMembers().stream()
@@ -230,8 +243,11 @@ public class ConversationHelper {
                 .friendshipStatus(friendshipStatus)
                 .isGroup(room.isGroup())
                 .isDisbanded(room.isDisbanded())
-                .unreadCount(room.getUnreadCounts() != null
-                        ? room.getUnreadCounts().getOrDefault(currentUserId, 0) : 0)
+                .isPinned(isPinned)
+                .isMuted(isMuted)
+                .isHidden(isHidden)
+                .manuallyMarkedUnread(manuallyMarkedUnread)
+                .unreadCount(unreadCount)
                 .lastMessage(last != null ? LastMessageResponse.builder()
                         .id(last.getMessageId())
                         .senderId(last.getSenderId())
