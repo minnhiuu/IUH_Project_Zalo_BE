@@ -1,5 +1,6 @@
 package com.bondhub.messageservice.service.conversation;
 
+import com.bondhub.common.utils.S3UtilV2;
 import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
@@ -20,12 +21,9 @@ import com.bondhub.common.dto.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.*;
 import org.springframework.stereotype.Service;
 
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import com.bondhub.common.dto.PageResponse;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
@@ -49,6 +47,7 @@ public class ConversationServiceImpl implements ConversationService {
     private final MongoTemplate mongoTemplate;
     private final FriendServiceClient friendServiceClient;
     private final ConversationHelper helper;
+    private final S3UtilV2 s3UtilV2;
 
     // ─────────────────────────── Core: Tạo / Lấy phòng chat ───────────────────────────
 
@@ -95,7 +94,7 @@ public class ConversationServiceImpl implements ConversationService {
 
         ChatUser partner = helper.resolvePartner(partnerId, currentUserId, userCache);
         boolean viewerCanSee = helper.canViewerSeeStatus(currentUserId, userCache);
-        String baseUrl = helper.getBaseUrl();
+        String baseUrl = s3UtilV2.getS3BaseUrl();
 
         String friendshipStatus = null;
         try {
@@ -146,7 +145,7 @@ public class ConversationServiceImpl implements ConversationService {
         final Map<String, String> friendshipStatusMap = tempMap;
 
         boolean viewerCanSee = helper.canViewerSeeStatus(currentUserId, userCache);
-        String baseUrl = helper.getBaseUrl();
+        String baseUrl = s3UtilV2.getS3BaseUrl();
 
         return PageResponse.fromPage(roomsPage, room -> {
             String partnerId = room.getMembers().stream()
@@ -239,11 +238,11 @@ public class ConversationServiceImpl implements ConversationService {
 
         String lastReadMessageId = currentMember.getLastReadMessageId();
 
-        // Determine anchor and count by querying actual messages —
-        // do NOT rely on unreadCounts cache, which may already be zeroed by markAsRead
         if (lastReadMessageId == null) {
-            // Never read — oldest visible message is the anchor, count all visible messages
-            Criteria base = buildMessageVisibilityCriteria(conversationId, currentUserId, memberJoinedAt, deletedBefore);
+            Criteria base = new Criteria().andOperator(
+                buildMessageVisibilityCriteria(conversationId, currentUserId, memberJoinedAt, deletedBefore),
+                Criteria.where("type").ne("SYSTEM")
+            );
             Query firstQ = new Query(base).with(Sort.by(Sort.Direction.ASC, "createdAt")).limit(1);
             Message firstMsg = mongoTemplate.findOne(firstQ, Message.class);
             long count = mongoTemplate.count(new Query(base), Message.class);
@@ -264,6 +263,7 @@ public class ConversationServiceImpl implements ConversationService {
         // First visible message strictly after lastReadMsg, respecting all visibility rules
         Criteria afterLastRead = new Criteria().andOperator(
                 buildMessageVisibilityCriteria(conversationId, currentUserId, memberJoinedAt, deletedBefore),
+                Criteria.where("type").ne("SYSTEM"),
                 Criteria.where("createdAt").gt(lastReadMsg.getCreatedAt())
         );
         Query afterQ = new Query(afterLastRead);
@@ -404,6 +404,76 @@ public class ConversationServiceImpl implements ConversationService {
                         .map(m -> m.getUserId())
                         .collect(java.util.stream.Collectors.toSet()))
                 .orElse(java.util.Collections.emptySet());
+    }
+
+    @Override
+    public PageResponse<List<ConversationParticipantResponse>> getConversationParticipants(
+            String conversationId, String query, int page, int size) {
+        String currentUserId = securityUtil.getCurrentUserId();
+        log.info("[Conversation] User {} is fetching participants for sidebar dropdown in conversation {} with query: '{}'", 
+                currentUserId, conversationId, query);
+
+        Conversation conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
+
+        // Security check
+        helper.assertMember(conversation, currentUserId);
+
+        List<ConversationMember> activeMembers = conversation.getMembers().stream()
+                .filter(helper::isActiveMember)
+                .toList();
+
+        List<String> userIds = activeMembers.stream()
+                .map(ConversationMember::getUserId)
+                .collect(Collectors.toList());
+
+        Map<String, ChatUser> userCache = chatUserRepository.findAllById(userIds).stream()
+                .collect(Collectors.toMap(ChatUser::getId, u -> u));
+
+        String normalizedQuery = (query != null) ? query.trim().toLowerCase() : "";
+        String baseUrl = s3UtilV2.getS3BaseUrl();
+
+        List<ConversationParticipantResponse> allParticipants = activeMembers.stream()
+                .map(m -> {
+                    ChatUser user = userCache.get(m.getUserId());
+                    if (user == null) return null;
+
+                    String fullName = user.getFullName() != null ? user.getFullName() : "Người dùng";
+                    String phone = user.getPhoneNumber() != null ? user.getPhoneNumber() : "";
+
+                    if (!normalizedQuery.isEmpty()) {
+                        if (!fullName.toLowerCase().contains(normalizedQuery) && !phone.contains(normalizedQuery)) {
+                            return null;
+                        }
+                    }
+
+                    return ConversationParticipantResponse.builder()
+                            .userId(user.getId())
+                            .fullName(fullName)
+                            .avatar(user.getAvatar() != null ? baseUrl + user.getAvatar() : null)
+                            .isMe(user.getId().equals(currentUserId))
+                            .build();
+                })
+                .filter(Objects::nonNull)
+                .sorted(Comparator.comparing(ConversationParticipantResponse::isMe, Comparator.reverseOrder())
+                        .thenComparing(ConversationParticipantResponse::fullName))
+                .toList();
+
+        int total = allParticipants.size();
+        int start = page * size;
+        int end = Math.min(start + size, total);
+        List<ConversationParticipantResponse> pagedList = (start < total) 
+                ? allParticipants.subList(start, end) 
+                : Collections.emptyList();
+
+        log.debug("[Conversation] Dropdown fetch: found {} participants, returning {} for page {}", 
+                total, pagedList.size(), page);
+
+        return PageResponse.fromPage(
+                new PageImpl<>(pagedList,
+                        PageRequest.of(page, size), total),
+                r -> r
+        );
     }
 }
 

@@ -3,6 +3,7 @@ package com.bondhub.messageservice.service.conversation;
 import com.bondhub.common.enums.Status;
 import com.bondhub.common.utils.PhoneUtil;
 import com.bondhub.common.utils.S3Util;
+import com.bondhub.common.utils.S3UtilV2;
 import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
@@ -49,12 +50,9 @@ public class ConversationHelper {
     private final SecurityUtil securityUtil;
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final MongoTemplate mongoTemplate;
+    private final S3UtilV2 s3UtilV2;
 
-    @Value("${aws.s3.bucket.name}")
-    private String bucketName;
 
-    @Value("${cloud.aws.region.static}")
-    private String region;
 
     @Value("${kafka.topics.socket-events}")
     private String socketEventsTopic;
@@ -149,7 +147,7 @@ public class ConversationHelper {
         Map<String, ChatUser> userCache = chatUserRepository.findAllById(allUserIds).stream()
                 .collect(Collectors.toMap(ChatUser::getId, u -> u));
 
-        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+        String baseUrl = s3UtilV2.getS3BaseUrl();
 
         ChatUser partner = null;
         if (!room.isGroup()) {
@@ -274,7 +272,7 @@ public class ConversationHelper {
         Map<String, ChatUser> userCache = chatUserRepository.findAllById(userIds).stream()
                 .collect(Collectors.toMap(ChatUser::getId, u -> u));
 
-        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+        String baseUrl = s3UtilV2.getS3BaseUrl();
 
         Long pendingJoinRequestCount = room.isGroup() && room.getSettings() != null
                 && room.getSettings().isMembershipApprovalEnabled()
@@ -449,9 +447,5 @@ public class ConversationHelper {
             }
         }
         return "";
-    }
-
-    public String getBaseUrl() {
-        return S3Util.getS3BaseUrl(bucketName, region);
     }
 }

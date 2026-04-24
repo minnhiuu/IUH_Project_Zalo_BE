@@ -3,6 +3,7 @@ package com.bondhub.messageservice.service.message;
 import com.bondhub.common.dto.PageResponse;
 import com.bondhub.common.dto.client.messageservice.MessageSendRequest;
 import com.bondhub.messageservice.dto.response.MessageResponse;
+import com.bondhub.messageservice.dto.response.CursorPageResponse;
 import com.bondhub.messageservice.dto.response.MessageSeenResponse;
 import com.bondhub.messageservice.model.Message;
 import java.util.List;
@@ -63,4 +64,12 @@ public interface MessageService {
      * Loại trừ người gửi tin nhắn.
      */
     List<MessageSeenResponse> getSeenMembers(String conversationId, String messageId);
+
+    /**
+     * Lấy tin nhắn theo conversationId với Cursor-based pagination (V2).
+     * Hỗ trợ lướt lên, lướt xuống và nhảy tới tin nhắn cụ thể.
+     */
+    CursorPageResponse<MessageResponse> findChatMessagesV2(
+            String conversationId, String cursor, int limit, String direction, String aroundMessageId);
+
 }

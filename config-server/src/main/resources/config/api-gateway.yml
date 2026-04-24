@@ -563,6 +563,8 @@ resilience4j:
         base-config: default
       socialFeedServiceCircuitBreaker:
         base-config: default
+      searchServiceCircuitBreaker:
+        base-config: default
 
   timelimiter:
     configs:
@@ -587,6 +589,8 @@ resilience4j:
       friendServiceCircuitBreaker:
         base-config: default
       socialFeedServiceCircuitBreaker:
+        base-config: default
+      searchServiceCircuitBreaker:
         base-config: default
 
   # Retry Configuration

@@ -1,7 +1,6 @@
 package com.bondhub.messageservice.consumer;
 
-import com.bondhub.common.utils.S3UrlUtil;
-import com.bondhub.common.utils.S3Util;
+import com.bondhub.common.utils.S3UtilV2;
 import com.bondhub.common.event.user.UserPrivacyChangedEvent;
 import com.bondhub.common.event.user.UserProfileUpdatedEvent;
 import com.bondhub.common.enums.SocketEventType;
@@ -37,29 +36,20 @@ public class UserMirrorConsumer {
     @Value("${kafka.topics.socket-events}")
     private String socketEventsTopic;
 
-    @Value("${aws.s3.bucket.name}")
-    private String bucketName;
-
-    @Value("${cloud.aws.region.static}")
-    private String region;
+    private final S3UtilV2 s3UtilV2;
 
     @KafkaListener(topics = "${kafka.topics.user-events.updated}", groupId = "${spring.kafka.consumer.group-id:message-service-group}")
     public void handleUserUpdated(UserProfileUpdatedEvent event, Acknowledgment ack) {
         log.info("Received USER_UPDATED event for userId: {}", event.userId());
         try {
-            String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
-
             chatUserRepository.findById(event.userId()).ifPresentOrElse(user -> {
                 LocalDateTime eventTime = new Timestamp(event.timestamp()).toLocalDateTime();
                 if (user.getLastUpdatedAt() == null || user.getLastUpdatedAt().isBefore(eventTime)) {
-                    user.setFullName(event.fullName());
-                    user.setAvatar(event.avatar());
-                    user.setPhoneNumber(event.phoneNumber());
                     if (StringUtils.hasText(event.fullName())) {
                         user.setFullName(event.fullName());
                     }
                     if (StringUtils.hasText(event.avatar())) {
-                        user.setAvatar(S3UrlUtil.extractStorageKey(event.avatar(), baseUrl));
+                        user.setAvatar(s3UtilV2.extractStorageKey(event.avatar()));
                         log.info("✅ Updated ChatUser mirror with avatar: {}", user.getAvatar());
                     }
                     user.setLastUpdatedAt(eventTime);
@@ -76,7 +66,7 @@ public class UserMirrorConsumer {
                         .phoneNumber(event.phoneNumber())
                         .fullName(StringUtils.hasText(event.fullName()) ? event.fullName() : "Người dùng mới")
                     .avatar(StringUtils.hasText(event.avatar())
-                        ? S3UrlUtil.extractStorageKey(event.avatar(), baseUrl)
+                        ? s3UtilV2.extractStorageKey(event.avatar())
                         : null)
                         .lastUpdatedAt(new Timestamp(event.timestamp()).toLocalDateTime())
                         .build();

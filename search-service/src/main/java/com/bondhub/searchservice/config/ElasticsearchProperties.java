@@ -12,6 +12,7 @@ public class ElasticsearchProperties {
     private SyncConfig sync = new SyncConfig();
     private IndexConfig index = new IndexConfig();
     private String userAlias = "users";
+    private String messageAlias = "messages";
     private MonitoringConfig monitoring = new MonitoringConfig();
 
     @Data

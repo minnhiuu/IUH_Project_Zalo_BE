@@ -1,13 +1,41 @@
 package com.bondhub.common.utils;
 
+import lombok.experimental.NonFinal;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
+
 import java.net.URI;
 
-public final class S3UrlUtil {
+@Component
+public class S3UtilV2 {
 
-    private S3UrlUtil() {
+    @Value("${aws.s3.bucket.name:bondhub-bucket}")
+    String bucketName;
+
+    @Value("${cloud.aws.region.static:ap-southeast-1}")
+    String region;
+
+    public String getS3BaseUrl() {
+        return String.format("https://%s.s3.%s.amazonaws.com/", bucketName, region);
     }
 
-    public static String extractStorageKey(String rawAvatar, String baseUrl) {
+    public String getS3BaseUrl(String customBucket, String customRegion) {
+        return String.format("https://%s.s3.%s.amazonaws.com/", customBucket, customRegion);
+    }
+
+    public String getFullUrl(String originalAvatar) {
+        if (originalAvatar == null || originalAvatar.isBlank()) {
+            return null;
+        }
+        String baseUrl = getS3BaseUrl();
+        return baseUrl + extractStorageKey(originalAvatar, baseUrl);
+    }
+
+    public String extractStorageKey(String rawAvatar) {
+        return extractStorageKey(rawAvatar, getS3BaseUrl());
+    }
+
+    public String extractStorageKey(String rawAvatar, String baseUrl) {
         if (rawAvatar == null || rawAvatar.isBlank()) {
             return rawAvatar;
         }
@@ -51,5 +79,13 @@ public final class S3UrlUtil {
         }
 
         return normalized;
+    }
+
+    public String getBucketName() {
+        return bucketName;
+    }
+
+    public String getRegion() {
+        return region;
     }
 }

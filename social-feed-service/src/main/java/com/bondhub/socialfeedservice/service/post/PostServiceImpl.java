@@ -3,7 +3,7 @@ package com.bondhub.socialfeedservice.service.post;
 import com.bondhub.common.dto.PageResponse;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
-import com.bondhub.common.utils.S3Util;
+import com.bondhub.common.utils.S3UtilV2;
 import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.socialfeedservice.dto.request.post.CreatePostRequest;
 import com.bondhub.socialfeedservice.dto.request.post.UpdatePostRequest;
@@ -60,12 +60,7 @@ public class PostServiceImpl implements PostService {
     final PostEventPublisher postEventPublisher;
     final ReactionRepository reactionRepository;
     final UserSummaryRepository userSummaryRepository;
-
-    @Value("${aws.s3.bucket.name}")
-    String bucketName;
-
-    @Value("${cloud.aws.region.static}")
-    String region;
+    final S3UtilV2 s3UtilV2;
 
     @Override
     @Transactional
@@ -157,7 +152,8 @@ public class PostServiceImpl implements PostService {
         String currentUserId = securityUtil.getCurrentUserId();
         Map<String, UserSummary> authorMap = buildAuthorMap(posts);
 
-        // Group stories by authorId, preserving insertion order (most-recent story first per group).
+        // Group stories by authorId, preserving insertion order (most-recent story
+        // first per group).
         Map<String, List<PostResponse>> grouped = new LinkedHashMap<>();
         for (Post post : posts) {
             PostResponse response = postMapper.toPostResponse(
@@ -299,7 +295,7 @@ public class PostServiceImpl implements PostService {
     }
 
     private String getS3BaseUrl() {
-        return S3Util.getS3BaseUrl(bucketName, region);
+        return s3UtilV2.getS3BaseUrl();
     }
 
     private Post getActivePost(String postId) {
@@ -506,8 +502,8 @@ public class PostServiceImpl implements PostService {
                         : null)
                 .build();
 
-        List<PostMedia> resolvedMedia = original.getMedia() == null ? new ArrayList<>() :
-                original.getMedia().stream()
+        List<PostMedia> resolvedMedia = original.getMedia() == null ? new ArrayList<>()
+                : original.getMedia().stream()
                         .filter(m -> m.getUrl() != null)
                         .map(m -> PostMedia.builder()
                                 .url(postMapper.resolveMediaUrl(m.getUrl(), s3BaseUrl))
