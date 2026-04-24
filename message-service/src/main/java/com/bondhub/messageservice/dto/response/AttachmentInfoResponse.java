@@ -1,8 +1,10 @@
 package com.bondhub.messageservice.dto.response;
 
 import lombok.Builder;
+import lombok.With;
 
-@Builder
+@Builder(toBuilder = true)
+@With
 public record AttachmentInfoResponse(
         String key,
         String url,

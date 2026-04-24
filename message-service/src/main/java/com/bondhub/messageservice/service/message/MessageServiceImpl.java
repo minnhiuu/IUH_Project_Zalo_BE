@@ -89,27 +89,27 @@ public class MessageServiceImpl implements MessageService {
                 .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
         assertConversationMember(room, currentUserId);
         ConversationMember currentMember = room.getMembers().stream()
-            .filter(m -> m.getUserId().equals(currentUserId))
-            .findFirst().orElse(null);
+                .filter(m -> m.getUserId().equals(currentUserId))
+                .findFirst().orElse(null);
         boolean isActive = currentMember != null && isActiveMember(currentMember);
 
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
 
         LocalDateTime memberJoinedAt = (currentMember != null && currentMember.getJoinedAt() != null)
-            ? currentMember.getJoinedAt()
-            : LocalDateTime.of(1970, 1, 1, 0, 0);
+                ? currentMember.getJoinedAt()
+                : LocalDateTime.of(1970, 1, 1, 0, 0);
         LocalDateTime deletedBefore = (room.getDeletedBefore() != null)
-            ? room.getDeletedBefore().getOrDefault(currentUserId, LocalDateTime.of(1970, 1, 1, 0, 0))
-            : LocalDateTime.of(1970, 1, 1, 0, 0);
+                ? room.getDeletedBefore().getOrDefault(currentUserId, LocalDateTime.of(1970, 1, 1, 0, 0))
+                : LocalDateTime.of(1970, 1, 1, 0, 0);
         Page<Message> messagePage = isActive
-            ? messageRepository.findByConversationIdAndNotDeleted(conversationId, currentUserId, memberJoinedAt, deletedBefore, pageable)
-            : messageRepository.findByConversationIdAndTypeAndNotDeleted(
+                ? messageRepository.findByConversationIdAndNotDeleted(conversationId, currentUserId, memberJoinedAt, deletedBefore, pageable)
+                : messageRepository.findByConversationIdAndTypeAndNotDeleted(
                 conversationId,
                 currentUserId,
                 MessageType.SYSTEM,
                 deletedBefore,
                 PageRequest.of(0, 1, Sort.by(Sort.Direction.DESC, "createdAt"))
-            );
+        );
 
         String baseUrl = s3UtilV2.getS3BaseUrl();
         List<MessageResponse> dtos = messagePage.getContent().stream()
@@ -373,12 +373,12 @@ public class MessageServiceImpl implements MessageService {
         // 5. Cập nhật lastMessage + tăng unreadCount cho tất cả member trừ sender
         Query query = new Query(Criteria.where("id").is(room.getId()));
         Update update = new Update().set("lastMessage", lastInfo);
-        
+
         if (message.getType() != MessageType.SYSTEM) {
             room.getMembers().stream()
-                .filter(this::isActiveMember)
-                .filter(m -> !m.getUserId().equals(currentUserId))
-                .forEach(m -> update.inc("unreadCounts." + m.getUserId(), 1));
+                    .filter(this::isActiveMember)
+                    .filter(m -> !m.getUserId().equals(currentUserId))
+                    .forEach(m -> update.inc("unreadCounts." + m.getUserId(), 1));
         }
 
         Conversation updatedRoom = mongoTemplate.findAndModify(
@@ -398,19 +398,19 @@ public class MessageServiceImpl implements MessageService {
         ChatNotification baseNotif = notifPrototypes.get(0);
 
         finalRoom.getMembers().stream()
-            .filter(this::isActiveMember)
-            .forEach(member -> {
-            boolean isFromMe = member.getUserId().equals(currentUserId);
-            Integer unreadCount = finalRoom.getUnreadCounts().getOrDefault(member.getUserId(), 0);
+                .filter(this::isActiveMember)
+                .forEach(member -> {
+                    boolean isFromMe = member.getUserId().equals(currentUserId);
+                    Integer unreadCount = finalRoom.getUnreadCounts().getOrDefault(member.getUserId(), 0);
 
-            ChatNotification personalNotif = baseNotif.toBuilder()
-                    .isFromMe(isFromMe)
-                    .unreadCount(unreadCount)
-                    .build();
+                    ChatNotification personalNotif = baseNotif.toBuilder()
+                            .isFromMe(isFromMe)
+                            .unreadCount(unreadCount)
+                            .build();
 
-            kafkaTemplate.send(socketEventsTopic,
-                    new SocketEvent(SocketEventType.MESSAGE, member.getUserId(),
-                            "/queue/messages", personalNotif));
+                    kafkaTemplate.send(socketEventsTopic,
+                            new SocketEvent(SocketEventType.MESSAGE, member.getUserId(),
+                                    "/queue/messages", personalNotif));
                 });
 
         // 7. Ingest vào AI system
@@ -532,7 +532,7 @@ public class MessageServiceImpl implements MessageService {
         Message message = messageRepository.findById(messageId)
                 .orElseThrow(() -> new AppException(ErrorCode.MESSAGE_NOT_FOUND));
 
-        
+
         Conversation room = conversationRepository.findById(message.getConversationId())
                 .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
         assertActiveMember(room, currentUserId);
@@ -660,10 +660,10 @@ public class MessageServiceImpl implements MessageService {
         // 1. Kiểm tra quyền membership
         Conversation room = conversationRepository.findById(conversationId)
                 .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
-        
+
         boolean isMember = room.getMembers().stream()
                 .anyMatch(m -> m.getUserId().equals(userId) && isActiveMember(m));
-        
+
         if (!isMember) {
             throw new AppException(ErrorCode.CHAT_NOT_A_MEMBER);
         }
@@ -721,6 +721,15 @@ public class MessageServiceImpl implements MessageService {
                 enriched = enriched.withMetadata(enrichSystemMetadata(d.metadata(), baseUrl));
             }
 
+            if (d.attachments() != null && !d.attachments().isEmpty()) {
+                List<AttachmentInfoResponse> enrichedAttachments = d.attachments().stream()
+                        .map(att -> att.key() != null
+                                ? att.withUrl(baseUrl + att.key())
+                                : att)
+                        .toList();
+                enriched = enriched.withAttachments(enrichedAttachments);
+            }
+
             ChatUser sender = userMap.get(d.senderId());
             if (sender != null) {
                 enriched = enriched.withSenderName(sender.getFullName())
@@ -756,6 +765,17 @@ public class MessageServiceImpl implements MessageService {
             if (n.type() == MessageType.SYSTEM && n.metadata() != null) {
                 enriched = enriched.toBuilder()
                         .metadata(enrichSystemMetadata(n.metadata(), baseUrl))
+                        .build();
+            }
+
+            if (n.attachments() != null && !n.attachments().isEmpty()) {
+                List<AttachmentInfoResponse> enrichedAttachments = n.attachments().stream()
+                        .map(att -> att.key() != null
+                                ? att.withUrl(baseUrl + att.key())
+                                : att)
+                        .toList();
+                enriched = enriched.toBuilder()
+                        .attachments(enrichedAttachments)
                         .build();
             }
 
@@ -929,7 +949,6 @@ public class MessageServiceImpl implements MessageService {
         return request.attachments().stream()
                 .map(a -> AttachmentInfo.builder()
                         .key(a.key())
-                        .url(a.url())
                         .fileName(a.fileName())
                         .originalFileName(a.originalFileName())
                         .contentType(a.contentType())
