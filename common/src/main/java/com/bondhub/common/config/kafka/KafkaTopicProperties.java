@@ -15,6 +15,8 @@ public class KafkaTopicProperties {
     private UserEvents userEvents = new UserEvents();
     private MessageEvents messageEvents = new MessageEvents();
     private NotificationEvents notificationEvents = new NotificationEvents();
+    private SocialFeedEvents socialFeedEvents = new SocialFeedEvents();
+    private InteractionEvents interactionEvents = new InteractionEvents();
     private FriendEvents friendEvents = new FriendEvents();
     private GroupEvents groupEvents = new GroupEvents();
 
@@ -56,7 +58,8 @@ public class KafkaTopicProperties {
     @Getter
     @Setter
     public static class MessageEvents {
-
+        private String indexRequested = "message.search.index-requested";
+        private String indexDeleted = "message.search.index-deleted";
     }
 
     @Getter
@@ -64,6 +67,25 @@ public class KafkaTopicProperties {
     public static class NotificationEvents {
         private String raw = "noti.raw";
         private String cleanup = "noti.cleanup";
+        private String system = "noti.system";
+    }
+
+    @Getter
+    @Setter
+    public static class SocialFeedEvents {
+        private String postCreated = "social-feed.post.created";
+        private String postUpdated = "social-feed.post.updated";
+        private String postDeleted = "social-feed.post.deleted";
+        private String reactionToggleCommandRequested = "social-feed.reaction.toggle.command";
+        private String postCommentCountProjectionRequested = "social-feed.post.comment-count.projection";
+        private String postViewRecorded = "social-feed.post.view.recorded";
+        private String postDislikeRecorded = "social-feed.post.dislike.recorded";
+    }
+
+    @Getter
+    @Setter
+    public static class InteractionEvents {
+        private String userInteraction = "user.interaction";
     }
 
     @Getter

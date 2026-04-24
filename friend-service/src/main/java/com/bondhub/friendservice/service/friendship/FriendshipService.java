@@ -34,6 +34,8 @@ public interface FriendshipService {
 
     Set<String> getFriendIds(String userId);
 
+    List<String> getFriendIds(String userId, int size);
+
     java.util.Map<String, String> batchCheckFriendshipStatus(List<String> targetUserIds);
 
     PageResponse<List<FriendSuggestionResponse>> getGraphSuggestions(Pageable pageable);

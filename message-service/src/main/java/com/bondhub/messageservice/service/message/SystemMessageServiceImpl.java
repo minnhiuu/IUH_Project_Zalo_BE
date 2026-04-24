@@ -3,6 +3,7 @@ package com.bondhub.messageservice.service.message;
 import com.bondhub.common.enums.MessageType;
 import com.bondhub.common.enums.SystemActionType;
 import com.bondhub.common.utils.S3Util;
+import com.bondhub.common.utils.S3UtilV2;
 import com.bondhub.common.dto.client.socketservice.SocketEvent;
 import com.bondhub.common.enums.SocketEventType;
 import com.bondhub.messageservice.dto.response.ChatNotification;
@@ -34,12 +35,9 @@ public class SystemMessageServiceImpl implements SystemMessageService {
     private final MongoTemplate mongoTemplate;
     private final MessageMapper messageMapper;
     private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final S3UtilV2 s3UtilV2;
 
-    @Value("${aws.s3.bucket.name}")
-    private String bucketName;
 
-    @Value("${cloud.aws.region.static}")
-    private String region;
 
     @Value("${kafka.topics.socket-events}")
     private String socketEventsTopic;
@@ -79,7 +77,9 @@ public class SystemMessageServiceImpl implements SystemMessageService {
         boolean isRestricted = recipientUserIds != null && !recipientUserIds.isEmpty();
 
         boolean isNegativeAction = action == SystemActionType.LEAVE_GROUP
-                || action == SystemActionType.DISBAND_GROUP;
+                || action == SystemActionType.DISBAND_GROUP
+                || action == SystemActionType.REMOVE_MEMBER
+                || action == SystemActionType.BLOCK_MEMBER;
 
         Conversation room;
         Query query = new Query(Criteria.where("id").is(conversationId));
@@ -139,9 +139,21 @@ public class SystemMessageServiceImpl implements SystemMessageService {
         }
 
         if (room != null) {
-            String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+            String baseUrl = s3UtilV2.getS3BaseUrl();
 
             room.getMembers().forEach(member -> {
+                boolean isInactive = Boolean.FALSE.equals(member.getActive());
+                if (isInactive) {
+                    boolean isTarget = false;
+                    if (metadata.get("targetIds") instanceof Collection<?> tIds) {
+                        isTarget = tIds.stream().map(String::valueOf).anyMatch(id -> id.equals(member.getUserId()));
+                    }
+                    boolean isActor = member.getUserId().equals(actorId);
+                    if (!isTarget && !isActor) {
+                        return;
+                    }
+                }
+
                 if (recipientUserIds != null && !recipientUserIds.contains(member.getUserId())) {
                     return;
                 }

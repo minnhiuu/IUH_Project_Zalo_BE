@@ -1,6 +1,5 @@
 package com.bondhub.messageservice.service.call;
 
-import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.common.dto.client.socketservice.SocketEvent;
 import com.bondhub.common.dto.client.userservice.user.response.UserSummaryResponse;
 import com.bondhub.common.enums.MessageType;
@@ -9,7 +8,7 @@ import com.bondhub.common.enums.SocketEventType;
 import com.bondhub.common.event.notification.RawNotificationEvent;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
-import com.bondhub.common.utils.S3Util;
+import com.bondhub.common.utils.S3UtilV2;
 import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.messageservice.client.FriendServiceClient;
 import com.bondhub.messageservice.client.UserServiceClient;
@@ -64,6 +63,7 @@ public class CallServiceImpl implements CallService {
     MessageRepository messageRepository;
     MessageMapper messageMapper;
     MongoTemplate mongoTemplate;
+    S3UtilV2 s3UtilV2;
 
     static final String USER_STATUS_KEY_PREFIX = "user:status:";
     static final String BUSY = "BUSY";
@@ -77,14 +77,6 @@ public class CallServiceImpl implements CallService {
     @NonFinal
     @Value("${zego.server-secret}")
     String zegoServerSecret;
-
-    @NonFinal
-    @Value("${aws.s3.bucket.name:bondhub-bucket}")
-    String bucketName;
-
-    @NonFinal
-    @Value("${cloud.aws.region.static:ap-southeast-1}")
-    String region;
 
     @NonFinal
     @Value("${kafka.topics.socket-events:socket-events}")
@@ -274,7 +266,8 @@ public class CallServiceImpl implements CallService {
         Map<String, Object> payload = new HashMap<>();
         payload.put("sessionId", sessionId);
         payload.put("signal", signal);
-        if (roomId != null) payload.put("roomId", roomId);
+        if (roomId != null)
+            payload.put("roomId", roomId);
 
         kafkaTemplate.send(socketEventsTopic, new SocketEvent(
                 SocketEventType.CALL_SIGNAL, targetUserId,
@@ -294,8 +287,7 @@ public class CallServiceImpl implements CallService {
                         "sessionId", session.getId(),
                         "roomId", session.getRoomId(),
                         "callerName", session.getCallerName(),
-                        "callerAvatar", session.getCallerAvatar() != null ? session.getCallerAvatar() : ""
-                ))
+                        "callerAvatar", session.getCallerAvatar() != null ? session.getCallerAvatar() : ""))
                 .occurredAt(LocalDateTime.now())
                 .build();
 
@@ -304,7 +296,8 @@ public class CallServiceImpl implements CallService {
     }
 
     /**
-     * Save a CALL message into the 1-1 conversation so both users see it in chat history.
+     * Save a CALL message into the 1-1 conversation so both users see it in chat
+     * history.
      */
     private void saveCallMessage(CallSession session, String action) {
         try {
@@ -370,10 +363,11 @@ public class CallServiceImpl implements CallService {
 
             // Broadcast call message to both users via socket
             if (updatedRoom != null) {
-                String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+                String baseUrl = s3UtilV2.getS3BaseUrl();
                 updatedRoom.getMembers().forEach(member -> {
                     Integer unread = updatedRoom.getUnreadCounts() != null
-                            ? updatedRoom.getUnreadCounts().getOrDefault(member.getUserId(), 0) : 0;
+                            ? updatedRoom.getUnreadCounts().getOrDefault(member.getUserId(), 0)
+                            : 0;
                     boolean isFromMe = member.getUserId().equals(session.getCallerId());
 
                     ChatNotification notification = messageMapper.mapToChatNotification(savedMessage, baseUrl, unread);

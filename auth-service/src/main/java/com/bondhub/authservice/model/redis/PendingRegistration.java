@@ -5,6 +5,8 @@ import org.springframework.data.annotation.Id;
 import org.springframework.data.redis.core.RedisHash;
 import org.springframework.data.redis.core.TimeToLive;
 
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -39,6 +41,12 @@ public class PendingRegistration {
      * Phone number (optional)
      */
     private String phoneNumber;
+
+    /**
+     * Initial interest hashtags selected during registration
+     */
+    @Builder.Default
+    private Set<String> initialInterests = new HashSet<>();
 
     /**
      * Timestamp when registration was initiated

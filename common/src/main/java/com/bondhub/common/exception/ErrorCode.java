@@ -61,6 +61,8 @@ public enum ErrorCode {
         INVALID_OPERATION(HttpStatus.BAD_REQUEST, 2305, "error.invalid.operation"),
         INVALID_PROMOTION_CONDITION(HttpStatus.BAD_REQUEST, 2306, "error.invalid.promotion.condition"),
         ACC_PASSWORD_MISMATCH(HttpStatus.BAD_REQUEST, 2307, "error.acc.password.mismatch"),
+        INVALID_TYPE(HttpStatus.BAD_REQUEST, 2308, "error.invalid.type"),
+
 
         // Friendship errors (3xxx)
         FRIEND_REQUEST_NOT_FOUND(HttpStatus.NOT_FOUND, 3001, "error.friend.request.not.found"),
@@ -72,6 +74,19 @@ public enum ErrorCode {
         NOT_AUTHORIZED_TO_DECLINE(HttpStatus.FORBIDDEN, 3007, "error.friend.not.authorized.to.decline"),
         NOT_AUTHORIZED_TO_CANCEL(HttpStatus.FORBIDDEN, 3008, "error.friend.not.authorized.to.cancel"),
         FRIEND_REQUEST_NOT_PENDING(HttpStatus.BAD_REQUEST, 3009, "error.friend.request.not.pending"),
+
+        // Social feed errors (4xxx)
+        POST_NOT_FOUND(HttpStatus.NOT_FOUND, 4001, "error.post.not.found"),
+        COMMENT_NOT_FOUND(HttpStatus.NOT_FOUND, 4002, "error.comment.not.found"),
+        REACTION_NOT_FOUND(HttpStatus.NOT_FOUND, 4003, "error.reaction.not.found"),
+        POST_INVALID_VISIBILITY(HttpStatus.BAD_REQUEST, 4004, "error.post.invalid.visibility"),
+
+        // Report & Moderation errors (5xxx)
+        REPORT_NOT_FOUND(HttpStatus.NOT_FOUND, 5001, "error.report.not.found"),
+        REPORT_ALREADY_PENDING(HttpStatus.CONFLICT, 5002, "error.report.already.pending"),
+        REPORT_SELF_CONTENT(HttpStatus.BAD_REQUEST, 5003, "error.report.self.content"),
+        REPORT_TARGET_NOT_FOUND(HttpStatus.NOT_FOUND, 5004, "error.report.target.not.found"),
+        REPORT_ALREADY_PROCESSED(HttpStatus.CONFLICT, 5005, "error.report.already.processed"),
 
         // Contact errors (34xx)
         CONTACT_IMPORT_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, 3401, "error.contact.import.failed"),
@@ -133,6 +148,7 @@ public enum ErrorCode {
         CHAT_GROUP_DUPLICATE(HttpStatus.CONFLICT, 4035, "error.chat.group.duplicate"),
         CHAT_NEED_AT_LEAST_ONE_FRIEND(HttpStatus.BAD_REQUEST, 4036, "error.chat.group.need.at.least.one.friend"),
         CHAT_INVALID_INVITE_TARGET(HttpStatus.BAD_REQUEST, 4037, "error.chat.invalid.invite.target"),
+        CHAT_ADMIN_CANNOT_DELETE_OWNER_MESSAGE(HttpStatus.FORBIDDEN, 4038, "error.chat.admin.cannot.delete.owner.message"),
 
         //  NOTIFICATION_TEMPLATE (23xx)
         NOTIFICATION_TEMPLATE_NOT_FOUND(HttpStatus.NOT_FOUND, 2300, "error.notification.template.not.found"),
@@ -160,6 +176,7 @@ public enum ErrorCode {
         CALL_ALREADY_IN_PROGRESS(HttpStatus.CONFLICT, 5004, "error.call.already.in.progress"),
         CALL_SELF_NOT_ALLOWED(HttpStatus.BAD_REQUEST, 5005, "error.call.self.not.allowed"),
         CALL_TOKEN_GENERATION_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, 5006, "error.call.token.generation.failed"),
+        CHAT_NOT_A_MEMBER(HttpStatus.FORBIDDEN, 4036, "error.chat.not.a.member"),
 
         ;
 
