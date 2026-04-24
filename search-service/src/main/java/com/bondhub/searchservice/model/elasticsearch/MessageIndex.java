@@ -28,6 +28,24 @@ public class MessageIndex {
     String conversationId;
 
     @Field(type = FieldType.Keyword)
+    List<String> participantIds;
+
+    @Field(type = FieldType.Keyword, index = false)
+    List<String> participantNames;
+
+    @Field(type = FieldType.Keyword, index = false)
+    List<String> participantAvatars;
+
+    @Field(type = FieldType.Keyword, index = false)
+    String conversationName;
+
+    @Field(type = FieldType.Keyword, index = false)
+    String conversationAvatar;
+
+    @Field(type = FieldType.Boolean)
+    boolean group;
+
+    @Field(type = FieldType.Keyword)
     String senderId;
 
     @Field(type = FieldType.Keyword, index = false)
@@ -57,6 +75,13 @@ public class MessageIndex {
             searchAnalyzer = "searchable_text_search_analyzer"
     )
     String searchableText;
+
+    @Field(
+            type = FieldType.Text,
+            analyzer = "searchable_text_index_analyzer",
+            searchAnalyzer = "searchable_text_search_analyzer"
+    )
+    String conversationSearchText;
 
     @Field(type = FieldType.Keyword)
     String type;
