@@ -4,15 +4,9 @@ import yaml
 import os
 from dotenv import load_dotenv
 
-# Paths to .env files
-# Resolve paths relative to the current file
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_ENV_PATH = os.path.abspath(os.path.join(BASE_DIR, "../../../.env"))
-# LOCAL_ENV_PATH = os.path.abspath(os.path.join(BASE_DIR, "../../.env"))
-
-# Explicitly load into environment variables (this makes os.getenv work)
 load_dotenv(ROOT_ENV_PATH)
-# load_dotenv(LOCAL_ENV_PATH, override=True) # Local settings for this service
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(

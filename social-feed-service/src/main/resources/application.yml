@@ -2,11 +2,11 @@ spring:
   application:
     name: social-feed-service
   config:
-    import: optional:configserver:http://localhost:8888
+    import: "optional:configserver:${CONFIG_SERVER_URL:http://bh-config-server:8888}"
   cloud:
     config:
       name: social-feed-service,application
-      uri: http://localhost:8888
+      uri: ${CONFIG_SERVER_URL:http://bh-config-server:8888}
       fail-fast: false
       retry:
         max-attempts: 6

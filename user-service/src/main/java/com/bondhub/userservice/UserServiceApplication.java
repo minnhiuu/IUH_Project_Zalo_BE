@@ -5,6 +5,7 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.cloud.openfeign.EnableFeignClients;
+import org.springframework.context.annotation.FilterType;
 import org.springframework.data.mongodb.config.EnableMongoAuditing;
 import org.springframework.data.mongodb.repository.config.EnableMongoRepositories;
 import org.springframework.scheduling.annotation.EnableAsync;
@@ -17,7 +18,16 @@ import java.util.TimeZone;
 @EnableScheduling
 @EnableMongoAuditing
 @EnableAsync
-@ComponentScan(basePackages = { "com.bondhub.userservice", "com.bondhub.common"})
+@ComponentScan(basePackages = { "com.bondhub.userservice", "com.bondhub.common"},
+        excludeFilters = {
+                @ComponentScan.Filter(
+                        type = FilterType.ASSIGNABLE_TYPE,
+                        classes = {
+                                com.bondhub.common.config.ElasticSearchConfiguration.class,
+                        }
+                )
+        }
+)
 @EnableMongoRepositories(basePackages = { "com.bondhub.userservice.repository", "com.bondhub.common.repository" })
 public class UserServiceApplication {
 

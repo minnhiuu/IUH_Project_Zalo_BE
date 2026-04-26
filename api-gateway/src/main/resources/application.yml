@@ -5,10 +5,10 @@ spring:
     allow-bean-definition-overriding: true
     web-application-type: reactive # Force reactive mode for Gateway
   config:
-    import: "configserver:http://localhost:8888"
+    import: "optional:configserver:${CONFIG_SERVER_URL:http://bh-config-server:8888}"
   cloud:
     config:
-      uri: http://localhost:8888
+      uri: ${CONFIG_SERVER_URL:http://bh-config-server:8888}
       fail-fast: true
       retry:
         max-attempts: 6
@@ -31,15 +31,14 @@ management:
       exposure:
         include: health,info,env
 
+# Eureka Client Configuration
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_SERVER_URL:http://bh-discovery-server:8761/eureka/}
+    register-with-eureka: true
+    fetch-registry: true
+
 # Environment variable defaults
-EUREKA_SERVER_URL: ${EUREKA_SERVER_URL}
 CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
 
-# JWT Configuration (fallback - should be configured in config-server)
-jwt:
-  secret: ${JWT_SECRET}
-  access:
-    expiration: ${JWT_ACCESS_EXPIRATION}
-  refresh:
-    expiration-web: ${JWT_REFRESH_EXPIRATION}
-    expiration-mobile: ${JWT_REFRESH_EXPIRATION}

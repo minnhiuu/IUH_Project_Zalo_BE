@@ -1,0 +1,110 @@
+services:
+  # --- DATABASES (Local to Server 4) ---
+  bh-mongodb-chat:
+    image: mongo:7.0
+    container_name: bh-mongodb-chat
+    ports: ["${MONGODB_PORT_MESSAGE:-27018}:27017"]
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+    volumes: [mongodb_chat_data:/data/db]
+    networks: [bondhub-network]
+
+  bh-neo4j:
+    image: neo4j:5.18-community
+    container_name: bh-neo4j
+    environment:
+      NEO4J_AUTH: ${NEO4J_USERNAME}/${NEO4J_PASSWORD}
+    ports: ["7474:7474", "7687:7687"]
+    networks: [bondhub-network]
+
+  # --- MICROSERVICES ---
+
+  message-service:
+    build: { context: .., dockerfile: message-service/Dockerfile, args: { MODULE_NAME: message-service } }
+    container_name: bh-message-service
+    environment:
+      - SPRING_CONFIG_IMPORT=optional:configserver:${CONFIG_SERVER_URL}
+      - EUREKA_SERVER_URL=${EUREKA_SERVER_URL}
+      - MONGODB_URI_MESSAGES=mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@bh-mongodb-chat:27017/bondhub_messages?authSource=admin
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS}
+      - AWS_REGION=${AWS_REGION}
+      - AWS_S3_BUCKET_NAME=${AWS_S3_BUCKET_NAME}
+      - JWT_SECRET=${JWT_SECRET}
+      - ZEGO_APP_ID=${ZEGO_APP_ID}
+      - ZEGO_SERVER_SECRET=${ZEGO_SERVER_SECRET}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - APP_FRONTEND_URL=${APP_FRONTEND_URL}
+      - SPRING_ELASTICSEARCH_URIS=http://${ELASTICSEARCH_URIS}
+      - ELASTICSEARCH_URIS=${ELASTICSEARCH_URIS}
+    networks: [bondhub-network]
+
+  friend-service:
+    build: { context: .., dockerfile: friend-service/Dockerfile, args: { MODULE_NAME: friend-service } }
+    container_name: bh-friend-service
+    environment:
+      - SPRING_CONFIG_IMPORT=optional:configserver:${CONFIG_SERVER_URL}
+      - EUREKA_SERVER_URL=${EUREKA_SERVER_URL}
+      - MONGODB_URI_FRIENDSHIPS=mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@bh-mongodb-chat:27017/bondhub_friendships?authSource=admin
+      - NEO4J_URI=bolt://bh-neo4j:7687
+      - NEO4J_USERNAME=${NEO4J_USERNAME}
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD}
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS}
+      - AWS_REGION=${AWS_REGION}
+      - AWS_S3_BUCKET_NAME=${AWS_S3_BUCKET_NAME}
+      - JWT_SECRET=${JWT_SECRET}
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS}
+      - SPRING_ELASTICSEARCH_URIS=http://${ELASTICSEARCH_URIS}
+      - ELASTICSEARCH_URIS=${ELASTICSEARCH_URIS}
+      - AWS_REGION=${AWS_REGION}
+      - AWS_S3_BUCKET_NAME=${AWS_S3_BUCKET_NAME}
+      - APP_FRONTEND_URL=${APP_FRONTEND_URL}
+    networks: [bondhub-network]
+
+  notification-service:
+    build: { context: .., dockerfile: notification-service/Dockerfile, args: { MODULE_NAME: notification-service } }
+    container_name: bh-notification-service
+    environment:
+      - SPRING_CONFIG_IMPORT=optional:configserver:${CONFIG_SERVER_URL}
+      - EUREKA_SERVER_URL=${EUREKA_SERVER_URL}
+      - MONGODB_URI_NOTIFICATIONS=mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@bh-mongodb-chat:27017/bondhub_notifications?authSource=admin
+      - FIREBASE_CONFIG_PATH=/app/firebase-adminsdk.json
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - APP_FRONTEND_URL=${APP_FRONTEND_URL}
+    volumes:
+      - ../${FIREBASE_CONFIG_PATH}:/app/firebase-adminsdk.json
+    networks: [bondhub-network]
+
+  socket-service:
+    build: { context: .., dockerfile: socket-service/Dockerfile, args: { MODULE_NAME: socket-service } }
+    container_name: bh-socket-service
+    environment:
+      - SPRING_CONFIG_IMPORT=optional:configserver:${CONFIG_SERVER_URL}
+      - EUREKA_SERVER_URL=${EUREKA_SERVER_URL}
+      - MONGODB_URI_MESSAGES=mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@bh-mongodb-chat:27017/bondhub_messages?authSource=admin
+      # Kafka & Redis (Server 5)
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      # Cloud & Security (Dựa trên config bạn vừa gửi)
+      - AWS_REGION=${AWS_REGION}
+      - AWS_S3_BUCKET_NAME=${AWS_S3_BUCKET_NAME}
+      - JWT_SECRET=${JWT_SECRET}
+
+      - APP_FRONTEND_URL=${APP_FRONTEND_URL}
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS}
+    networks: [bondhub-network]
+
+volumes:
+  mongodb_chat_data:
+  neo4j_data:
+
+networks:
+  bondhub-network:
+    driver: bridge

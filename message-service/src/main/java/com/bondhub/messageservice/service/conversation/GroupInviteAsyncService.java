@@ -20,13 +20,14 @@ public class GroupInviteAsyncService {
     private final ConversationService conversationService;
     private final MessageService messageService;
 
-    @Value("${bondhub.frontend-url:http://localhost:5173}")
+    @Value("${bondhub.frontend-url}")
     private String frontendUrl;
 
     @Async
     public void sendJoinLinkInvites(Conversation groupConversation, String senderUserId, Set<String> targetUserIds) {
         String joinLinkToken = groupConversation.getJoinLinkToken();
-        if (joinLinkToken == null) return;
+        if (joinLinkToken == null)
+            return;
 
         String joinLinkUrl = frontendUrl + "/g/" + joinLinkToken;
 

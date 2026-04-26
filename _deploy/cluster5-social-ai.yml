@@ -1,0 +1,134 @@
+services:
+  # --- DATABASE NỘI BỘ CHO CỤM SOCIAL ---
+  bh-mongodb-social:
+    image: mongo:7.0
+    container_name: bh-mongodb-social
+    restart: unless-stopped
+    ports:
+      - "${MONGODB_PORT_SOCIAL:-27020}:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+    volumes:
+      - mongodb_social_data:/data/db
+    networks:
+      - bondhub-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+  
+  bh-mongodb-ai:
+    image: mongo:7.0
+    container_name: bh-mongodb-ai
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+    ports:
+      - "${MONGODB_PORT_AI:-27019}:27017"
+    volumes:
+      - mongodb_ai_data:/data/db
+    networks:
+      - bondhub-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # --- AI AGENT SERVICE (Python FastAPI) ---
+
+  agent-service:
+    build:
+      context: ../agent-service # Đường dẫn tới folder chứa code Python của Huy
+      dockerfile: Dockerfile
+    container_name: bh-agent-service
+    environment:
+      # Mapping chính xác theo class Settings Pydantic của Huy
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - TAVILY_API_KEY=${TAVILY_API_KEY}
+      - MONGODB_URI_AI_SERVICE=mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@bh-mongodb-ai:27017/bondhub_ai_service?authSource=admin
+      - KAFKA_BOOTSTRAP_SERVERS=bh-kafka:29092 # Kết nối nội bộ cùng server 5
+      - EUREKA_SERVER_URL=${EUREKA_SERVER_URL}
+
+      # Qdrant nằm ở Server 3
+      - QDRANT_HOST=bh-qdrant
+      - QDRANT_URL=http://bh-qdrant:6333
+
+      # AWS/S3 cho RAG
+      - AWS_ACCESS_KEY=${AWS_ACCESS_KEY}
+      - AWS_SECRET_KEY=${AWS_SECRET_KEY}
+      - AWS_REGION=${AWS_REGION}
+      - AWS_S3_BUCKET_NAME=${AWS_S3_BUCKET_NAME}
+
+      # Các biến khác
+      - LANGCHAIN_TRACING_V2=${LANGCHAIN_TRACING_V2}
+      - LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY}
+      - EUREKA_INSTANCE_HOST=${IP_SERVER_5}
+    depends_on:
+      bh-kafka: { condition: service_healthy }
+      bh-mongodb-ai: { condition: service_healthy }
+      bh-qdrant: { condition: service_healthy }
+
+    networks:
+      - bondhub-network
+
+  # --- SOCIAL FEED SERVICE (JAVA / SPRING BOOT) ---
+  social-feed-service:
+    build:
+      context: ..
+      dockerfile: social-feed-service/Dockerfile
+      args: { MODULE_NAME: social-feed-service }
+    container_name: bh-social-feed-service
+    environment:
+      - SPRING_CONFIG_IMPORT=optional:configserver:${CONFIG_SERVER_URL}
+      - EUREKA_SERVER_URL=${EUREKA_SERVER_URL}
+      - MONGODB_URI_SOCIAL_FEED=mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@bh-mongodb-social:27017/bondhub_social?authSource=admin
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS}
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_ACCESS_EXPIRATION=${JWT_ACCESS_EXPIRATION}
+      - JWT_REFRESH_WEB_EXPIRATION=${JWT_REFRESH_WEB_EXPIRATION}
+      - JWT_REFRESH_MOBILE_EXPIRATION=${JWT_REFRESH_MOBILE_EXPIRATION}
+      - AWS_REGION=${AWS_REGION}
+      - AWS_S3_BUCKET_NAME=${AWS_S3_BUCKET_NAME}
+      - APP_FRONTEND_URL=${APP_FRONTEND_URL}
+    depends_on:
+      bh-mongodb-social: { condition: service_started }
+    networks:
+      - bondhub-network
+
+  # --- POST RECOMMENDATION SERVICE (PYTHON / FASTAPI) ---
+  post-recommendation-service:
+    build:
+      context: ../post-recommendation-service
+      dockerfile: Dockerfile
+    container_name: bh-post-recommendation
+    environment:
+      # 1. Định danh service
+      - APP_NAME=post-recommendation-service
+      - EUREKA_SERVER_URL=${EUREKA_SERVER_URL}
+      - EUREKA_INSTANCE_HOST=${IP_SERVER_6}
+
+      # 2. Database nội bộ (Cùng Server 6)
+      - MONGODB_URI=mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@bh-mongodb-social:27017/post_recommendation?authSource=admin
+      - MONGODB_DATABASE=post_recommendation
+
+      # 3. Kết nối Middleware & Vector DB (Server 5 & Server 3)
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS}
+      - QDRANT_HOST=${IP_SERVER_5}
+      - QDRANT_PORT=6333
+
+      # 4. GỌI LIÊN SERVER
+      - SOCIAL_FEED_SERVICE_URL=http://bh-social-feed-service:8088
+      - FRIEND_SERVICE_URL=http://bh-friend-service:8086
+      - USER_SERVICE_URL=http://bh-user-service:8083
+
+    depends_on:
+      bh-mongodb-social: { condition: service_started }
+    networks: [ bondhub-network ]
+
+volumes:
+  mongodb_social_data:
+
+networks:
+  bondhub-network:
+    driver: bridge

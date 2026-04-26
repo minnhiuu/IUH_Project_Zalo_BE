@@ -1,0 +1,51 @@
+services:
+  bh-api-gateway:
+    build:
+      context: ..
+      dockerfile: api-gateway/Dockerfile
+      args: { MODULE_NAME: api-gateway }
+    container_name: bh-api-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      # --- INFRA & DISCOVERY ---
+      - SPRING_CONFIG_IMPORT=optional:configserver:${CONFIG_SERVER_URL}
+      - EUREKA_SERVER_URL=http://bh-discovery-server:8761/eureka/
+
+      # --- REDIS ---
+      - REDIS_HOST=${IP_SERVER_5}
+      - REDIS_PORT=${REDIS_PORT}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+
+      # --- SECURITY & JWT ---
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_ACCESS_EXPIRATION=${JWT_ACCESS_EXPIRATION}
+      - JWT_REFRESH_WEB_EXPIRATION=${JWT_REFRESH_WEB_EXPIRATION}
+      - JWT_REFRESH_MOBILE_EXPIRATION=${JWT_REFRESH_MOBILE_EXPIRATION}
+      - COOKIE_SECURE=${COOKIE_SECURE}
+      - COOKIE_SAME_SITE=${COOKIE_SAME_SITE}
+      - COOKIE_PATH=${COOKIE_PATH}
+
+      # --- CORS & FRONTEND ---
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS}
+      - APP_FRONTEND_URL=${CORS_ALLOWED_ORIGINS}
+
+      # --- BUSINESS LOGIC & TIMEOUTS ---
+      - GATEWAY_QR_TIMEOUT_MS=${GATEWAY_QR_TIMEOUT_MS}
+      - QR_EXPIRATION_SECONDS=${QR_EXPIRATION_SECONDS}
+      - QR_CONTENT_PREFIX=${QR_CONTENT_PREFIX}
+      - QR_WAIT_TIMEOUT_MS=${QR_WAIT_TIMEOUT_MS}
+
+      # --- COMMON CLOUD/INFRA (Bắt buộc để resolve Common Config) ---
+      - ELASTICSEARCH_URIS=${ELASTICSEARCH_URIS}
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS}
+      - AWS_REGION=${AWS_REGION}
+      - AWS_S3_BUCKET_NAME=${AWS_S3_BUCKET_NAME}
+
+    networks:
+      - bondhub-network
+    restart: unless-stopped
+
+networks:
+  bondhub-network:
+    driver: bridge

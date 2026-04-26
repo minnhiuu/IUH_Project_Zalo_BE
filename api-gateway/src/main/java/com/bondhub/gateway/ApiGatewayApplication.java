@@ -13,10 +13,19 @@ import org.springframework.context.annotation.FilterType;
 })
 @ComponentScan(
         basePackages = { "com.bondhub.gateway", "com.bondhub.common" },
-        excludeFilters = @ComponentScan.Filter(
-                type = FilterType.ASSIGNABLE_TYPE,
-                classes = com.bondhub.common.config.I18nConfig.class
-        )
+        excludeFilters = {
+                // 1. Loại bỏ các class Config gây crash (Cú pháp mảng chuẩn)
+                @ComponentScan.Filter(
+                        type = FilterType.ASSIGNABLE_TYPE,
+                        classes = {
+                                com.bondhub.common.config.I18nConfig.class,
+                                com.bondhub.common.config.ElasticSearchConfiguration.class,
+                                com.bondhub.common.publisher.OutboxEventPublisher.class,
+                                com.bondhub.common.scheduler.OutboxEventRetryScheduler.class,
+                                com.bondhub.common.config.kafka.KafkaTopicConfig.class,
+                        }
+                )
+        }
 )
 public class ApiGatewayApplication {
 

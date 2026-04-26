@@ -1,0 +1,168 @@
+services:
+  # --- DATABASES ---
+  bh-mongodb-identity:
+    image: mongo:7.0
+    container_name: bh-mongodb-identity
+    ports: ["${MONGODB_PORT_IDENTITY:-27019}:27017"]
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+    volumes:
+      - mongodb_identity_data:/data/db
+    networks:
+      - bondhub-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      retries: 5
+
+  bh-elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.17.0
+    container_name: bh-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports: ["9200:9200"]
+    networks:
+      - bondhub-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -vq '\"status\":\"red\"'"]
+      interval: 20s
+
+  # --- MICROSERVICES ---
+
+  auth-service:
+    build:
+      context: ..
+      dockerfile: auth-service/Dockerfile
+      args: { MODULE_NAME: auth-service }
+    container_name: bh-auth-service
+    environment:
+      # Infra & Discovery
+      - SPRING_CONFIG_IMPORT=optional:configserver:${CONFIG_SERVER_URL}
+      - EUREKA_SERVER_URL=http://bh-discovery-server:8761/eureka/
+
+      # Database URIs
+      - MONGODB_URI_AUTH=${MONGODB_URI_AUTH}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+
+      # JWT & Security (Bổ sung các biến Expiration từ config)
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_ACCESS_EXPIRATION=${JWT_ACCESS_EXPIRATION}
+      - JWT_REFRESH_WEB_EXPIRATION=${JWT_REFRESH_WEB_EXPIRATION}
+      - JWT_REFRESH_MOBILE_EXPIRATION=${JWT_REFRESH_MOBILE_EXPIRATION}
+      - COOKIE_SECURE=${COOKIE_SECURE}
+      - COOKIE_SAME_SITE=${COOKIE_SAME_SITE}
+      - COOKIE_PATH=${COOKIE_PATH}
+
+      # Email & Admin (Bổ sung từ auth-service yml)
+      - BREVO_API_KEY=${BREVO_API_KEY}
+      - BREVO_MAIL=${BREVO_MAIL}
+      - BREVO_SENDER_NAME=${BREVO_SENDER_NAME}
+      - BREVO_OTP_TEMPLATE_ID=${BREVO_OTP_TEMPLATE_ID}
+      - ADMIN_EMAIL=${ADMIN_EMAIL}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+
+      # Business Logic
+      - QR_EXPIRATION_SECONDS=${QR_EXPIRATION_SECONDS}
+      - QR_CONTENT_PREFIX=${QR_CONTENT_PREFIX}
+      - QR_WAIT_TIMEOUT_MS=${QR_WAIT_TIMEOUT_MS}
+      - APP_FRONTEND_URL=${CORS_ALLOWED_ORIGINS}
+
+      # Common Infra Var (Để resolve Common Config)
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS}
+
+      - SPRING_ELASTICSEARCH_URIS=http://${ELASTICSEARCH_URIS}
+      - ELASTICSEARCH_URIS=${ELASTICSEARCH_URIS}
+    depends_on:
+      bh-mongodb-identity: { condition: service_started }
+    networks:
+      - bondhub-network
+
+  user-service:
+    build:
+      context: ..
+      dockerfile: user-service/Dockerfile
+      args: { MODULE_NAME: user-service }
+    container_name: bh-user-service
+    environment:
+      - SPRING_CONFIG_IMPORT=optional:configserver:${CONFIG_SERVER_URL}
+      - EUREKA_SERVER_URL=http://bh-discovery-server:8761/eureka/
+      - MONGODB_URI_USERS=${MONGODB_URI_USERS}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+
+      # Cloud Storage (Bổ sung cho User Service)
+      - AWS_REGION=${AWS_REGION}
+      - AWS_S3_BUCKET_NAME=${AWS_S3_BUCKET_NAME}
+
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS}
+
+      # Elasticsearch Sync
+      - SPRING_ELASTICSEARCH_URIS=http://${ELASTICSEARCH_URIS}
+      - ELASTICSEARCH_URIS=${ELASTICSEARCH_URIS}
+      - ELASTICSEARCH_PARALLELISM=${ELASTICSEARCH_PARALLELISM:-0}
+    depends_on:
+      bh-mongodb-identity: { condition: service_started }
+    networks:
+      - bondhub-network
+
+  file-service:
+    build:
+      context: ..
+      dockerfile: file-service/Dockerfile
+      args: { MODULE_NAME: file-service }
+    container_name: bh-file-service
+    environment:
+      - SPRING_CONFIG_IMPORT=optional:configserver:${CONFIG_SERVER_URL}
+      - EUREKA_SERVER_URL=http://bh-discovery-server:8761/eureka/
+      - MONGODB_URI_FILES=${MONGODB_URI_FILES}
+
+      # AWS Credentials (Cực kỳ quan trọng)
+      - AWS_ACCESS_KEY=${AWS_ACCESS_KEY}
+      - AWS_SECRET_KEY=${AWS_SECRET_KEY}
+      - AWS_REGION=${AWS_REGION}
+      - AWS_S3_BUCKET_NAME=${AWS_S3_BUCKET_NAME}
+
+      - SPRING_ELASTICSEARCH_URIS=http://${ELASTICSEARCH_URIS}
+      - ELASTICSEARCH_URIS=${ELASTICSEARCH_URIS}
+    networks:
+      - bondhub-network
+
+  search-service:
+    build:
+      context: ..
+      dockerfile: search-service/Dockerfile
+      args: { MODULE_NAME: search-service }
+    container_name: bh-search-service
+    environment:
+      - SPRING_CONFIG_IMPORT=optional:configserver:${CONFIG_SERVER_URL}
+      - EUREKA_SERVER_URL=http://bh-discovery-server:8761/eureka/
+      - MONGODB_URI_SEARCH=${MONGODB_URI_SEARCH}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+
+      # Search & Messaging Infra
+      - SPRING_ELASTICSEARCH_URIS=http://${ELASTICSEARCH_URIS}
+      - ELASTICSEARCH_URIS=${ELASTICSEARCH_URIS}
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS}
+
+      # AWS Region (Search service cũng cần do dùng Common Config)
+      - AWS_REGION=${AWS_REGION}
+      - AWS_S3_BUCKET_NAME=${AWS_S3_BUCKET_NAME}
+    depends_on:
+      bh-elasticsearch: { condition: service_healthy }
+    networks:
+      - bondhub-network
+
+volumes:
+  mongodb_identity_data:
+
+networks:
+  bondhub-network:
+    driver: bridge

@@ -5,11 +5,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.data.elasticsearch.client.ClientConfiguration;
 import org.springframework.data.elasticsearch.client.elc.ElasticsearchConfiguration;
 import org.springframework.data.elasticsearch.config.EnableElasticsearchAuditing;
-import org.springframework.data.elasticsearch.repository.config.EnableElasticsearchRepositories;
-import org.springframework.lang.NonNull;
-
 @Configuration
-@EnableElasticsearchRepositories(basePackages = "com.bondhub.**.repository")
 @EnableElasticsearchAuditing
 public class ElasticSearchConfiguration extends ElasticsearchConfiguration {
 
@@ -17,7 +13,6 @@ public class ElasticSearchConfiguration extends ElasticsearchConfiguration {
     private String elasticSearchUrl;
 
     @Override
-    @NonNull
     public ClientConfiguration clientConfiguration() {
         return ClientConfiguration.builder()
                 .connectedTo(elasticSearchUrl)

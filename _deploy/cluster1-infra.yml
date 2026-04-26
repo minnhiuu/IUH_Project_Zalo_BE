@@ -1,0 +1,52 @@
+services:
+  bh-config-server:
+    build:
+      context: ..
+      dockerfile: config-server/Dockerfile
+      args: { MODULE_NAME: config-server }
+    container_name: bh-config-server
+    ports: ["8888:8888"]
+    volumes:
+      - ../config-server:/app/config-server
+    environment:
+      - SPRING_PROFILES_ACTIVE=native
+      # Trỏ đường dẫn native search tới thư mục chứa các file .yml
+      - SPRING_CLOUD_CONFIG_SERVER_NATIVE_SEARCH_LOCATIONS=file:/app/config-server/src/main/resources/config
+      - EUREKA_SERVER_URL=http://bh-discovery-server:8761/eureka/
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS}
+      - REDIS_HOST=${REDIS_HOST}
+      - ELASTICSEARCH_URIS=${ELASTICSEARCH_URIS}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8888/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [bondhub-network]
+
+  bh-discovery-server:
+    build:
+      context: ..
+      dockerfile: discovery-server/Dockerfile
+      args: { MODULE_NAME: discovery-server }
+    container_name: bh-discovery-server
+    ports: ["8761:8761"]
+    environment:
+      - SPRING_CONFIG_IMPORT=optional:configserver:http://bh-config-server:8888
+      - EUREKA_SERVER_URL=http://bh-discovery-server:8761/eureka/
+
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_ACCESS_EXPIRATION=${JWT_ACCESS_EXPIRATION}
+      - JWT_REFRESH_WEB_EXPIRATION=${JWT_REFRESH_WEB_EXPIRATION}
+      - JWT_REFRESH_MOBILE_EXPIRATION=${JWT_REFRESH_MOBILE_EXPIRATION}
+      - ELASTICSEARCH_URIS=${ELASTICSEARCH_URIS}
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS}
+      - AWS_REGION=${AWS_REGION}
+      - AWS_S3_BUCKET_NAME=${AWS_S3_BUCKET_NAME}
+      - APP_FRONTEND_URL=${CORS_ALLOWED_ORIGINS}
+    depends_on:
+      bh-config-server: { condition: service_healthy }
+    networks: [bondhub-network]
+
+networks:
+  bondhub-network:
+    driver: bridge

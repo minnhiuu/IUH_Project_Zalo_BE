@@ -26,7 +26,7 @@ public class GroupInviteServiceImpl implements GroupInviteService {
     private final ConversationService conversationService;
     private final MessageService messageService;
 
-    @Value("${bondhub.frontend-url:http://localhost:5173}")
+    @Value("${bondhub.frontend-url}")
     private String frontendUrl;
 
     @Override
@@ -44,8 +44,7 @@ public class GroupInviteServiceImpl implements GroupInviteService {
         }
 
         Set<String> requestedUserIds = new LinkedHashSet<>(
-                request != null && request.userIds() != null ? request.userIds() : Set.of()
-        );
+                request != null && request.userIds() != null ? request.userIds() : Set.of());
         requestedUserIds.remove(currentUserId);
 
         if (requestedUserIds.isEmpty()) {
@@ -68,8 +67,8 @@ public class GroupInviteServiceImpl implements GroupInviteService {
 
         for (String targetUserId : requestedUserIds) {
             try {
-                Conversation directConversation =
-                        conversationService.getOrCreateDirectConversation(currentUserId, targetUserId);
+                Conversation directConversation = conversationService.getOrCreateDirectConversation(currentUserId,
+                        targetUserId);
 
                 messageService.sendMessage(
                         directConversation.getId(),
@@ -80,9 +79,7 @@ public class GroupInviteServiceImpl implements GroupInviteService {
                                 UUID.randomUUID().toString(),
                                 null,
                                 false,
-                                null
-                        )
-                );
+                                null));
             } catch (Exception e) {
                 log.warn("[Group] Failed to send invite message to user {} for group {}: {}",
                         targetUserId, conversationId, e.getMessage());

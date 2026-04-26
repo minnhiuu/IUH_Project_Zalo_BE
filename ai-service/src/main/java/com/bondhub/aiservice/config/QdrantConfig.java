@@ -16,7 +16,7 @@ import org.springframework.context.annotation.Configuration;
 @Slf4j
 public class QdrantConfig {
 
-    @Value("${qdrant.host:localhost}")
+    @Value("${qdrant.host}")
     private String qdrantHost;
 
     @Value("${qdrant.port:6334}")
@@ -35,8 +35,7 @@ public class QdrantConfig {
     public QdrantClient qdrantClient() {
         log.info("Connecting to Qdrant at {}:{}", qdrantHost, qdrantPort);
         return new QdrantClient(
-            QdrantGrpcClient.newBuilder(qdrantHost, qdrantPort, false).build()
-        );
+                QdrantGrpcClient.newBuilder(qdrantHost, qdrantPort, false).build());
     }
 
     @Bean
