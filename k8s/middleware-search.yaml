@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bh-elasticsearch
+  namespace: bondhub
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bh-elasticsearch
+  template:
+    metadata:
+      labels:
+        app: bh-elasticsearch
+    spec:
+      nodeSelector:
+        node-type: middleware
+      containers:
+        - name: elasticsearch
+          image: docker.elastic.co/elasticsearch/elasticsearch:8.11.1
+          ports:
+            - containerPort: 9200
+            - containerPort: 9300
+          env:
+            - name: discovery.type
+              value: single-node
+            - name: xpack.security.enabled
+              value: "false"
+            - name: ES_JAVA_OPTS
+              value: "-Xms512m -Xmx512m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bh-elasticsearch
+  namespace: bondhub
+spec:
+  ports:
+    - port: 9200
+      targetPort: 9200
+  selector:
+    app: bh-elasticsearch
