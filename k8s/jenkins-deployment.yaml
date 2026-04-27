@@ -21,6 +21,8 @@ spec:
         - name: jenkins
           image: jenkins/jenkins:lts
           env:
+            - name: DOCKER_HOST
+              value: "tcp://localhost:2375"
             - name: PATH
               value: "/var/jenkins_home/tools:/opt/java/openjdk/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
           ports:
@@ -29,11 +31,19 @@ spec:
           volumeMounts:
             - name: jenkins-data
               mountPath: /var/jenkins_home
-            - name: docker-sock
-              mountPath: /var/run/docker.sock
+        # Docker-in-Docker sidecar
+        - name: dind
+          image: docker:27.3.1-dind
+          securityContext:
+            privileged: true
+          env:
+            - name: DOCKER_TLS_CERTDIR
+              value: ""
+          volumeMounts:
+            - name: docker-storage
+              mountPath: /var/lib/docker
       volumes:
-        - name: docker-sock
-          hostPath:
-            path: /var/run/docker.sock
         - name: jenkins-data
+          emptyDir: {}
+        - name: docker-storage
           emptyDir: {}

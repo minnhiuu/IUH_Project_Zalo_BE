@@ -65,6 +65,8 @@ pipeline {
                                   secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']]) {
                     dir('api-gateway') {
                         sh """
+                            export DOCKER_HOST=tcp://localhost:2375
+
                             ${TOOLS_DIR}/aws ecr get-login-password --region ${AWS_REGION} | \
                             ${TOOLS_DIR}/docker login --username AWS --password-stdin ${ECR_URL}
 
