@@ -8,6 +8,7 @@ pipeline {
         IMAGE_REPO     = "bondhub/config-server"
         IMAGE_TAG      = "${env.BUILD_NUMBER}"
         ECR_URL        = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+        TOOLS_DIR      = "/var/jenkins_home/tools"
     }
 
     stages {
@@ -15,25 +16,25 @@ pipeline {
             steps {
                 script {
                     sh '''
+                        mkdir -p ${TOOLS_DIR}
+
                         echo "=== Installing Docker CLI ==="
-                        if [ ! -x /usr/local/bin/docker ]; then
-                            curl -L https://download.docker.com/linux/static/stable/x86_64/docker-27.3.1.tgz | tar -xz -C /tmp
-                            mv /tmp/docker/docker /usr/local/bin/
-                            ln -sf /usr/local/bin/docker /usr/bin/docker
+                        if [ ! -x ${TOOLS_DIR}/docker ]; then
+                            curl -sL https://download.docker.com/linux/static/stable/x86_64/docker-27.3.1.tgz | tar -xz -C /tmp
+                            mv /tmp/docker/docker ${TOOLS_DIR}/docker
                             rm -rf /tmp/docker
                         fi
 
                         echo "=== Installing kubectl ==="
-                        if [ ! -x /usr/local/bin/kubectl ]; then
-                            curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+                        if [ ! -x ${TOOLS_DIR}/kubectl ]; then
+                            curl -sLO "https://dl.k8s.io/release/$(curl -sL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
                             chmod +x kubectl
-                            mv kubectl /usr/local/bin/
-                            ln -sf /usr/local/bin/kubectl /usr/bin/kubectl
+                            mv kubectl ${TOOLS_DIR}/kubectl
                         fi
 
                         echo "=== Verification ==="
-                        docker --version
-                        kubectl version --client
+                        ${TOOLS_DIR}/docker --version
+                        ${TOOLS_DIR}/kubectl version --client
                     '''
                 }
             }
@@ -54,11 +55,14 @@ pipeline {
         stage('Docker Build & Push') {
             steps {
                 script {
-                    docker.withRegistry("https://${ECR_URL}", "ecr:${AWS_REGION}:aws-credentials-id") {
-                        dir('config-server') {
-                            def customImage = docker.build("${IMAGE_REPO}:${IMAGE_TAG}")
-                            customImage.push()
-                            customImage.push("latest")
+                    // Thêm tools vào PATH để plugin Docker nhận diện được
+                    withEnv(["PATH+TOOLS=${TOOLS_DIR}"]) {
+                        docker.withRegistry("https://${ECR_URL}", "ecr:${AWS_REGION}:aws-credentials-id") {
+                            dir('config-server') {
+                                def customImage = docker.build("${IMAGE_REPO}:${IMAGE_TAG}")
+                                customImage.push()
+                                customImage.push("latest")
+                            }
                         }
                     }
                 }
@@ -68,7 +72,7 @@ pipeline {
         stage('Deploy to EKS') {
             steps {
                 withKubeConfig([credentialsId: 'eks-creds-id', clusterName: 'bondhub-cluster-final']) {
-                    sh "kubectl set image deployment/config-server-deploy config-server=${ECR_URL}/${IMAGE_REPO}:${IMAGE_TAG} -n bondhub"
+                    sh "${TOOLS_DIR}/kubectl set image deployment/config-server-deploy config-server=${ECR_URL}/${IMAGE_REPO}:${IMAGE_TAG} -n bondhub"
                 }
             }
         }
