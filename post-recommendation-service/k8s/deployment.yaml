@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: post-recommendation-service-deploy
+  namespace: bondhub
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: post-recommendation-service
+  template:
+    metadata:
+      labels:
+        app: post-recommendation-service
+    spec:
+      nodeSelector:
+        node-type: interaction-ai
+      initContainers:
+        - name: wait-for-infra
+          image: busybox
+          command: ['sh', '-c', 'until nc -z bh-discovery-server 8761 && nc -z bh-config-server 8888 && nc -z bh-mongodb 27017 && nc -z bh-qdrant 6333; do echo "Waiting for Recommendation Infra (Eureka, Config, Mongo, Qdrant)..."; sleep 5; done;']
+      containers:
+        - name: post-recommendation-service
+          image: 952647925716.dkr.ecr.ap-southeast-2.amazonaws.com/bondhub/post-recommendation-service:latest
+          ports:
+            - containerPort: 8091
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8091
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          env:
+            - name: MONGODB_URI
+              value: "mongodb://$(MONGO_INITDB_ROOT_USERNAME):$(MONGO_INITDB_ROOT_PASSWORD)@bh-mongodb:27017/post_recommendation?authSource=admin"
+            - name: QDRANT_HOST
+              value: "bh-qdrant"
+            - name: QDRANT_PORT
+              value: "6333"
+            - name: RELOAD
+              value: "false"
+          envFrom:
+            - configMapRef:
+                name: bondhub-common-config
+            - secretRef:
+                name: bondhub-common-secrets
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bh-post-recommendation-service
+  namespace: bondhub
+spec:
+  ports:
+    - port: 8091
+      targetPort: 8091
+  selector:
+    app: post-recommendation-service
