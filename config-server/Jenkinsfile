@@ -11,6 +11,23 @@ pipeline {
     }
 
     stages {
+        stage('Wait for Infrastructure Tools') {
+            steps {
+                script {
+                    echo "Waiting for Docker and Kubectl to be installed..."
+                    timeout(time: 5, unit: 'MINUTES') {
+                        waitUntil {
+                            def dockerCheck = sh(script: 'command -v docker', returnStatus: true) == 0
+                            def kubectlCheck = sh(script: 'command -v kubectl', returnStatus: true) == 0
+                            return (dockerCheck && kubectlCheck)
+                        }
+                    }
+                    sh 'docker --version'
+                    sh 'kubectl version --client'
+                }
+            }
+        }
+
         stage('Maven Build') {
             steps {
                 dir('config-server') {
@@ -26,9 +43,6 @@ pipeline {
         stage('Docker Build & Push') {
             steps {
                 script {
-                    // Kiểm tra xem Jenkins đã thực sự nhận diện được Docker chưa
-                    sh 'docker --version' 
-                    
                     docker.withRegistry("https://${ECR_URL}", "ecr:${AWS_REGION}:aws-credentials-id") {
                         dir('config-server') {
                             def customImage = docker.build("${IMAGE_REPO}:${IMAGE_TAG}")
