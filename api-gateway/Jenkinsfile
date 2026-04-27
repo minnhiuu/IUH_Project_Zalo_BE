@@ -65,16 +65,14 @@ pipeline {
                                   secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']]) {
                     dir('api-gateway') {
                         sh """
-                            export DOCKER_HOST=tcp://localhost:2375
-
                             ${TOOLS_DIR}/aws ecr get-login-password --region ${AWS_REGION} | \
-                            ${TOOLS_DIR}/docker login --username AWS --password-stdin ${ECR_URL}
+                            ${TOOLS_DIR}/docker -H tcp://localhost:2375 login --username AWS --password-stdin ${ECR_URL}
 
-                            ${TOOLS_DIR}/docker build -t ${ECR_URL}/${IMAGE_REPO}:${IMAGE_TAG} .
-                            ${TOOLS_DIR}/docker push ${ECR_URL}/${IMAGE_REPO}:${IMAGE_TAG}
+                            ${TOOLS_DIR}/docker -H tcp://localhost:2375 build -t ${ECR_URL}/${IMAGE_REPO}:${IMAGE_TAG} .
+                            ${TOOLS_DIR}/docker -H tcp://localhost:2375 push ${ECR_URL}/${IMAGE_REPO}:${IMAGE_TAG}
 
-                            ${TOOLS_DIR}/docker tag ${ECR_URL}/${IMAGE_REPO}:${IMAGE_TAG} ${ECR_URL}/${IMAGE_REPO}:latest
-                            ${TOOLS_DIR}/docker push ${ECR_URL}/${IMAGE_REPO}:latest
+                            ${TOOLS_DIR}/docker -H tcp://localhost:2375 tag ${ECR_URL}/${IMAGE_REPO}:${IMAGE_TAG} ${ECR_URL}/${IMAGE_REPO}:latest
+                            ${TOOLS_DIR}/docker -H tcp://localhost:2375 push ${ECR_URL}/${IMAGE_REPO}:latest
                         """
                     }
                 }
