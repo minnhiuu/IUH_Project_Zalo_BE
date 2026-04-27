@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-service-deploy
+  namespace: bondhub
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: notification-service
+  template:
+    metadata:
+      labels:
+        app: notification-service
+    spec:
+      nodeSelector:
+        node-type: interaction-ai
+      initContainers:
+        - name: wait-for-infra
+          image: busybox
+          command: ['sh', '-c', 'until nc -z bh-discovery-server 8761 && nc -z bh-config-server 8888; do if ! nc -z bh-discovery-server 8761; then echo "Waiting for bh-discovery-server:8761..."; fi; if ! nc -z bh-config-server 8888; then echo "Waiting for bh-config-server:8888..."; fi; sleep 5; done; echo "Infrastructure services are UP!";']
+      containers:
+        - name: notification-service
+          image: 952647925716.dkr.ecr.ap-southeast-2.amazonaws.com/bondhub/notification-service:latest
+          ports:
+            - containerPort: 8099
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8099
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 3
+          envFrom:
+            - configMapRef:
+                name: bondhub-common-config
+            - secretRef:
+                name: bondhub-common-secrets

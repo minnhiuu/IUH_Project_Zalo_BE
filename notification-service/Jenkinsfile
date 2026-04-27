@@ -1,0 +1,79 @@
+pipeline {
+    agent any
+    tools { maven 'maven-3.9' }
+
+    environment {
+        AWS_ACCOUNT_ID = "952647925716"
+        AWS_REGION     = "ap-southeast-2"
+        IMAGE_REPO     = "bondhub/notification-service"
+        IMAGE_TAG      = "${env.BUILD_NUMBER}"
+        ECR_URL        = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+        TOOLS_DIR      = "/var/jenkins_home/tools"
+    }
+
+    stages {
+        stage('Setup Tools') {
+            steps {
+                sh '''
+                    mkdir -p ${TOOLS_DIR}
+                    if [ ! -x ${TOOLS_DIR}/docker ]; then
+                        curl -sL https://download.docker.com/linux/static/stable/x86_64/docker-27.3.1.tgz | tar -xz -C /tmp
+                        mv /tmp/docker/docker ${TOOLS_DIR}/docker
+                        rm -rf /tmp/docker
+                    fi
+                    if [ ! -x ${TOOLS_DIR}/kubectl ]; then
+                        curl -sLO "https://dl.k8s.io/release/$(curl -sL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+                        chmod +x kubectl
+                        mv kubectl ${TOOLS_DIR}/kubectl
+                    fi
+                    if [ ! -x ${TOOLS_DIR}/aws ]; then
+                        curl -sL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
+                        unzip -q /tmp/awscliv2.zip -d /tmp
+                        /tmp/aws/install --install-dir ${TOOLS_DIR}/aws-cli --bin-dir ${TOOLS_DIR}
+                        rm -rf /tmp/aws /tmp/awscliv2.zip
+                    fi
+                '''
+            }
+        }
+
+        stage('Maven Build') {
+            steps {
+                dir('notification-service') {
+                    sh 'mvn -f ../pom.xml install -N'
+                    sh 'mvn -f ../common/pom.xml clean install -DskipTests'
+                    sh 'mvn clean package -DskipTests'
+                }
+            }
+        }
+
+        stage('Docker Build & Push') {
+            steps {
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding',
+                                  credentialsId: 'aws-credentials-id',
+                                  accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                                  secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']]) {
+                    dir('notification-service') {
+                        sh """
+                            ${TOOLS_DIR}/aws ecr get-login-password --region ${AWS_REGION} | \
+                            ${TOOLS_DIR}/docker -H tcp://localhost:2375 login --username AWS --password-stdin ${ECR_URL}
+
+                            ${TOOLS_DIR}/docker -H tcp://localhost:2375 build -t ${ECR_URL}/${IMAGE_REPO}:${IMAGE_TAG} .
+                            ${TOOLS_DIR}/docker -H tcp://localhost:2375 push ${ECR_URL}/${IMAGE_REPO}:${IMAGE_TAG}
+
+                            ${TOOLS_DIR}/docker -H tcp://localhost:2375 tag ${ECR_URL}/${IMAGE_REPO}:${IMAGE_TAG} ${ECR_URL}/${IMAGE_REPO}:latest
+                            ${TOOLS_DIR}/docker -H tcp://localhost:2375 push ${ECR_URL}/${IMAGE_REPO}:latest
+                        """
+                    }
+                }
+            }
+        }
+
+        stage('Deploy to EKS') {
+            steps {
+                withKubeConfig([credentialsId: 'eks-creds-id', clusterName: 'bondhub-cluster-final']) {
+                    sh "${TOOLS_DIR}/kubectl set image deployment/notification-service-deploy notification-service=${ECR_URL}/${IMAGE_REPO}:${IMAGE_TAG} -n bondhub"
+                }
+            }
+        }
+    }
+}

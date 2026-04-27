@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: bh-notification-service
+  namespace: bondhub
+spec:
+  ports:
+    - port: 8099
+      targetPort: 8099
+  selector:
+    app: notification-service
