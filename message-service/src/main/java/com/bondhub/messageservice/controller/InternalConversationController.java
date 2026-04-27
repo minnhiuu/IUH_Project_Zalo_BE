@@ -1,8 +1,10 @@
 package com.bondhub.messageservice.controller;
 
 import com.bondhub.common.dto.ApiResponse;
+import com.bondhub.common.dto.PageResponse;
 import com.bondhub.messageservice.dto.response.MessageResponse;
 import com.bondhub.common.dto.client.messageservice.ConversationMemberLookupResponse;
+import com.bondhub.common.dto.client.messageservice.ConversationSearchResponse;
 import com.bondhub.messageservice.service.conversation.ConversationInternalService;
 import com.bondhub.messageservice.service.conversation.ConversationService;
 import com.bondhub.messageservice.service.message.MessageService;
@@ -46,5 +48,15 @@ public class InternalConversationController {
             @PathVariable String userId) {
         return ResponseEntity.ok(ApiResponse.success(
                 conversationInternalService.getConversationMember(conversationId, userId)));
+    }
+
+    @GetMapping("/search")
+    public ResponseEntity<ApiResponse<PageResponse<List<ConversationSearchResponse>>>> searchConversations(
+            @RequestParam String userId,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(ApiResponse.success(
+                conversationInternalService.searchConversations(userId, keyword, page, size)));
     }
 }

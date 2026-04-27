@@ -1,6 +1,5 @@
 package com.bondhub.searchservice.dto.request;
 
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import org.springframework.format.annotation.DateTimeFormat;
 
@@ -10,7 +9,6 @@ import java.util.Locale;
 public record MessageSearchRequest(
         String keyword,
 
-        @NotBlank(message = "validation.message.search.conversationId.required")
         String conversationId,
 
         String senderId,
@@ -26,7 +24,7 @@ public record MessageSearchRequest(
 ) {
     public MessageSearchRequest {
         keyword = keyword != null && !keyword.isBlank() ? keyword.trim() : null;
-        conversationId = conversationId != null ? conversationId.trim() : null;
+        conversationId = conversationId != null && !conversationId.isBlank() ? conversationId.trim() : null;
         senderId = senderId != null && !senderId.isBlank() ? senderId.trim() : null;
         dateRange = dateRange != null && !dateRange.isBlank()
                 ? dateRange.trim().toLowerCase(Locale.ROOT)

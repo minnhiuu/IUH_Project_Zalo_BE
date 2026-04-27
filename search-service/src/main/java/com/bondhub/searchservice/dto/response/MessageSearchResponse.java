@@ -17,6 +17,8 @@ public record MessageSearchResponse(
         String status,
         boolean hasAttachment,
         boolean hasLink,
+        boolean isGroup,
+        String conversationName,
         Instant createdAt,
         String displayHighlights
 ) {}

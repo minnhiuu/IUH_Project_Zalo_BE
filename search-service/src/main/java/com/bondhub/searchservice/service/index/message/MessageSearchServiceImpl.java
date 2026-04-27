@@ -5,6 +5,7 @@ import co.elastic.clients.elasticsearch._types.query_dsl.Query;
 import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.common.dto.PageResponse;
 import com.bondhub.common.dto.client.messageservice.ConversationMemberLookupResponse;
+import com.bondhub.common.dto.client.messageservice.ConversationSearchResponse;
 import com.bondhub.common.enums.MessageStatus;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
@@ -80,17 +81,34 @@ public class MessageSearchServiceImpl implements MessageSearchService {
     String region;
 
     @Override
+    public PageResponse<List<ConversationSearchResponse>> searchContacts(
+            String userId,
+            String keyword,
+            Pageable pageable) {
+        ApiResponse<PageResponse<List<ConversationSearchResponse>>> response =
+                conversationMemberClient.searchConversations(
+                        userId,
+                        keyword,
+                        pageable.getPageNumber(),
+                        pageable.getPageSize());
+
+        return response != null && response.data() != null
+                ? response.data()
+                : PageResponse.empty(pageable);
+    }
+
+    @Override
     public PageResponse<List<MessageSearchResponse>> searchMessages(
             String userId,
             MessageSearchRequest request,
             MessageSearchSection section,
             Pageable pageable) {
-        ConversationMemberLookupResponse membership = getConversationMembership(request.conversationId(), userId);
+        ConversationMemberLookupResponse membership = resolveConversationMembership(request.conversationId(), userId);
 
         NativeQuery query = buildQuery(
                 userId,
                 request,
-                membership.joinedAt(),
+                membership != null ? membership.joinedAt() : null,
                 section,
                 pageable);
 
@@ -109,24 +127,36 @@ public class MessageSearchServiceImpl implements MessageSearchService {
             String userId,
             MessageSearchRequest request,
             int sectionSize) {
-        ConversationMemberLookupResponse membership = getConversationMembership(request.conversationId(), userId);
+        ConversationMemberLookupResponse membership = resolveConversationMembership(request.conversationId(), userId);
         int normalizedSectionSize = Math.max(sectionSize, 1);
         Pageable sectionPageable = PageRequest.of(0, normalizedSectionSize);
+        PageResponse<List<ConversationSearchResponse>> contacts = searchContacts(
+                userId,
+                request.keyword(),
+                sectionPageable);
 
         PageResponse<List<MessageSearchResponse>> messages = executeSearch(
                 userId,
                 request,
-                membership.joinedAt(),
+                membership != null ? membership.joinedAt() : null,
                 MessageSearchSection.MESSAGES,
                 sectionPageable);
         PageResponse<List<MessageSearchResponse>> files = executeSearch(
                 userId,
                 request,
-                membership.joinedAt(),
+                membership != null ? membership.joinedAt() : null,
                 MessageSearchSection.FILES,
                 sectionPageable);
 
-        return new MessageSearchOverviewResponse(messages, files);
+        return new MessageSearchOverviewResponse(contacts, messages, files);
+    }
+
+    private ConversationMemberLookupResponse resolveConversationMembership(String conversationId, String userId) {
+        if (!hasText(conversationId)) {
+            return null;
+        }
+
+        return getConversationMembership(conversationId, userId);
     }
 
     private ConversationMemberLookupResponse getConversationMembership(String conversationId, String userId) {
@@ -170,10 +200,17 @@ public class MessageSearchServiceImpl implements MessageSearchService {
                 ));
             }
 
-            b.filter(f -> f.term(t -> t
-                    .field("conversationId")
-                    .value(request.conversationId())
-            ));
+            if (hasText(request.conversationId())) {
+                b.filter(f -> f.term(t -> t
+                        .field("conversationId")
+                        .value(request.conversationId())
+                ));
+            } else {
+                b.filter(f -> f.term(t -> t
+                        .field("participantIds")
+                        .value(userId)
+                ));
+            }
 
             if (request.senderId() != null) {
                 b.filter(f -> f.term(t -> t
@@ -183,14 +220,26 @@ public class MessageSearchServiceImpl implements MessageSearchService {
             }
 
             if (section == MessageSearchSection.FILES) {
-                b.filter(f -> f.term(t -> t
+                b.filter(f -> f.terms(t -> t
                         .field("type")
-                        .value(FILE_MESSAGE_TYPE)
+                        .terms(values -> values.value(List.of(
+                                co.elastic.clients.elasticsearch._types.FieldValue.of(FILE_MESSAGE_TYPE),
+                                co.elastic.clients.elasticsearch._types.FieldValue.of(LINK_MESSAGE_TYPE)
+                        )))
                 ));
             } else if (section == MessageSearchSection.MESSAGES) {
-                b.mustNot(mn -> mn.term(t -> t
+                b.filter(f -> f.term(t -> t
                         .field("type")
-                        .value(FILE_MESSAGE_TYPE)
+                        .value("CHAT")
+                ));
+            } else {
+                b.filter(f -> f.terms(t -> t
+                        .field("type")
+                        .terms(values -> values.value(List.of(
+                                co.elastic.clients.elasticsearch._types.FieldValue.of("CHAT"),
+                                co.elastic.clients.elasticsearch._types.FieldValue.of(FILE_MESSAGE_TYPE),
+                                co.elastic.clients.elasticsearch._types.FieldValue.of(LINK_MESSAGE_TYPE)
+                        )))
                 ));
             }
 
@@ -322,6 +371,8 @@ public class MessageSearchServiceImpl implements MessageSearchService {
                 .status(message.getStatus())
                 .hasAttachment(message.isHasAttachment())
                 .hasLink(message.isHasLink())
+                .isGroup(message.isGroup())
+                .conversationName(message.getConversationName())
                 .createdAt(message.getCreatedAt())
                 .displayHighlights(displayHighlights)
                 .build();
