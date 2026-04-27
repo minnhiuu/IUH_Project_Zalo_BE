@@ -1,0 +1,50 @@
+pipeline {
+    agent any
+    
+    environment {
+        AWS_ACCOUNT_ID = "952647925716"
+        AWS_REGION     = "ap-southeast-2"
+        IMAGE_REPO     = "bondhub/api-gateway"
+        IMAGE_TAG      = "${env.BUILD_NUMBER}"
+    }
+
+    stages {
+        stage('Checkout Code') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Maven Build') {
+            steps {
+                script {
+                    // 1. Cài đặt Parent POM vào local repo của Jenkins (đứng ở thư mục gốc của project)
+                    sh 'mvn -f ../pom.xml install -N' 
+                    
+                    // 2. Build và cài đặt module Common (để các service khác có thể reference tới)
+                    sh 'mvn -f ../common/pom.xml clean install -DskipTests'
+                    
+                    // 3. Build service hiện tại
+                    sh 'mvn clean package -DskipTests'
+                }
+            }
+        }
+
+        stage('Docker Build & Push to ECR') {
+            steps {
+                script {
+                    sh "aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+                    sh "docker build -t ${IMAGE_REPO}:${IMAGE_TAG} ."
+                    sh "docker tag ${IMAGE_REPO}:${IMAGE_TAG} ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${IMAGE_REPO}:${IMAGE_TAG}"
+                    sh "docker push ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${IMAGE_REPO}:${IMAGE_TAG}"
+                }
+            }
+        }
+
+        stage('Deploy to EKS') {
+            steps {
+                sh "kubectl set image deployment/api-gateway-deploy api-gateway=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${IMAGE_REPO}:${IMAGE_TAG} -n bondhub"
+            }
+        }
+    }
+}

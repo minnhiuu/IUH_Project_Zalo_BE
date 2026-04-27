@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway-deploy
+  namespace: bondhub
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: api-gateway
+  template:
+    metadata:
+      labels:
+        app: api-gateway
+    spec:
+      nodeSelector:
+        node-type: infra
+      containers:
+        - name: api-gateway
+          image: 952647925716.dkr.ecr.ap-southeast-2.amazonaws.com/bondhub/api-gateway:latest
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: bondhub-common-config
+            - secretRef:
+                name: bondhub-common-secrets

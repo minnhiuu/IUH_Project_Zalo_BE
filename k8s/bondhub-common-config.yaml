@@ -1,0 +1,75 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bondhub-common-config
+  namespace: bondhub
+data:
+  EUREKA_SERVER_URL: "http://bh-discovery-server:8761/eureka/"
+  CONFIG_SERVER_URL: "http://bh-config-server:8888"
+
+  # MongoDB
+  MONGODB_PORT: "27017"
+  MONGODB_PORT_IDENTITY: "27017"
+  MONGODB_PORT_MESSAGE: "21018"
+  MONGODB_PORT_AI: "21019"
+  MONGODB_PORT_SOCIAL: "21020"
+  MONGO_INITDB_ROOT_USERNAME: "root"
+  MONGO_INITDB_DATABASE: "bondhub"
+
+  # Redis
+  REDIS_HOST: "bh-redis"
+  REDIS_PORT: "6379"
+
+  # Elasticsearch
+  ELASTICSEARCH_URIS: "bh-elasticsearch:9200"
+  ELASTICSEARCH_PORT: "9200"
+  KIBANA_PORT: "5601"
+
+  # Kafka
+  KAFKA_BOOTSTRAP_SERVERS: "bh-kafka:9092"
+
+  # Neo4j
+  NEO4J_URI: "bolt://bh-neo4j:7687"
+  NEO4J_USERNAME: "neo4j"
+  NEO4J_HTTP_PORT: "7474"
+  NEO4J_BOLT_PORT: "7687"
+
+  # Security
+  JWT_ACCESS_EXPIRATION: "3600000"
+  JWT_REFRESH_WEB_EXPIRATION: "1209600000"
+  JWT_REFRESH_MOBILE_EXPIRATION: "31536000000"
+  JWT_REFRESH_EXPIRATION: "604800000"
+  CORS_ALLOWED_ORIGINS: "http://localhost:3000,http://localhost:4200,http://localhost:8080,http://localhost:5173"
+  COOKIE_SECURE: "false"
+  COOKIE_SAME_SITE: "Lax"
+  COOKIE_PATH: "/"
+
+  # Admin
+  ADMIN_EMAIL: "admin@bondhub.com"
+
+  # Brevo
+  BREVO_MAIL: "foxminer246@gmail.com"
+  BREVO_SENDER_NAME: "BondHub"
+  BREVO_OTP_TEMPLATE_ID: "1"
+
+  # AWS
+  AWS_REGION: "ap-southeast-2"
+  AWS_S3_BUCKET_NAME: "s3-bondhub-bucket"
+
+  # Firebase
+  FIREBASE_CONFIG_PATH: "notification-service/firebase-adminsdk.json"
+
+  # QR Code
+  QR_EXPIRATION_SECONDS: "60"
+  QR_CONTENT_PREFIX: "bondhub://qr/"
+  QR_WAIT_TIMEOUT_MS: "20000"
+  GATEWAY_QR_TIMEOUT_MS: "45000"
+
+  # Langchain
+  LANGCHAIN_TRACING_V2: "false"
+
+  # ZegoCloud
+  ZEGO_APP_ID: "1404011031"
+
+  # Frontend
+  APP_FRONTEND_URL: "localhost:5173"
