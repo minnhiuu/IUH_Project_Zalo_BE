@@ -11,18 +11,30 @@ pipeline {
     }
 
     stages {
-        stage('Wait for Infrastructure Tools') {
+        stage('Setup Tools') {
             steps {
                 script {
-                    echo "Waiting for Infrastructure Setup to complete..."
-                    timeout(time: 5, unit: 'MINUTES') {
-                        waitUntil {
-                            return sh(script: 'test -f /var/jenkins_home/ready', returnStatus: true) == 0
-                        }
-                    }
-                    sh 'ls -l /var/jenkins_home/ready'
-                    sh '/usr/local/bin/docker --version'
-                    sh '/usr/local/bin/kubectl version --client'
+                    sh '''
+                        echo "=== Installing Docker CLI ==="
+                        if [ ! -x /usr/local/bin/docker ]; then
+                            curl -L https://download.docker.com/linux/static/stable/x86_64/docker-27.3.1.tgz | tar -xz -C /tmp
+                            mv /tmp/docker/docker /usr/local/bin/
+                            ln -sf /usr/local/bin/docker /usr/bin/docker
+                            rm -rf /tmp/docker
+                        fi
+
+                        echo "=== Installing kubectl ==="
+                        if [ ! -x /usr/local/bin/kubectl ]; then
+                            curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+                            chmod +x kubectl
+                            mv kubectl /usr/local/bin/
+                            ln -sf /usr/local/bin/kubectl /usr/bin/kubectl
+                        fi
+
+                        echo "=== Verification ==="
+                        docker --version
+                        kubectl version --client
+                    '''
                 }
             }
         }
@@ -56,7 +68,7 @@ pipeline {
         stage('Deploy to EKS') {
             steps {
                 withKubeConfig([credentialsId: 'eks-creds-id', clusterName: 'bondhub-cluster-final']) {
-                    sh "/usr/local/bin/kubectl set image deployment/api-gateway-deploy api-gateway=${ECR_URL}/${IMAGE_REPO}:${IMAGE_TAG} -n bondhub"
+                    sh "kubectl set image deployment/api-gateway-deploy api-gateway=${ECR_URL}/${IMAGE_REPO}:${IMAGE_TAG} -n bondhub"
                 }
             }
         }
