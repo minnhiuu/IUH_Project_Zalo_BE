@@ -8,6 +8,7 @@ pipeline {
         IMAGE_TAG      = "${env.BUILD_NUMBER}"
         ECR_URL        = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
         TOOLS_DIR      = "/var/jenkins_home/tools"
+        IS_CHANGED     = "true"
     }
 
     stages {
@@ -38,23 +39,20 @@ pipeline {
         stage('Check Changes') {
             steps {
                 script {
-                    if (env.GIT_PREVIOUS_COMMIT == null || env.GIT_PREVIOUS_COMMIT == env.GIT_COMMIT) {
-                        echo "--- First build or manual trigger. Proceeding... ---"
-                        return
-                    }
-                    def changedFiles = sh(script: "git diff --name-only ${env.GIT_PREVIOUS_COMMIT} ${env.GIT_COMMIT}", returnStatus: false, returnStdout: true).trim()
-                    def isChanged = changedFiles.contains("post-recommendation-service/") || changedFiles.contains("common/")
-                    
-                    if (!isChanged) {
-                        echo "--- No changes in post-recommendation-service or common. Stopping pipeline early. ---"
-                        currentBuild.result = 'SUCCESS'
-                        error("Stopping pipeline early because no changes detected.")
+                    if (env.GIT_PREVIOUS_COMMIT != null && env.GIT_PREVIOUS_COMMIT != env.GIT_COMMIT) {
+                        def changedFiles = sh(script: "git diff --name-only ${env.GIT_PREVIOUS_COMMIT} ${env.GIT_COMMIT}", returnStatus: false, returnStdout: true).trim()
+                        def hasChanges = changedFiles.contains("post-recommendation-service/")
+                        if (!hasChanges) {
+                            env.IS_CHANGED = "false"
+                            echo "--- No changes detected in post-recommendation-service. Stages will be skipped. ---"
+                        }
                     }
                 }
             }
         }
 
         stage('Docker Build & Push') {
+            when { environment name: 'IS_CHANGED', value: 'true' }
             steps {
                 withCredentials([[$class: 'AmazonWebServicesCredentialsBinding',
                                   credentialsId: 'aws-credentials-id',
@@ -77,6 +75,7 @@ pipeline {
         }
 
         stage('Deploy to EKS') {
+            when { environment name: 'IS_CHANGED', value: 'true' }
             steps {
                 withKubeConfig([credentialsId: 'eks-creds-id', clusterName: 'bondhub-cluster-final']) {
                     sh "${TOOLS_DIR}/kubectl set image deployment/post-recommendation-service-deploy post-recommendation-service=${ECR_URL}/${IMAGE_REPO}:${IMAGE_TAG} -n bondhub"
