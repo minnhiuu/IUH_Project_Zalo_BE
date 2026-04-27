@@ -36,14 +36,17 @@ spec:
                       # 1. Tải Docker CLI trực tiếp (Bản tĩnh - Static Binary)
                       curl -L https://download.docker.com/linux/static/stable/x86_64/docker-27.3.1.tgz | tar -xz -C /tmp && \
                       mv /tmp/docker/docker /usr/local/bin/ && \
-                      ln -s /usr/local/bin/docker /usr/bin/docker && \
+                      ln -sf /usr/local/bin/docker /usr/bin/docker && \
                       rm -rf /tmp/docker && \
                       
                       # 2. Tải kubectl
                       curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && \
                       chmod +x kubectl && \
                       mv kubectl /usr/local/bin/ && \
-                      ln -s /usr/local/bin/kubectl /usr/bin/kubectl
+                      ln -sf /usr/local/bin/kubectl /usr/bin/kubectl && \
+                      
+                      # 3. Đánh dấu hoàn tất
+                      touch /tmp/ready && echo "All tools installed successfully!"
                     ) > /var/log/install_tools.log 2>&1 &
           volumeMounts:
             - name: jenkins-data

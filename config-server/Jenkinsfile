@@ -14,16 +14,13 @@ pipeline {
         stage('Wait for Infrastructure Tools') {
             steps {
                 script {
-                    echo "Checking for Docker and Kubectl at absolute paths..."
+                    echo "Waiting for Infrastructure Setup to complete..."
                     timeout(time: 5, unit: 'MINUTES') {
                         waitUntil {
-                            // Kiểm tra trực tiếp file có tồn tại và có quyền thực thi không
-                            def dockerCheck = sh(script: 'test -x /usr/local/bin/docker', returnStatus: true) == 0
-                            def kubectlCheck = sh(script: 'test -x /usr/local/bin/kubectl', returnStatus: true) == 0
-                            return (dockerCheck && kubectlCheck)
+                            // Kiểm tra file đánh dấu hoàn tất cài đặt
+                            return sh(script: 'test -f /tmp/ready', returnStatus: true) == 0
                         }
                     }
-                    // Sau khi tìm thấy, mình dùng luôn đường dẫn tuyệt đối cho các bước sau
                     sh '/usr/local/bin/docker --version'
                     sh '/usr/local/bin/kubectl version --client'
                 }
