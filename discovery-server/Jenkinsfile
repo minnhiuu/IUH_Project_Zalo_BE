@@ -19,30 +19,25 @@ pipeline {
             }
         }
 
-        stage('Maven Build') {
+        stage('Build & Deploy') {
             steps {
-                script {
-                    sh 'mvn -f ../pom.xml install -N' 
-                    sh 'mvn -f ../common/pom.xml clean install -DskipTests'
-                    sh 'mvn clean package -DskipTests'
-                }
-            }
-        }
+                dir('discovery-server') {
+                    script {
+                        // 1. Maven Build
+                        sh 'mvn -f ../pom.xml install -N' 
+                        sh 'mvn -f ../common/pom.xml clean install -DskipTests'
+                        sh 'mvn clean package -DskipTests'
 
-        stage('Docker Build & Push to ECR') {
-            steps {
-                script {
-                    sh "aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
-                    sh "docker build -t ${IMAGE_REPO}:${IMAGE_TAG} ."
-                    sh "docker tag ${IMAGE_REPO}:${IMAGE_TAG} ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${IMAGE_REPO}:${IMAGE_TAG}"
-                    sh "docker push ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${IMAGE_REPO}:${IMAGE_TAG}"
-                }
-            }
-        }
+                        // 2. Docker Build & Push to ECR
+                        sh "aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+                        sh "docker build -t ${IMAGE_REPO}:${IMAGE_TAG} ."
+                        sh "docker tag ${IMAGE_REPO}:${IMAGE_TAG} ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${IMAGE_REPO}:${IMAGE_TAG}"
+                        sh "docker push ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${IMAGE_REPO}:${IMAGE_TAG}"
 
-        stage('Deploy to EKS') {
-            steps {
-                sh "kubectl set image deployment/discovery-server-deploy discovery-server=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${IMAGE_REPO}:${IMAGE_TAG} -n bondhub"
+                        // 3. Deploy to EKS
+                        sh "kubectl set image deployment/discovery-server-deploy discovery-server=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${IMAGE_REPO}:${IMAGE_TAG} -n bondhub"
+                    }
+                }
             }
         }
     }
