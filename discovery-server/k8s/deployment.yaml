@@ -20,6 +20,13 @@ spec:
           image: 952647925716.dkr.ecr.ap-southeast-2.amazonaws.com/bondhub/discovery-server:latest
           ports:
             - containerPort: 8761
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8761
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 3
           envFrom:
             - configMapRef:
                 name: bondhub-common-config

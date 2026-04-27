@@ -15,11 +15,22 @@ spec:
     spec:
       nodeSelector:
         node-type: infra
+      initContainers:
+        - name: wait-for-discovery
+          image: busybox
+          command: ['sh', '-c', 'until nc -z bh-discovery-server 8761; do echo waiting for discovery; sleep 2; done;']
       containers:
         - name: api-gateway
           image: 952647925716.dkr.ecr.ap-southeast-2.amazonaws.com/bondhub/api-gateway:latest
           ports:
             - containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 3
           envFrom:
             - configMapRef:
                 name: bondhub-common-config
