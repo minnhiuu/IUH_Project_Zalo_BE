@@ -45,8 +45,8 @@ spec:
                       mv kubectl /usr/local/bin/ && \
                       ln -sf /usr/local/bin/kubectl /usr/bin/kubectl && \
                       
-                      # 3. Đánh dấu hoàn tất
-                      touch /tmp/ready && echo "All tools installed successfully!"
+                      # 3. Đánh dấu hoàn tất vào Volume chung
+                      touch /var/jenkins_home/ready && echo "All tools installed successfully!"
                     ) > /var/log/install_tools.log 2>&1 &
           volumeMounts:
             - name: jenkins-data

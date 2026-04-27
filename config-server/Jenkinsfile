@@ -17,10 +17,11 @@ pipeline {
                     echo "Waiting for Infrastructure Setup to complete..."
                     timeout(time: 5, unit: 'MINUTES') {
                         waitUntil {
-                            // Kiểm tra file đánh dấu hoàn tất cài đặt
-                            return sh(script: 'test -f /tmp/ready', returnStatus: true) == 0
+                            // Kiểm tra file đánh dấu trong thư mục home của Jenkins
+                            return sh(script: 'test -f /var/jenkins_home/ready', returnStatus: true) == 0
                         }
                     }
+                    sh 'ls -l /var/jenkins_home/ready'
                     sh '/usr/local/bin/docker --version'
                     sh '/usr/local/bin/kubectl version --client'
                 }

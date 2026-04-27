@@ -17,9 +17,10 @@ pipeline {
                     echo "Waiting for Infrastructure Setup to complete..."
                     timeout(time: 5, unit: 'MINUTES') {
                         waitUntil {
-                            return sh(script: 'test -f /tmp/ready', returnStatus: true) == 0
+                            return sh(script: 'test -f /var/jenkins_home/ready', returnStatus: true) == 0
                         }
                     }
+                    sh 'ls -l /var/jenkins_home/ready'
                     sh '/usr/local/bin/docker --version'
                     sh '/usr/local/bin/kubectl version --client'
                 }
