@@ -1,42 +1,48 @@
 pipeline {
     agent any
-    
-    tools {
-        maven 'maven-3.9'
-    }
+    tools { maven 'maven-3.9' }
 
     environment {
         AWS_ACCOUNT_ID = "952647925716"
         AWS_REGION     = "ap-southeast-2"
         IMAGE_REPO     = "bondhub/config-server"
         IMAGE_TAG      = "${env.BUILD_NUMBER}"
+        ECR_URL        = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
     }
 
     stages {
-        stage('Checkout Code') {
-            steps {
-                checkout scm
-            }
-        }
-
-        stage('Build & Deploy') {
+        stage('Maven Build') {
             steps {
                 dir('config-server') {
                     script {
-                        // 1. Maven Build
                         sh 'mvn -f ../pom.xml install -N' 
                         sh 'mvn -f ../common/pom.xml clean install -DskipTests'
                         sh 'mvn clean package -DskipTests'
-
-                        // 2. Docker Build & Push to ECR
-                        sh "aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
-                        sh "docker build -t ${IMAGE_REPO}:${IMAGE_TAG} ."
-                        sh "docker tag ${IMAGE_REPO}:${IMAGE_TAG} ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${IMAGE_REPO}:${IMAGE_TAG}"
-                        sh "docker push ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${IMAGE_REPO}:${IMAGE_TAG}"
-
-                        // 3. Deploy to EKS
-                        sh "kubectl set image deployment/config-server-deploy config-server=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${IMAGE_REPO}:${IMAGE_TAG} -n bondhub"
                     }
+                }
+            }
+        }
+
+        stage('Docker Build & Push') {
+            steps {
+                script {
+                    // Dùng Plugin Docker để build và login ECR (Cần cài Plugin Docker Pipeline)
+                    docker.withRegistry("https://${ECR_URL}", "ecr:${AWS_REGION}:aws-credentials-id") {
+                        dir('config-server') {
+                            def customImage = docker.build("${IMAGE_REPO}:${IMAGE_TAG}")
+                            customImage.push()
+                            customImage.push("latest")
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Deploy to EKS') {
+            steps {
+                // Dùng Plugin Kubernetes CLI (Cần cài Plugin Kubernetes CLI)
+                withKubeConfig([credentialsId: 'eks-creds-id', clusterName: 'bondhub-cluster-final']) {
+                    sh "kubectl set image deployment/config-server-deploy config-server=${ECR_URL}/${IMAGE_REPO}:${IMAGE_TAG} -n bondhub"
                 }
             }
         }
