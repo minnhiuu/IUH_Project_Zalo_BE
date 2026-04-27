@@ -53,7 +53,7 @@ pipeline {
         }
 
         stage('Maven Build') {
-            when { environment name: 'IS_CHANGED', value: 'true' }
+            when { expression { return env.IS_CHANGED == 'true' } }
             steps {
                 dir('socket-service') {
                     sh 'mvn -f ../pom.xml install -N'
@@ -64,7 +64,7 @@ pipeline {
         }
 
         stage('Docker Build & Push') {
-            when { environment name: 'IS_CHANGED', value: 'true' }
+            when { expression { return env.IS_CHANGED == 'true' } }
             steps {
                 withCredentials([[$class: 'AmazonWebServicesCredentialsBinding',
                                   credentialsId: 'aws-credentials-id',
@@ -87,7 +87,7 @@ pipeline {
         }
 
         stage('Deploy to EKS') {
-            when { environment name: 'IS_CHANGED', value: 'true' }
+            when { expression { return env.IS_CHANGED == 'true' } }
             steps {
                 withKubeConfig([credentialsId: 'eks-creds-id', clusterName: 'bondhub-cluster-final']) {
                     sh "${TOOLS_DIR}/kubectl set image deployment/socket-service-deploy socket-service=${ECR_URL}/${IMAGE_REPO}:${IMAGE_TAG} -n bondhub"
