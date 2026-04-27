@@ -60,6 +60,12 @@ data:
   # Firebase
   FIREBASE_CONFIG_PATH: "notification-service/firebase-adminsdk.json"
 
+  # Qdrant
+  QDRANT_HOST: "bh-qdrant"
+  QDRANT_PORT: "6333"
+  QDRANT_GRPC_PORT: "6334"
+  QDRANT_URL: "http://bh-qdrant:6333"
+
   # QR Code
   QR_EXPIRATION_SECONDS: "60"
   QR_CONTENT_PREFIX: "bondhub://qr/"
