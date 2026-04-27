@@ -14,56 +14,66 @@ pipeline {
     stages {
         stage('Setup Tools') {
             steps {
-                script {
-                    sh '''
-                        mkdir -p ${TOOLS_DIR}
+                sh '''
+                    mkdir -p ${TOOLS_DIR}
 
+                    if [ ! -x ${TOOLS_DIR}/docker ]; then
                         echo "=== Installing Docker CLI ==="
-                        if [ ! -x ${TOOLS_DIR}/docker ]; then
-                            curl -sL https://download.docker.com/linux/static/stable/x86_64/docker-27.3.1.tgz | tar -xz -C /tmp
-                            mv /tmp/docker/docker ${TOOLS_DIR}/docker
-                            rm -rf /tmp/docker
-                        fi
+                        curl -sL https://download.docker.com/linux/static/stable/x86_64/docker-27.3.1.tgz | tar -xz -C /tmp
+                        mv /tmp/docker/docker ${TOOLS_DIR}/docker
+                        rm -rf /tmp/docker
+                    fi
 
+                    if [ ! -x ${TOOLS_DIR}/kubectl ]; then
                         echo "=== Installing kubectl ==="
-                        if [ ! -x ${TOOLS_DIR}/kubectl ]; then
-                            curl -sLO "https://dl.k8s.io/release/$(curl -sL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-                            chmod +x kubectl
-                            mv kubectl ${TOOLS_DIR}/kubectl
-                        fi
+                        curl -sLO "https://dl.k8s.io/release/$(curl -sL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+                        chmod +x kubectl
+                        mv kubectl ${TOOLS_DIR}/kubectl
+                    fi
 
-                        echo "=== Verification ==="
-                        ${TOOLS_DIR}/docker --version
-                        ${TOOLS_DIR}/kubectl version --client
-                    '''
-                }
+                    if [ ! -x ${TOOLS_DIR}/aws ]; then
+                        echo "=== Installing AWS CLI ==="
+                        curl -sL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
+                        unzip -q /tmp/awscliv2.zip -d /tmp
+                        /tmp/aws/install --install-dir ${TOOLS_DIR}/aws-cli --bin-dir ${TOOLS_DIR}
+                        rm -rf /tmp/aws /tmp/awscliv2.zip
+                    fi
+
+                    echo "=== Verification ==="
+                    ${TOOLS_DIR}/docker --version
+                    ${TOOLS_DIR}/kubectl version --client
+                    ${TOOLS_DIR}/aws --version
+                '''
             }
         }
 
         stage('Maven Build') {
             steps {
                 dir('config-server') {
-                    script {
-                        sh 'mvn -f ../pom.xml install -N' 
-                        sh 'mvn -f ../common/pom.xml clean install -DskipTests'
-                        sh 'mvn clean package -DskipTests'
-                    }
+                    sh 'mvn -f ../pom.xml install -N'
+                    sh 'mvn -f ../common/pom.xml clean install -DskipTests'
+                    sh 'mvn clean package -DskipTests'
                 }
             }
         }
 
         stage('Docker Build & Push') {
             steps {
-                script {
-                    // Thêm tools vào PATH để plugin Docker nhận diện được
-                    withEnv(["PATH+TOOLS=${TOOLS_DIR}"]) {
-                        docker.withRegistry("https://${ECR_URL}", "ecr:${AWS_REGION}:aws-credentials-id") {
-                            dir('config-server') {
-                                def customImage = docker.build("${IMAGE_REPO}:${IMAGE_TAG}")
-                                customImage.push()
-                                customImage.push("latest")
-                            }
-                        }
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding',
+                                  credentialsId: 'aws-credentials-id',
+                                  accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                                  secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']]) {
+                    dir('config-server') {
+                        sh """
+                            ${TOOLS_DIR}/aws ecr get-login-password --region ${AWS_REGION} | \
+                            ${TOOLS_DIR}/docker login --username AWS --password-stdin ${ECR_URL}
+
+                            ${TOOLS_DIR}/docker build -t ${ECR_URL}/${IMAGE_REPO}:${IMAGE_TAG} .
+                            ${TOOLS_DIR}/docker push ${ECR_URL}/${IMAGE_REPO}:${IMAGE_TAG}
+
+                            ${TOOLS_DIR}/docker tag ${ECR_URL}/${IMAGE_REPO}:${IMAGE_TAG} ${ECR_URL}/${IMAGE_REPO}:latest
+                            ${TOOLS_DIR}/docker push ${ECR_URL}/${IMAGE_REPO}:latest
+                        """
                     }
                 }
             }

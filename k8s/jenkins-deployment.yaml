@@ -16,38 +16,16 @@ spec:
       nodeSelector:
         node-type: infra
       securityContext:
-        runAsUser: 0 # Bắt buộc phải là root để cài được phần mềm
+        runAsUser: 0
       containers:
         - name: jenkins
           image: jenkins/jenkins:lts
+          env:
+            - name: PATH
+              value: "/var/jenkins_home/tools:/opt/java/openjdk/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
           ports:
             - containerPort: 8080
             - containerPort: 50000
-          lifecycle:
-            postStart:
-              exec:
-                command: 
-                  - "/bin/sh"
-                  - "-c"
-                  - |
-                    (
-                      apt-get update && apt-get install -y curl && \
-                      
-                      # 1. Tải Docker CLI trực tiếp (Bản tĩnh - Static Binary)
-                      curl -L https://download.docker.com/linux/static/stable/x86_64/docker-27.3.1.tgz | tar -xz -C /tmp && \
-                      mv /tmp/docker/docker /usr/local/bin/ && \
-                      ln -sf /usr/local/bin/docker /usr/bin/docker && \
-                      rm -rf /tmp/docker && \
-                      
-                      # 2. Tải kubectl
-                      curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && \
-                      chmod +x kubectl && \
-                      mv kubectl /usr/local/bin/ && \
-                      ln -sf /usr/local/bin/kubectl /usr/bin/kubectl && \
-                      
-                      # 3. Đánh dấu hoàn tất vào Volume chung
-                      touch /var/jenkins_home/ready && echo "All tools installed successfully!"
-                    ) > /var/log/install_tools.log 2>&1 &
           volumeMounts:
             - name: jenkins-data
               mountPath: /var/jenkins_home
@@ -56,6 +34,6 @@ spec:
       volumes:
         - name: docker-sock
           hostPath:
-            path: /var/run/docker.sock # Mount socket từ EC2 vào trong Pod
+            path: /var/run/docker.sock
         - name: jenkins-data
           emptyDir: {}
