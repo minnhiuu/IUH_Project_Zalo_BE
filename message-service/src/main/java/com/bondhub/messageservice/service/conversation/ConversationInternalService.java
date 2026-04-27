@@ -12,6 +12,7 @@ public interface ConversationInternalService {
     PageResponse<List<ConversationSearchResponse>> searchConversations(
             String userId,
             String keyword,
+            Boolean isGroup,
             int page,
             int size);
 }

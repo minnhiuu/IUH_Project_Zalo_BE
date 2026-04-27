@@ -23,6 +23,7 @@ public interface ConversationMemberClient {
     ApiResponse<PageResponse<List<ConversationSearchResponse>>> searchConversations(
             @RequestParam("userId") String userId,
             @RequestParam(value = "keyword", required = false) String keyword,
+            @RequestParam(value = "isGroup", required = false) Boolean isGroup,
             @RequestParam("page") int page,
             @RequestParam("size") int size);
 }

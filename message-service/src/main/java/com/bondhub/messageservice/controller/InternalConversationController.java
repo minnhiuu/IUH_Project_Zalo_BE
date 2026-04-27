@@ -54,9 +54,10 @@ public class InternalConversationController {
     public ResponseEntity<ApiResponse<PageResponse<List<ConversationSearchResponse>>>> searchConversations(
             @RequestParam String userId,
             @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Boolean isGroup,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         return ResponseEntity.ok(ApiResponse.success(
-                conversationInternalService.searchConversations(userId, keyword, page, size)));
+                conversationInternalService.searchConversations(userId, keyword, isGroup, page, size)));
     }
 }

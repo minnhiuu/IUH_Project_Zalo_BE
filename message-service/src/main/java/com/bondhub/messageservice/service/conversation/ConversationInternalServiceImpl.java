@@ -70,6 +70,7 @@ public class ConversationInternalServiceImpl implements ConversationInternalServ
     public PageResponse<List<ConversationSearchResponse>> searchConversations(
             String userId,
             String keyword,
+            Boolean isGroup,
             int page,
             int size) {
         PageRequest pageable = PageRequest.of(page, size);
@@ -97,6 +98,7 @@ public class ConversationInternalServiceImpl implements ConversationInternalServ
         List<ConversationSearchResponse> filtered = conversations.stream()
                 .map(conversation -> toSearchResponse(conversation, userId, userCache, baseUrl, keyword))
                 .filter(Objects::nonNull)
+                .filter(response -> isGroup == null || response.group() == isGroup)
                 .filter(response -> matches(response, normalizedKeyword))
                 .sorted(Comparator.comparing(ConversationSearchResponse::group)
                         .thenComparing(ConversationSearchResponse::name, String.CASE_INSENSITIVE_ORDER))

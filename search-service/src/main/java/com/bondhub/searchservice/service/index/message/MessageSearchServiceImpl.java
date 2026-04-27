@@ -13,6 +13,7 @@ import com.bondhub.common.utils.S3Util;
 import com.bondhub.searchservice.client.ConversationMemberClient;
 import com.bondhub.searchservice.config.ElasticsearchProperties;
 import com.bondhub.searchservice.dto.request.MessageSearchRequest;
+import com.bondhub.searchservice.dto.response.ContactSearchTabResponse;
 import com.bondhub.searchservice.dto.response.MessageSearchOverviewResponse;
 import com.bondhub.searchservice.dto.response.MessageSearchResponse;
 import com.bondhub.searchservice.enums.MessageSearchSection;
@@ -81,7 +82,7 @@ public class MessageSearchServiceImpl implements MessageSearchService {
     String region;
 
     @Override
-    public PageResponse<List<ConversationSearchResponse>> searchContacts(
+    public PageResponse<List<ConversationSearchResponse>> searchConversations(
             String userId,
             String keyword,
             Pageable pageable) {
@@ -89,12 +90,34 @@ public class MessageSearchServiceImpl implements MessageSearchService {
                 conversationMemberClient.searchConversations(
                         userId,
                         keyword,
+                        null,
                         pageable.getPageNumber(),
                         pageable.getPageSize());
 
         return response != null && response.data() != null
                 ? response.data()
                 : PageResponse.empty(pageable);
+    }
+
+    @Override
+    public ContactSearchTabResponse searchConversationsCategorized(
+            String userId,
+            String keyword,
+            int page,
+            int size) {
+        ApiResponse<PageResponse<List<ConversationSearchResponse>>> peopleResponse =
+                conversationMemberClient.searchConversations(userId, keyword, false, page, size);
+        ApiResponse<PageResponse<List<ConversationSearchResponse>>> groupsResponse =
+                conversationMemberClient.searchConversations(userId, keyword, true, page, size);
+
+        return ContactSearchTabResponse.builder()
+                .people(peopleResponse != null && peopleResponse.data() != null
+                        ? peopleResponse.data()
+                        : PageResponse.empty(PageRequest.of(page, size)))
+                .groups(groupsResponse != null && groupsResponse.data() != null
+                        ? groupsResponse.data()
+                        : PageResponse.empty(PageRequest.of(page, size)))
+                .build();
     }
 
     @Override
@@ -130,7 +153,7 @@ public class MessageSearchServiceImpl implements MessageSearchService {
         ConversationMemberLookupResponse membership = resolveConversationMembership(request.conversationId(), userId);
         int normalizedSectionSize = Math.max(sectionSize, 1);
         Pageable sectionPageable = PageRequest.of(0, normalizedSectionSize);
-        PageResponse<List<ConversationSearchResponse>> contacts = searchContacts(
+        PageResponse<List<ConversationSearchResponse>> contacts = searchConversations(
                 userId,
                 request.keyword(),
                 sectionPageable);
