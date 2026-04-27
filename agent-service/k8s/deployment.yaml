@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-service-deploy
+  namespace: bondhub
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: agent-service
+  template:
+    metadata:
+      labels:
+        app: agent-service
+    spec:
+      nodeSelector:
+        node-type: interaction-ai
+      initContainers:
+        - name: wait-for-infra
+          image: busybox
+          command: ['sh', '-c', 'until nc -z bh-discovery-server 8761 && nc -z bh-config-server 8888 && nc -z bh-mongodb 27017 && nc -z bh-qdrant 6333; do echo "Waiting for AI Infra (Eureka, Config, Mongo, Qdrant)..."; sleep 5; done;']
+      containers:
+        - name: agent-service
+          image: 952647925716.dkr.ecr.ap-southeast-2.amazonaws.com/bondhub/agent-service:latest
+          ports:
+            - containerPort: 8082
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8082
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          env:
+            - name: MONGODB_URI_AI_SERVICE
+              value: "mongodb://$(MONGO_INITDB_ROOT_USERNAME):$(MONGO_INITDB_ROOT_PASSWORD)@bh-mongodb:27017/bondhub_ai_service?authSource=admin"
+          envFrom:
+            - configMapRef:
+                name: bondhub-common-config
+            - secretRef:
+                name: bondhub-common-secrets
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bh-agent-service
+  namespace: bondhub
+spec:
+  ports:
+    - port: 8082
+      targetPort: 8082
+  selector:
+    app: agent-service

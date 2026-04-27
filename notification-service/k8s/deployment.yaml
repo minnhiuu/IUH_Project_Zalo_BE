@@ -31,8 +31,19 @@ spec:
             initialDelaySeconds: 30
             periodSeconds: 10
             failureThreshold: 3
+          env:
+            - name: FIREBASE_CONFIG_PATH
+              value: "/app/firebase/firebase-adminsdk.json"
+          volumeMounts:
+            - name: firebase-config-volume
+              mountPath: "/app/firebase"
+              readOnly: true
           envFrom:
             - configMapRef:
                 name: bondhub-common-config
             - secretRef:
                 name: bondhub-common-secrets
+      volumes:
+        - name: firebase-config-volume
+          secret:
+            secretName: bh-firebase-secret
