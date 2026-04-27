@@ -16,13 +16,26 @@ spec:
       nodeSelector:
         node-type: infra
       securityContext:
-        runAsUser: 0 # Chạy quyền root để dùng được docker socket
+        runAsUser: 0 # Bắt buộc phải là root để cài được phần mềm
       containers:
         - name: jenkins
           image: jenkins/jenkins:lts
           ports:
             - containerPort: 8080
             - containerPort: 50000
+          lifecycle:
+            postStart:
+              exec:
+                command: 
+                  - "/bin/sh"
+                  - "-c"
+                  - |
+                    apt-get update && \
+                    apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release && \
+                    curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.asc && \
+                    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.asc] https://download.docker.com/linux/debian $(lsb_release -cs) stable" > /etc/apt/sources.list.d/docker.list && \
+                    apt-get update && \
+                    apt-get install -y docker-ce-cli
           volumeMounts:
             - name: jenkins-data
               mountPath: /var/jenkins_home
