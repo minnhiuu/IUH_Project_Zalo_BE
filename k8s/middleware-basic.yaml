@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bh-mongodb
+  namespace: bondhub
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bh-mongodb
+  template:
+    metadata:
+      labels:
+        app: bh-mongodb
+    spec:
+      nodeSelector:
+        node-type: middleware
+      containers:
+        - name: bh-mongodb
+          image: mongo:latest
+          ports:
+            - containerPort: 27017
+          envFrom:
+            - configMapRef:
+                name: bondhub-common-config
+            - secretRef:
+                name: bondhub-common-secrets
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bh-mongodb
+  namespace: bondhub
+spec:
+  ports:
+    - port: 27017
+  selector:
+    app: bh-mongodb
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bh-redis
+  namespace: bondhub
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bh-redis
+  template:
+    metadata:
+      labels:
+        app: bh-redis
+    spec:
+      nodeSelector:
+        node-type: middleware
+      containers:
+        - name: bh-redis
+          image: redis:alpine
+          ports:
+            - containerPort: 6379
+          envFrom:
+            - configMapRef:
+                name: bondhub-common-config
+            - secretRef:
+                name: bondhub-common-secrets
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bh-redis
+  namespace: bondhub
+spec:
+  ports:
+    - port: 6379
+  selector:
+    app: bh-redis

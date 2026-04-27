@@ -27,6 +27,7 @@ data:
 
   # Kafka
   KAFKA_BOOTSTRAP_SERVERS: "bh-kafka:9092"
+  CLUSTER_ID: "MkU3OEVBNTcwNTJENDM2Qk"
 
   # Neo4j
   NEO4J_URI: "bolt://bh-neo4j:7687"

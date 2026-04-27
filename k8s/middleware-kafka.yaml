@@ -1,0 +1,106 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bh-kafka
+  namespace: bondhub
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bh-kafka
+  template:
+    metadata:
+      labels:
+        app: bh-kafka
+    spec:
+      nodeSelector:
+        node-type: middleware
+      containers:
+        - name: bh-kafka
+          image: confluentinc/cp-kafka:7.6.0
+          ports:
+            - containerPort: 9092
+          env:
+            - name: KAFKA_NODE_ID
+              value: "1"
+            - name: KAFKA_PROCESS_ROLES
+              value: "broker,controller"
+            - name: KAFKA_CONTROLLER_QUORUM_VOTERS
+              value: "1@bh-kafka:9093"
+            - name: KAFKA_LISTENERS
+              value: "PLAINTEXT://:9092,CONTROLLER://:9093,PLAINTEXT_INTERNAL://:29092"
+            - name: KAFKA_ADVERTISED_LISTENERS
+              value: "PLAINTEXT://bh-kafka:9092,PLAINTEXT_INTERNAL://bh-kafka:29092"
+            - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
+              value: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT"
+            - name: KAFKA_CONTROLLER_LISTENER_NAMES
+              value: "CONTROLLER"
+            - name: KAFKA_INTER_BROKER_LISTENER_NAME
+              value: "PLAINTEXT_INTERNAL"
+            - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
+              value: "1"
+            - name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
+              value: "1"
+            - name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR
+              value: "1"
+            - name: KAFKA_AUTO_CREATE_TOPICS_ENABLE
+              value: "true"
+          envFrom:
+            - configMapRef:
+                name: bondhub-common-config
+            - secretRef:
+                name: bondhub-common-secrets
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bh-kafka
+  namespace: bondhub
+spec:
+  ports:
+    - port: 9092
+  selector:
+    app: bh-kafka
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bh-kafka-ui
+  namespace: bondhub
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bh-kafka-ui
+  template:
+    metadata:
+      labels:
+        app: bh-kafka-ui
+    spec:
+      nodeSelector:
+        node-type: middleware
+      containers:
+        - name: kafka-ui
+          image: provectuslabs/kafka-ui:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: KAFKA_CLUSTERS_0_NAME
+              value: "bondhub-cluster"
+            - name: KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS
+              value: "bh-kafka:9092"
+            - name: DYNAMIC_CONFIG_ENABLED
+              value: "true"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bh-kafka-ui
+  namespace: bondhub
+spec:
+  type: LoadBalancer # Để Huy truy cập được từ trình duyệt máy cá nhân
+  ports:
+    - port: 80
+      targetPort: 8080
+  selector:
+    app: bh-kafka-ui

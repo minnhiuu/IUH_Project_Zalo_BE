@@ -1,0 +1,93 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bh-qdrant
+  namespace: bondhub
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bh-qdrant
+  template:
+    metadata:
+      labels:
+        app: bh-qdrant
+    spec:
+      nodeSelector:
+        node-type: middleware
+      containers:
+        - name: bh-qdrant
+          image: qdrant/qdrant:latest
+          ports:
+            - containerPort: 6333
+            - containerPort: 6334
+          envFrom:
+            - configMapRef:
+                name: bondhub-common-config
+            - secretRef:
+                name: bondhub-common-secrets
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bh-qdrant
+  namespace: bondhub
+spec:
+  ports:
+    - name: http
+      port: 6333
+    - name: grpc
+      port: 6334
+  selector:
+    app: bh-qdrant
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bh-neo4j
+  namespace: bondhub
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bh-neo4j
+  template:
+    metadata:
+      labels:
+        app: bh-neo4j
+    spec:
+      nodeSelector:
+        node-type: middleware
+      containers:
+        - name: bh-neo4j
+          image: neo4j:latest
+          ports:
+            - containerPort: 7474
+            - containerPort: 7687
+          env:
+            - name: N_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: bondhub-common-config
+                  key: NEO4J_USERNAME
+            - name: N_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: bondhub-common-secrets
+                  key: NEO4J_PASSWORD
+            - name: NEO4J_AUTH
+              value: "$(N_USER)/$(N_PASS)"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bh-neo4j
+  namespace: bondhub
+spec:
+  ports:
+    - name: http
+      port: 7474
+    - name: bolt
+      port: 7687
+  selector:
+    app: bh-neo4j

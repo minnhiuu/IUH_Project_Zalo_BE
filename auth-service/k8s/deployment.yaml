@@ -1,33 +1,33 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: api-gateway-deploy
+  name: auth-service-deploy
   namespace: bondhub
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: api-gateway
+      app: auth-service
   template:
     metadata:
       labels:
-        app: api-gateway
+        app: auth-service
     spec:
       nodeSelector:
-        node-type: infra
+        node-type: core-social
       initContainers:
         - name: wait-for-infra
           image: busybox
           command: ['sh', '-c', 'until nc -z bh-discovery-server 8761 && nc -z bh-config-server 8888; do echo waiting for infra services; sleep 2; done;']
       containers:
-        - name: api-gateway
-          image: 952647925716.dkr.ecr.ap-southeast-2.amazonaws.com/bondhub/api-gateway:latest
+        - name: auth-service
+          image: 952647925716.dkr.ecr.ap-southeast-2.amazonaws.com/bondhub/auth-service:latest
           ports:
-            - containerPort: 8080
+            - containerPort: 8084
           readinessProbe:
             httpGet:
               path: /actuator/health/readiness
-              port: 8080
+              port: 8084
             initialDelaySeconds: 30
             periodSeconds: 10
             failureThreshold: 3
