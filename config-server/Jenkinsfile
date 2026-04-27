@@ -16,34 +16,42 @@ pipeline {
             steps {
                 sh '''
                     mkdir -p ${TOOLS_DIR}
-
                     if [ ! -x ${TOOLS_DIR}/docker ]; then
-                        echo "=== Installing Docker CLI ==="
                         curl -sL https://download.docker.com/linux/static/stable/x86_64/docker-27.3.1.tgz | tar -xz -C /tmp
                         mv /tmp/docker/docker ${TOOLS_DIR}/docker
                         rm -rf /tmp/docker
                     fi
-
                     if [ ! -x ${TOOLS_DIR}/kubectl ]; then
-                        echo "=== Installing kubectl ==="
                         curl -sLO "https://dl.k8s.io/release/$(curl -sL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
                         chmod +x kubectl
                         mv kubectl ${TOOLS_DIR}/kubectl
                     fi
-
                     if [ ! -x ${TOOLS_DIR}/aws ]; then
-                        echo "=== Installing AWS CLI ==="
                         curl -sL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
                         unzip -q /tmp/awscliv2.zip -d /tmp
                         /tmp/aws/install --install-dir ${TOOLS_DIR}/aws-cli --bin-dir ${TOOLS_DIR}
                         rm -rf /tmp/aws /tmp/awscliv2.zip
                     fi
-
-                    echo "=== Verification ==="
-                    ${TOOLS_DIR}/docker --version
-                    ${TOOLS_DIR}/kubectl version --client
-                    ${TOOLS_DIR}/aws --version
                 '''
+            }
+        }
+
+        stage('Check Changes') {
+            steps {
+                script {
+                    if (env.GIT_PREVIOUS_COMMIT == null || env.GIT_PREVIOUS_COMMIT == env.GIT_COMMIT) {
+                        echo "--- First build or manual trigger. Proceeding... ---"
+                        return
+                    }
+                    def changedFiles = sh(script: "git diff --name-only ${env.GIT_PREVIOUS_COMMIT} ${env.GIT_COMMIT}", returnStatus: false, returnStdout: true).trim()
+                    def isChanged = changedFiles.contains("config-server/") || changedFiles.contains("pom.xml")
+                    
+                    if (!isChanged) {
+                        echo "--- No changes in config-server. Stopping pipeline early. ---"
+                        currentBuild.result = 'SUCCESS'
+                        error("Stopping pipeline early because no changes detected.")
+                    }
+                }
             }
         }
 
@@ -51,7 +59,6 @@ pipeline {
             steps {
                 dir('config-server') {
                     sh 'mvn -f ../pom.xml install -N'
-                    sh 'mvn -f ../common/pom.xml clean install -DskipTests'
                     sh 'mvn clean package -DskipTests'
                 }
             }

@@ -36,6 +36,25 @@ pipeline {
             }
         }
 
+        stage('Check Changes') {
+            steps {
+                script {
+                    if (env.GIT_PREVIOUS_COMMIT == null || env.GIT_PREVIOUS_COMMIT == env.GIT_COMMIT) {
+                        echo "--- First build or manual trigger. Proceeding... ---"
+                        return
+                    }
+                    def changedFiles = sh(script: "git diff --name-only ${env.GIT_PREVIOUS_COMMIT} ${env.GIT_COMMIT}", returnStatus: false, returnStdout: true).trim()
+                    def isChanged = changedFiles.contains("friend-service/") || changedFiles.contains("common/") || changedFiles.contains("pom.xml")
+                    
+                    if (!isChanged) {
+                        echo "--- No changes in friend-service or common. Stopping pipeline early. ---"
+                        currentBuild.result = 'SUCCESS'
+                        error("Stopping pipeline early because no changes detected.")
+                    }
+                }
+            }
+        }
+
         stage('Maven Build') {
             steps {
                 dir('friend-service') {
