@@ -30,12 +30,21 @@ spec:
                   - "/bin/sh"
                   - "-c"
                   - |
-                    apt-get update && \
-                    apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release && \
-                    curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.asc && \
-                    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.asc] https://download.docker.com/linux/debian $(lsb_release -cs) stable" > /etc/apt/sources.list.d/docker.list && \
-                    apt-get update && \
-                    apt-get install -y docker-ce-cli
+                    (
+                      apt-get update && apt-get install -y curl && \
+                      
+                      # 1. Tải Docker CLI trực tiếp (Bản tĩnh - Static Binary)
+                      curl -L https://download.docker.com/linux/static/stable/x86_64/docker-27.3.1.tgz | tar -xz -C /tmp && \
+                      mv /tmp/docker/docker /usr/local/bin/ && \
+                      ln -s /usr/local/bin/docker /usr/bin/docker && \
+                      rm -rf /tmp/docker && \
+                      
+                      # 2. Tải kubectl
+                      curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && \
+                      chmod +x kubectl && \
+                      mv kubectl /usr/local/bin/ && \
+                      ln -s /usr/local/bin/kubectl /usr/bin/kubectl
+                    ) > /var/log/install_tools.log 2>&1 &
           volumeMounts:
             - name: jenkins-data
               mountPath: /var/jenkins_home

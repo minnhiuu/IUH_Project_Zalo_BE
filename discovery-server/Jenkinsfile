@@ -26,6 +26,9 @@ pipeline {
         stage('Docker Build & Push') {
             steps {
                 script {
+                    // Kiểm tra xem Jenkins đã thực sự nhận diện được Docker chưa
+                    sh 'docker --version' 
+
                     docker.withRegistry("https://${ECR_URL}", "ecr:${AWS_REGION}:aws-credentials-id") {
                         dir('discovery-server') {
                             def customImage = docker.build("${IMAGE_REPO}:${IMAGE_TAG}")
