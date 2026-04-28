@@ -22,6 +22,7 @@ public record MessageIndexRequestedEvent(
         String linkGroupName,
         String linkUrl,
         String originalFileName,
+        String fileExtension,
         Long size,
         String searchableText,
         String conversationSearchText,

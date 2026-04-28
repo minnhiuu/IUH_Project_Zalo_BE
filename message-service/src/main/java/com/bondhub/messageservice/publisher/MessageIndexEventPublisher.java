@@ -77,6 +77,7 @@ public class MessageIndexEventPublisher {
                 .linkGroupName(resolvedLinkGroupName)
                 .linkUrl(resolvedLinkUrl)
                 .originalFileName(resolveOriginalFileName(primaryAttachment))
+                .fileExtension(primaryAttachment != null ? primaryAttachment.getExtension() : null)
                 .size(primaryAttachment != null ? primaryAttachment.getSize() : null)
                 .searchableText(searchableText)
                 .conversationSearchText(conversationMetadata.conversationSearchText())

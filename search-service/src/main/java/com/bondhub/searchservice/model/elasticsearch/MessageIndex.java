@@ -66,6 +66,9 @@ public class MessageIndex {
     @Field(type = FieldType.Keyword, index = false)
     String originalFileName;
 
+    @Field(type = FieldType.Keyword)
+    String fileExtension;
+
     @Field(type = FieldType.Long, index = false)
     Long size;
 

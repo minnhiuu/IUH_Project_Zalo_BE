@@ -316,6 +316,28 @@ public class MessageSearchServiceImpl implements MessageSearchService {
                         .field("type")
                         .value(FILE_MESSAGE_TYPE)
                 ));
+
+                if (request.fileType() != null) {
+                    String ft = request.fileType().toUpperCase(Locale.ROOT);
+                    b.filter(ff -> {
+                        switch (ft) {
+                            case "PDF" -> ff.term(t -> t.field("fileExtension").value("pdf"));
+                            case "WORD" -> ff.terms(t -> t.field("fileExtension").terms(v -> v.value(List.of(
+                                    co.elastic.clients.elasticsearch._types.FieldValue.of("doc"),
+                                    co.elastic.clients.elasticsearch._types.FieldValue.of("docx")
+                            ))));
+                            case "EXCEL" -> ff.terms(t -> t.field("fileExtension").terms(v -> v.value(List.of(
+                                    co.elastic.clients.elasticsearch._types.FieldValue.of("xls"),
+                                    co.elastic.clients.elasticsearch._types.FieldValue.of("xlsx")
+                            ))));
+                            case "POWERPOINT" -> ff.terms(t -> t.field("fileExtension").terms(v -> v.value(List.of(
+                                    co.elastic.clients.elasticsearch._types.FieldValue.of("ppt"),
+                                    co.elastic.clients.elasticsearch._types.FieldValue.of("pptx")
+                            ))));
+                        }
+                        return ff;
+                    });
+                }
             } else if (section == MessageSearchSection.MESSAGES) {
                 b.filter(f -> f.terms(t -> t
                         .field("type")

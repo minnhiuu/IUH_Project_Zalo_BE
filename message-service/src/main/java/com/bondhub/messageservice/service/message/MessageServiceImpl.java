@@ -1,6 +1,5 @@
 package com.bondhub.messageservice.service.message;
 
-import com.bondhub.common.utils.S3Util;
 import com.bondhub.common.utils.S3UtilV2;
 import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.common.exception.AppException;
@@ -927,14 +926,22 @@ public class MessageServiceImpl implements MessageService {
     private List<AttachmentInfo> mapAttachments(MessageSendRequest request) {
         if (request.attachments() == null || request.attachments().isEmpty()) return List.of();
         return request.attachments().stream()
-                .map(a -> AttachmentInfo.builder()
-                        .key(a.key())
-                        .url(a.url())
-                        .fileName(a.fileName())
-                        .originalFileName(a.originalFileName())
-                        .contentType(a.contentType())
-                        .size(a.size())
-                        .build())
+                .map(a -> {
+                    String originalFileName = a.originalFileName();
+                    String extension = null;
+                    if (originalFileName != null && originalFileName.contains(".")) {
+                        extension = originalFileName.substring(originalFileName.lastIndexOf(".") + 1).toLowerCase().trim();
+                    }
+                    return AttachmentInfo.builder()
+                            .key(a.key())
+                            .url(a.url())
+                            .fileName(a.fileName())
+                            .originalFileName(originalFileName)
+                            .extension(extension)
+                            .contentType(a.contentType())
+                            .size(a.size())
+                            .build();
+                })
                 .toList();
     }
 
