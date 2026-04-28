@@ -1,9 +1,6 @@
 package com.bondhub.searchservice.dto.request;
 
 import jakarta.validation.constraints.Pattern;
-import org.springframework.format.annotation.DateTimeFormat;
-
-import java.time.Instant;
 import java.util.Locale;
 
 public record MessageSearchRequest(
@@ -13,11 +10,9 @@ public record MessageSearchRequest(
 
         String senderId,
 
-        @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
-        Instant from,
+        Long from,
 
-        @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
-        Instant to,
+        Long to,
 
         @Pattern(regexp = "^(7d|30d|3months)?$", message = "validation.message.search.dateRange.invalid")
         String dateRange

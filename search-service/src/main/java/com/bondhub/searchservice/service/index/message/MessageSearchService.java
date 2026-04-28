@@ -3,8 +3,6 @@ package com.bondhub.searchservice.service.index.message;
 import com.bondhub.common.dto.PageResponse;
 import com.bondhub.common.dto.client.messageservice.ConversationSearchResponse;
 import com.bondhub.searchservice.dto.request.MessageSearchRequest;
-import com.bondhub.searchservice.dto.response.ContactSearchTabResponse;
-import com.bondhub.searchservice.dto.response.MessageSearchOverviewResponse;
 import com.bondhub.searchservice.dto.response.MessageSearchResponse;
 import com.bondhub.searchservice.enums.MessageSearchSection;
 import org.springframework.data.domain.Pageable;
@@ -15,13 +13,8 @@ public interface MessageSearchService {
     PageResponse<List<ConversationSearchResponse>> searchConversations(
             String userId,
             String keyword,
+            Boolean isGroup,
             Pageable pageable);
-
-    ContactSearchTabResponse searchConversationsCategorized(
-            String userId,
-            String keyword,
-            int page,
-            int size);
 
     PageResponse<List<MessageSearchResponse>> searchMessages(
             String userId,
@@ -29,9 +22,7 @@ public interface MessageSearchService {
             MessageSearchSection section,
             Pageable pageable);
 
-    MessageSearchOverviewResponse searchMessageOverview(
+    List<ConversationSearchResponse> searchMessageSenders(
             String userId,
-            MessageSearchRequest request,
-            int sectionSize);
-
+            String keyword);
 }

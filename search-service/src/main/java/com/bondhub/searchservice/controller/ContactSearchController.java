@@ -4,7 +4,6 @@ import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.common.dto.PageResponse;
 import com.bondhub.common.dto.client.messageservice.ConversationSearchResponse;
 import com.bondhub.common.utils.SecurityUtil;
-import com.bondhub.searchservice.dto.response.ContactSearchTabResponse;
 import com.bondhub.searchservice.service.index.message.MessageSearchService;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
@@ -31,19 +30,11 @@ public class ContactSearchController {
     @GetMapping
     public ResponseEntity<ApiResponse<PageResponse<List<ConversationSearchResponse>>>> searchContacts(
             @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Boolean isGroup,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         Pageable pageable = PageRequest.of(page, size);
         return ResponseEntity.ok(ApiResponse.success(
-                messageSearchService.searchConversations(securityUtil.getCurrentUserId(), keyword, pageable)));
-    }
-
-    @GetMapping("/categorized")
-    public ResponseEntity<ApiResponse<ContactSearchTabResponse>> searchConversationsCategorized(
-            @RequestParam(required = false) String keyword,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "1") int size) {
-        return ResponseEntity.ok(ApiResponse.success(
-                messageSearchService.searchConversationsCategorized(securityUtil.getCurrentUserId(), keyword, page, size)));
+                messageSearchService.searchConversations(securityUtil.getCurrentUserId(), keyword, isGroup, pageable)));
     }
 }

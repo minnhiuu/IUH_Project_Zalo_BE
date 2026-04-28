@@ -1,8 +1,8 @@
 package com.bondhub.searchservice.dto.response;
 
 import lombok.Builder;
-
 import java.time.Instant;
+import java.util.List;
 
 @Builder
 public record MessageSearchResponse(
@@ -19,6 +19,9 @@ public record MessageSearchResponse(
         boolean hasLink,
         boolean isGroup,
         String conversationName,
+        String conversationAvatar,
+        List<String> participantNames,
+        List<String> participantAvatars,
         Instant createdAt,
         String displayHighlights
 ) {}
