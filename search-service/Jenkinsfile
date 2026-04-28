@@ -1,5 +1,3 @@
-def IS_CHANGED = true
-
 pipeline {
     agent any
     tools { maven 'maven-3.9' }
@@ -7,10 +5,11 @@ pipeline {
     environment {
         AWS_ACCOUNT_ID = "952647925716"
         AWS_REGION     = "ap-southeast-2"
-        IMAGE_REPO     = "bondhub/friend-service"
+        IMAGE_REPO     = "bondhub/search-service"
         IMAGE_TAG      = "${env.BUILD_NUMBER}"
         ECR_URL        = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
         TOOLS_DIR      = "/var/jenkins_home/tools"
+        IS_CHANGED     = "true"
     }
 
     stages {
@@ -43,10 +42,10 @@ pipeline {
                 script {
                     if (env.GIT_PREVIOUS_COMMIT != null && env.GIT_PREVIOUS_COMMIT != env.GIT_COMMIT) {
                         def changedFiles = sh(script: "git diff --name-only ${env.GIT_PREVIOUS_COMMIT} ${env.GIT_COMMIT}", returnStatus: false, returnStdout: true).trim()
-                        def hasChanges = changedFiles.contains("friend-service/") || changedFiles.contains("common/") || changedFiles.contains("pom.xml")
+                        def hasChanges = changedFiles.contains("search-service/") || changedFiles.contains("common/") || changedFiles.contains("pom.xml")
                         if (!hasChanges) {
-                            IS_CHANGED = false
-                            echo "--- No changes detected in friend-service. Stages will be skipped. ---"
+                            env.IS_CHANGED = "false"
+                            echo "--- No changes detected in search-service. Stages will be skipped. ---"
                         }
                     }
                 }
@@ -54,9 +53,9 @@ pipeline {
         }
 
         stage('Maven Build') {
-            when { expression { return IS_CHANGED } }
+            when { expression { return env.IS_CHANGED == 'true' } }
             steps {
-                dir('friend-service') {
+                dir('search-service') {
                     sh 'mvn -f ../pom.xml install -N'
                     sh 'mvn -f ../common/pom.xml clean install -DskipTests'
                     sh 'mvn clean package -DskipTests'
@@ -65,13 +64,13 @@ pipeline {
         }
 
         stage('Docker Build & Push') {
-            when { expression { return IS_CHANGED } }
+            when { expression { return env.IS_CHANGED == 'true' } }
             steps {
                 withCredentials([[$class: 'AmazonWebServicesCredentialsBinding',
                                   credentialsId: 'aws-credentials-id',
                                   accessKeyVariable: 'AWS_ACCESS_KEY_ID',
                                   secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']]) {
-                    dir('friend-service') {
+                    dir('search-service') {
                         sh """
                             ${TOOLS_DIR}/aws ecr get-login-password --region ${AWS_REGION} | \
                             ${TOOLS_DIR}/docker -H tcp://localhost:2375 login --username AWS --password-stdin ${ECR_URL}
@@ -88,10 +87,10 @@ pipeline {
         }
 
         stage('Deploy to EKS') {
-            when { expression { return IS_CHANGED } }
+            when { expression { return env.IS_CHANGED == 'true' } }
             steps {
                 withKubeConfig([credentialsId: 'eks-creds-id', clusterName: 'bondhub-cluster-final']) {
-                    sh "${TOOLS_DIR}/kubectl set image deployment/friend-service-deploy friend-service=${ECR_URL}/${IMAGE_REPO}:${IMAGE_TAG} -n bondhub"
+                    sh "${TOOLS_DIR}/kubectl set image deployment/search-service-deploy search-service=${ECR_URL}/${IMAGE_REPO}:${IMAGE_TAG} -n bondhub"
                 }
             }
         }

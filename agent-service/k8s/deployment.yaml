@@ -31,6 +31,10 @@ spec:
             initialDelaySeconds: 15
             periodSeconds: 10
           env:
+            - name: EUREKA_INSTANCE_HOST
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
             - name: MONGODB_URI_AI_SERVICE
               value: "mongodb://$(MONGO_INITDB_ROOT_USERNAME):$(MONGO_INITDB_ROOT_PASSWORD)@bh-mongodb:27017/bondhub_ai_service?authSource=admin"
           envFrom:

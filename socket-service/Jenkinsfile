@@ -1,3 +1,5 @@
+def IS_CHANGED = true
+
 pipeline {
     agent any
     tools { maven 'maven-3.9' }
@@ -9,7 +11,6 @@ pipeline {
         IMAGE_TAG      = "${env.BUILD_NUMBER}"
         ECR_URL        = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
         TOOLS_DIR      = "/var/jenkins_home/tools"
-        IS_CHANGED     = "true"
     }
 
     stages {
@@ -44,7 +45,7 @@ pipeline {
                         def changedFiles = sh(script: "git diff --name-only ${env.GIT_PREVIOUS_COMMIT} ${env.GIT_COMMIT}", returnStatus: false, returnStdout: true).trim()
                         def hasChanges = changedFiles.contains("socket-service/") || changedFiles.contains("common/") || changedFiles.contains("pom.xml")
                         if (!hasChanges) {
-                            env.IS_CHANGED = "false"
+                            IS_CHANGED = false
                             echo "--- No changes detected in socket-service. Stages will be skipped. ---"
                         }
                     }
@@ -53,7 +54,7 @@ pipeline {
         }
 
         stage('Maven Build') {
-            when { expression { return env.IS_CHANGED == 'true' } }
+            when { expression { return IS_CHANGED } }
             steps {
                 dir('socket-service') {
                     sh 'mvn -f ../pom.xml install -N'
@@ -64,7 +65,7 @@ pipeline {
         }
 
         stage('Docker Build & Push') {
-            when { expression { return env.IS_CHANGED == 'true' } }
+            when { expression { return IS_CHANGED } }
             steps {
                 withCredentials([[$class: 'AmazonWebServicesCredentialsBinding',
                                   credentialsId: 'aws-credentials-id',
@@ -87,7 +88,7 @@ pipeline {
         }
 
         stage('Deploy to EKS') {
-            when { expression { return env.IS_CHANGED == 'true' } }
+            when { expression { return IS_CHANGED } }
             steps {
                 withKubeConfig([credentialsId: 'eks-creds-id', clusterName: 'bondhub-cluster-final']) {
                     sh "${TOOLS_DIR}/kubectl set image deployment/socket-service-deploy socket-service=${ECR_URL}/${IMAGE_REPO}:${IMAGE_TAG} -n bondhub"
