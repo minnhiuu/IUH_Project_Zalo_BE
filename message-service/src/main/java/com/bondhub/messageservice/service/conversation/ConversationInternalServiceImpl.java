@@ -133,12 +133,26 @@ public class ConversationInternalServiceImpl implements ConversationInternalServ
                 name = helper.getDynamicGroupName(conversation, viewerId, userCache);
             }
 
+            List<String> participantNames = activeMembers.stream()
+                    .map(m -> userCache.get(m.getUserId()))
+                    .filter(Objects::nonNull)
+                    .map(u -> helper.safeDisplayName(u.getFullName()))
+                    .toList();
+
+            List<String> participantAvatars = activeMembers.stream()
+                    .map(m -> userCache.get(m.getUserId()))
+                    .filter(Objects::nonNull)
+                    .map(u -> u.getAvatar() != null ? baseUrl + u.getAvatar() : null)
+                    .toList();
+
             return ConversationSearchResponse.builder()
                     .conversationId(conversation.getId())
                     .name(name)
                     .avatar(conversation.getAvatar() != null ? baseUrl + conversation.getAvatar() : null)
                     .group(true)
                     .memberCount(memberCount)
+                    .participantNames(participantNames)
+                    .participantAvatars(participantAvatars)
                     .displayHighlights(highlight(name, keyword))
                     .build();
         }

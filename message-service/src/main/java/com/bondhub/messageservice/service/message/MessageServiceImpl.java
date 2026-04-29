@@ -648,6 +648,23 @@ public class MessageServiceImpl implements MessageService {
                 .collect(Collectors.toList());
     }
 
+    @Override
+    public MessageResponse findById(String messageId) {
+        String currentUserId = securityUtil.getCurrentUserId();
+        Message message = messageRepository.findById(messageId)
+                .orElseThrow(() -> new AppException(ErrorCode.MESSAGE_NOT_FOUND));
+
+        Conversation room = conversationRepository.findById(message.getConversationId())
+                .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
+        assertConversationMember(room, currentUserId);
+
+        String baseUrl = s3UtilV2.getS3BaseUrl();
+        MessageResponse dto = messageMapper.mapToMessageResponse(message, baseUrl);
+        List<MessageResponse> dtos = new ArrayList<>(List.of(dto));
+        enrichMessages(dtos);
+        return dtos.get(0);
+    }
+
     // ─────────────────────────── Private helpers ───────────────────────────
 
     /**

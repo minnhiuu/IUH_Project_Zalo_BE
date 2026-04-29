@@ -6,18 +6,17 @@ import com.bondhub.searchservice.dto.response.RecentHistoryResponse;
 import com.bondhub.searchservice.dto.response.RecentSearchResponse;
 import com.bondhub.searchservice.enums.SearchType;
 import com.bondhub.searchservice.mapper.RecentSearchMapper;
-import com.bondhub.searchservice.model.redis.RecentSearch;
+import com.bondhub.searchservice.model.mongodb.RecentSearch;
+import com.bondhub.searchservice.repository.RecentSearchRepository;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Collections;
 import java.util.List;
-import java.util.Set;
-import java.util.concurrent.TimeUnit;
+import java.util.Optional;
 
 @Service
 @Slf4j
@@ -25,119 +24,116 @@ import java.util.concurrent.TimeUnit;
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public class RecentSearchServiceImpl implements RecentSearchService {
 
-    RedisTemplate<String, Object> redisTemplate;
+    RecentSearchRepository recentSearchRepository;
     RecentSearchMapper recentSearchMapper;
     SecurityUtil securityUtil;
- 
-    static String PREFIX_ITEM = "recent_search:items:";
-    static String PREFIX_QUERY = "recent_search:queries:";
+
     static int MAX_ITEMS = 15;
-    static long EXPIRATION_DAYS = 30;
 
     @Override
+    @Transactional
     public void addSearchItem(RecentSearchRequest request) {
         String userId = securityUtil.getCurrentUserId();
- 
+
         if (request.id().equals(userId)) {
             log.info("Skipping saving self search to history for user: {}", userId);
             return;
         }
- 
-        String key = (request.type() == SearchType.KEYWORD)
-                ? PREFIX_QUERY + userId
-                : PREFIX_ITEM + userId;
 
-        long now = System.currentTimeMillis();
-        RecentSearch newItem = recentSearchMapper.toModel(request);
-        newItem.setTimestamp(now);
-
-        Set<Object> currentHistory = redisTemplate.opsForZSet().range(key, 0, -1);
-        if (currentHistory != null) {
-            currentHistory.stream()
-                    .map(obj -> (RecentSearch) obj)
-                    .filter(oldItem -> oldItem.getId().equals(newItem.getId())
-                            || (request.type() == SearchType.KEYWORD && oldItem.getName().equalsIgnoreCase(newItem.getName())))
-                    .forEach(oldItem -> redisTemplate.opsForZSet().remove(key, oldItem));
+        if (request.type() == SearchType.KEYWORD) {
+            recentSearchRepository.findByUserIdAndNameIgnoreCaseAndType(userId, request.name(), SearchType.KEYWORD)
+                    .ifPresent(recentSearchRepository::delete);
+        } else {
+            recentSearchRepository.findByUserIdAndTargetIdAndType(userId, request.id(), request.type())
+                    .ifPresent(recentSearchRepository::delete);
+            
+            removeRedundantQueries(userId, request.name());
         }
 
-        if (request.type() != SearchType.KEYWORD) {
-            String queryKey = PREFIX_QUERY + userId;
-            Set<Object> queries = redisTemplate.opsForZSet().range(queryKey, 0, -1);
-            if (queries != null) {
-                queries.stream()
-                        .map(obj -> (RecentSearch) obj)
-                        .filter(q -> {
-                            String keyword = q.getName().toLowerCase();
-                            String itemName = request.name().toLowerCase();
-                            return itemName.contains(keyword) || keyword.contains(itemName);
-                        })
-                        .forEach(q -> {
-                            redisTemplate.opsForZSet().remove(queryKey, q);
-                            log.info("Removed redundant query '{}' after selecting item '{}'", q.getName(), request.name());
-                        });
+        RecentSearch newItem = recentSearchMapper.toModel(request);
+        newItem.setUserId(userId);
+        newItem.setTimestamp(System.currentTimeMillis());
+        recentSearchRepository.save(newItem);
+
+        long count = recentSearchRepository.countByUserIdAndType(userId, request.type());
+        if (count > MAX_ITEMS) {
+            List<RecentSearch> history = recentSearchRepository.findAllByUserIdAndTypeOrderByTimestampAsc(userId, request.type());
+            long toDelete = count - MAX_ITEMS;
+            for (int i = 0; i < toDelete && i < history.size(); i++) {
+                recentSearchRepository.delete(history.get(i));
             }
         }
+    }
 
-        redisTemplate.opsForZSet().add(key, newItem, now);
-        Long size = redisTemplate.opsForZSet().size(key);
-        if (size != null && size > MAX_ITEMS) {
-            redisTemplate.opsForZSet().removeRange(key, 0, size - (MAX_ITEMS + 1));
-        }
-
-        redisTemplate.expire(key, EXPIRATION_DAYS, TimeUnit.DAYS);
+    private void removeRedundantQueries(String userId, String itemName) {
+        String lowerItemName = itemName.toLowerCase();
+        List<RecentSearch> queries = recentSearchRepository.findAllByUserIdAndTypeOrderByTimestampDesc(userId, SearchType.KEYWORD);
+        
+        queries.stream()
+                .filter(q -> {
+                    String keyword = q.getName().toLowerCase();
+                    return lowerItemName.contains(keyword) || keyword.contains(lowerItemName);
+                })
+                .forEach(q -> {
+                    recentSearchRepository.delete(q);
+                    log.info("Removed redundant query '{}' after selecting item '{}'", q.getName(), itemName);
+                });
     }
 
     @Override
     public List<RecentSearchResponse> getRecentItems() {
-        return fetchFromRedis(PREFIX_ITEM + securityUtil.getCurrentUserId());
-    }
-
-    @Override
-    public List<RecentSearchResponse> getRecentQueries() {
-        return fetchFromRedis(PREFIX_QUERY + securityUtil.getCurrentUserId());
-    }
-
-    @Override
-    public RecentHistoryResponse getRecentHistory() {
         String userId = securityUtil.getCurrentUserId();
-        return RecentHistoryResponse.builder()
-                .items(fetchFromRedis(PREFIX_ITEM + userId))
-                .queries(fetchFromRedis(PREFIX_QUERY + userId))
-                .build();
-    }
-
-    private List<RecentSearchResponse> fetchFromRedis(String key) {
-        Set<Object> results = redisTemplate.opsForZSet().reverseRange(key, 0, MAX_ITEMS - 1);
-        if (results == null || results.isEmpty()) return Collections.emptyList();
-
-        return results.stream()
-                .map(obj -> (RecentSearch) obj)
+        return recentSearchRepository.findAllByUserIdAndTypeInOrderByTimestampDesc(userId, List.of(SearchType.USER, SearchType.GROUP))
+                .stream()
+                .limit(MAX_ITEMS)
                 .map(recentSearchMapper::toResponse)
                 .toList();
     }
 
     @Override
-    public void removeItem(String itemId, SearchType type) {
+    public List<RecentSearchResponse> getRecentQueries() {
         String userId = securityUtil.getCurrentUserId();
-        String key = (type == SearchType.KEYWORD) ? PREFIX_QUERY + userId : PREFIX_ITEM + userId;
-
-        Set<Object> currentHistory = redisTemplate.opsForZSet().range(key, 0, -1);
-        if (currentHistory != null) {
-            currentHistory.stream()
-                    .map(obj -> (RecentSearch) obj)
-                    .filter(item -> item.getId().equals(itemId))
-                    .forEach(item -> {
-                        redisTemplate.opsForZSet().remove(key, item);
-                        log.info("Removed {} from {}", itemId, key);
-                    });
-        }
+        return recentSearchRepository.findAllByUserIdAndTypeOrderByTimestampDesc(userId, SearchType.KEYWORD).stream()
+                .limit(MAX_ITEMS)
+                .map(recentSearchMapper::toResponse)
+                .toList();
     }
 
     @Override
+    public RecentHistoryResponse getRecentHistory() {
+        String userId = securityUtil.getCurrentUserId();
+        
+        List<RecentSearchResponse> queries = recentSearchRepository.findAllByUserIdAndTypeOrderByTimestampDesc(userId, SearchType.KEYWORD)
+                .stream()
+                .limit(MAX_ITEMS)
+                .map(recentSearchMapper::toResponse)
+                .toList();
+
+        List<RecentSearchResponse> items = recentSearchRepository.findAllByUserIdAndTypeInOrderByTimestampDesc(userId, List.of(SearchType.USER, SearchType.GROUP))
+                .stream()
+                .limit(MAX_ITEMS)
+                .map(recentSearchMapper::toResponse)
+                .toList();
+                
+        return RecentHistoryResponse.builder()
+                .items(items)
+                .queries(queries)
+                .build();
+    }
+
+    @Override
+    @Transactional
+    public void removeItem(String itemId, SearchType type) {
+        String userId = securityUtil.getCurrentUserId();
+        recentSearchRepository.deleteByUserIdAndTargetIdAndType(userId, itemId, type);
+        log.info("Removed {} item with id {} for user {}", type, itemId, userId);
+    }
+
+    @Override
+    @Transactional
     public void clearAllHistory() {
         String userId = securityUtil.getCurrentUserId();
-        redisTemplate.delete(PREFIX_ITEM + userId);
-        redisTemplate.delete(PREFIX_QUERY + userId);
-        log.info("User {} cleared both items and queries history", userId);
+        recentSearchRepository.deleteAllByUserId(userId);
+        log.info("User {} cleared both items and queries history from DB", userId);
     }
 }
