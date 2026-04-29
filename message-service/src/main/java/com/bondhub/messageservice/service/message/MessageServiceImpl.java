@@ -271,6 +271,13 @@ public class MessageServiceImpl implements MessageService {
         securityCriteria.add(Criteria.where("deletedBy").ne(currentUserId));
         securityCriteria.add(Criteria.where("createdAt").gt(effectiveStartTime));
 
+        // Visibility filter: visibleTo is null OR visibleTo contains currentUserId
+        securityCriteria.add(new Criteria().orOperator(
+                Criteria.where("visibleTo").is(null),
+                Criteria.where("visibleTo").size(0),
+                Criteria.where("visibleTo").is(currentUserId)
+        ));
+
         if (!isActive) {
             securityCriteria.add(Criteria.where("type").is(MessageType.SYSTEM));
         }
