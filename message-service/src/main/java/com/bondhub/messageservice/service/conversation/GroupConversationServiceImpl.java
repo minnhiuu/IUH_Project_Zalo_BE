@@ -159,6 +159,9 @@ public class GroupConversationServiceImpl implements GroupConversationService {
 
         log.info("[Group] Created group {} by user {} with {} direct members and {} pending invite(s)",
                 saved.getId(), currentUserId, saved.getMembers().size(), nonFriendMemberIds.size());
+        if (hasNonFriends) {
+            groupInviteAsyncService.sendJoinLinkInvites(saved, currentUserId, nonFriendMemberIds);
+        }
         return helper.broadcastAndRespond(saved, currentUserId);
     }
 
@@ -244,6 +247,25 @@ public class GroupConversationServiceImpl implements GroupConversationService {
                 ? currentUser.getFriendIds() : Collections.emptySet();
         Set<String> nonFriendIds = requestedIds.stream().filter(id -> !friendIds.contains(id)).collect(Collectors.toCollection(LinkedHashSet::new));
         if (!nonFriendIds.isEmpty()) {
+            // Ensure join link is enabled and token exists if we have non-friends to invite
+            if (conversation.getJoinLinkToken() == null) {
+                conversation.setJoinLinkToken(UUID.randomUUID().toString().replace("-", ""));
+                if (conversation.getSettings() == null) {
+                    conversation.setSettings(GroupSettings.builder().joinByLinkEnabled(true).build());
+                } else {
+                    conversation.getSettings().setJoinByLinkEnabled(true);
+                }
+            }
+
+            if (conversation.getInvitedUserIds() == null) {
+                conversation.setInvitedUserIds(new HashSet<>());
+            }
+            conversation.getInvitedUserIds().addAll(nonFriendIds);
+
+            // Send invites async
+            groupInviteAsyncService.sendJoinLinkInvites(conversation, currentUserId, nonFriendIds);
+
+            // Notify actor only (similar to ADD_MEMBERS_FAILED but as an invitation notification)
             var actorInfoForNonFriend = helper.fetchActorInfo(currentUserId);
             List<String> nonFriendTargetIds = new ArrayList<>(nonFriendIds);
             List<ChatUser> nonFriendUsers = chatUserRepository.findAllById(nonFriendIds);
@@ -259,11 +281,12 @@ public class GroupConversationServiceImpl implements GroupConversationService {
 
             systemMessageService.sendSystemMessage(conversationId, currentUserId,
                     actorInfoForNonFriend.name(), actorInfoForNonFriend.avatar(),
-                    SystemActionType.ADD_MEMBERS_FAILED,
+                    SystemActionType.ADD_MEMBERS_FAILED, // Reusing existing type for actor-only notification
                     Map.of("targetIds", nonFriendTargetIds,
                             "payload", Map.of("targetNames", nonFriendNames, "targetAvatars", nonFriendAvatars,
-                                    "failedCount", nonFriendIds.size())),
+                                    "failedCount", nonFriendIds.size(), "isInvited", true)),
                     Set.of(currentUserId));
+
             requestedIds.removeAll(nonFriendIds);
         }
         if (requestedIds.isEmpty()) return helper.buildConversationResponseForCurrentUser(conversation, currentUserId);
