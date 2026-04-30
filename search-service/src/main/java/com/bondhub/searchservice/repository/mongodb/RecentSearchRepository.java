@@ -1,4 +1,4 @@
-package com.bondhub.searchservice.repository;
+package com.bondhub.searchservice.repository.mongodb;
 
 import com.bondhub.searchservice.enums.SearchType;
 import com.bondhub.searchservice.model.mongodb.RecentSearch;

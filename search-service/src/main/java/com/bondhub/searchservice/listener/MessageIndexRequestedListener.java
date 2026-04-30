@@ -3,7 +3,7 @@ package com.bondhub.searchservice.listener;
 import com.bondhub.common.event.message.MessageIndexRequestedEvent;
 import com.bondhub.common.model.kafka.EventType;
 import com.bondhub.searchservice.model.elasticsearch.MessageIndex;
-import com.bondhub.searchservice.repository.MessageSearchRepository;
+import com.bondhub.searchservice.repository.elasticsearch.MessageSearchRepository;
 import com.bondhub.searchservice.service.failevent.FailedEventService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.AccessLevel;

@@ -7,7 +7,7 @@ import com.bondhub.searchservice.dto.response.RecentSearchResponse;
 import com.bondhub.searchservice.enums.SearchType;
 import com.bondhub.searchservice.mapper.RecentSearchMapper;
 import com.bondhub.searchservice.model.mongodb.RecentSearch;
-import com.bondhub.searchservice.repository.RecentSearchRepository;
+import com.bondhub.searchservice.repository.mongodb.RecentSearchRepository;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
@@ -16,7 +16,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-import java.util.Optional;
 
 @Service
 @Slf4j
