@@ -84,6 +84,8 @@ public class NotificationServiceImpl implements NotificationService {
             criteria.and("lastModifiedAt").lt(cursor);
         }
 
+        criteria.and("active").is(true);
+
         Query query = new Query(criteria)
                 .with(Sort.by(Sort.Direction.DESC, "lastModifiedAt"))
                 .limit(limit + 1);
@@ -209,13 +211,18 @@ public class NotificationServiceImpl implements NotificationService {
     public void deactivateByReferenceIdAndType(String userId, String referenceId, NotificationType type) {
         Query query = new Query(Criteria.where("userId").is(new ObjectId(userId))
                 .and("referenceId").is(new ObjectId(referenceId))
-                .and("type").is(type));
+                .and("type").is(type)
+                .and("active").is(true));
 
         Notification existing = mongoTemplate.findOne(query, Notification.class);
         if (existing != null) {
             boolean wasUnread = !existing.isRead();
-            mongoTemplate.remove(existing);
-            log.info("[Notification] Removed notification for referenceId={}, type={}, userId={}, wasUnread={}",
+            
+            // Soft remove
+            Update update = new Update().set("active", false);
+            mongoTemplate.updateFirst(query, update, Notification.class);
+            
+            log.info("[Notification] Soft-removed notification for referenceId={}, type={}, userId={}, wasUnread={}",
                     referenceId, type, userId, wasUnread);
 
             if (wasUnread) {
