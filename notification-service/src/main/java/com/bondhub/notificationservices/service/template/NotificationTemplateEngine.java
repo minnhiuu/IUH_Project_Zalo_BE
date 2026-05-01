@@ -9,7 +9,7 @@ import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
-public class TemplateService {
+public class NotificationTemplateEngine {
 
     private final TemplateEngine templateEngine;
 

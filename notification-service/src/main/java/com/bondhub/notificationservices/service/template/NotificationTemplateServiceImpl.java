@@ -10,7 +10,7 @@ import com.bondhub.common.enums.NotificationType;
 import com.bondhub.notificationservices.mapper.NotificationTemplateMapper;
 import com.bondhub.notificationservices.model.NotificationTemplate;
 import com.bondhub.notificationservices.repository.NotificationTemplateRepository;
-import com.bondhub.notificationservices.utils.TemplateEngine;
+import com.bondhub.notificationservices.utils.SimpleTemplateEngine;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
@@ -28,7 +28,7 @@ import java.util.Map;
 public class NotificationTemplateServiceImpl implements NotificationTemplateService {
 
     NotificationTemplateRepository notificationTemplateRepository;
-    TemplateEngine templateEngine;
+    SimpleTemplateEngine templateEngine;
     NotificationTemplateMapper notificationTemplateMapper;
 
     @Override

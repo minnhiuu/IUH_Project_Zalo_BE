@@ -23,6 +23,6 @@ public class EmailDeliveryStrategy implements NotificationStrategy {
         // This is a placeholder for actual business rules
         log.info("EmailDeliveryStrategy: Checking if email should be sent for notification {}", notification.getId());
         
-        // Example: mailService.sendEmail(recipientEmail, subject, templateId, notification.getPayload());
+        // Example: mailService.sendEmail(recipientEmail, subject, processedHtml);
     }
 }

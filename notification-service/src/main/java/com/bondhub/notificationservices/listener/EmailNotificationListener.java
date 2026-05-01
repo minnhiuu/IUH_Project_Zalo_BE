@@ -3,7 +3,7 @@ package com.bondhub.notificationservices.listener;
 import com.bondhub.common.constant.MailTemplate;
 import com.bondhub.common.event.notification.EmailNotificationEvent;
 import com.bondhub.notificationservices.service.mail.MailService;
-import com.bondhub.notificationservices.service.template.TemplateService;
+import com.bondhub.notificationservices.service.template.NotificationTemplateEngine;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -17,7 +17,7 @@ import java.util.Map;
 public class EmailNotificationListener {
 
     private final MailService mailService;
-    private final TemplateService templateService;
+    private final NotificationTemplateEngine templateEngine;
 
     @KafkaListener(topics = "email-notifications", groupId = "${spring.kafka.consumer.group-id}")
     public void handleEmailNotification(EmailNotificationEvent event) {
@@ -25,21 +25,18 @@ public class EmailNotificationListener {
         try {
             String templateName = getThymeleafTemplateName(event.getTemplateId());
             
-            if (templateName != null) {
-                log.info("Processing Thymeleaf template: {}", templateName);
-                String htmlContent = templateService.process(templateName, event.getTemplateParams());
-                mailService.sendHtmlEmail(event.getRecipientEmail(), event.getSubject(), htmlContent);
-            } else {
-                log.info("Using Brevo Transactional Template: {}", event.getTemplateId());
-                mailService.sendEmail(
-                    event.getRecipientEmail(),
-                    event.getSubject(),
-                    event.getTemplateId(),
-                    event.getTemplateParams()
-                );
+            if (templateName == null) {
+                log.error("No local template found for ID: {}. Skipping email delivery.", event.getTemplateId());
+                return;
             }
+
+            log.info("Processing Thymeleaf template: {}", templateName);
+            String htmlContent = templateEngine.process(templateName, event.getTemplateParams());
+            mailService.sendEmail(event.getRecipientEmail(), event.getSubject(), htmlContent);
+            
+            log.info("Email notification processed successfully for: {}", event.getRecipientEmail());
         } catch (Exception e) {
-            log.error("Failed to process email notification: {}", e.getMessage(), e);
+            log.error("Failed to process email notification for {}: {}", event.getRecipientEmail(), e.getMessage(), e);
         }
     }
 

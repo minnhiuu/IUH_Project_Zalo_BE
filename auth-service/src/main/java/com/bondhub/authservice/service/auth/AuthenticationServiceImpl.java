@@ -17,8 +17,10 @@ import com.bondhub.authservice.service.device.DeviceService;
 import com.bondhub.authservice.service.otp.OtpService;
 import com.bondhub.authservice.service.token.TokenStoreService;
 import com.bondhub.authservice.util.TokenProvider;
+import com.bondhub.common.constant.MailTemplate;
 import com.bondhub.common.dto.client.userservice.user.request.UserCreateRequest;
 import com.bondhub.common.enums.Role;
+import com.bondhub.common.event.notification.EmailNotificationEvent;
 import com.bondhub.common.event.user.UserIndexEvent;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
@@ -257,11 +259,11 @@ public class AuthenticationServiceImpl implements AuthenticationService {
 
         pendingRegistrationRepository.save(pendingReg);
 
-        com.bondhub.common.event.notification.EmailNotificationEvent emailEvent = 
-                com.bondhub.common.event.notification.EmailNotificationEvent.builder()
+        EmailNotificationEvent emailEvent = 
+                EmailNotificationEvent.builder()
                 .recipientEmail(request.email())
                 .subject("Registration Verification")
-                .templateId(com.bondhub.common.constant.MailTemplate.REGISTRATION_OTP_TEMPLATE_ID)
+                .templateId(MailTemplate.REGISTRATION_OTP_TEMPLATE_ID)
                 .templateParams(java.util.Map.of(
                         "otpCode", otp,
                         "accountId", "Registration Verification",
@@ -357,11 +359,11 @@ public class AuthenticationServiceImpl implements AuthenticationService {
 
         String otp = otpService.generateAndStoreOtp(request.email(), OtpPurpose.PASSWORD_RESET);
 
-        com.bondhub.common.event.notification.EmailNotificationEvent emailEvent = 
-                com.bondhub.common.event.notification.EmailNotificationEvent.builder()
+        EmailNotificationEvent emailEvent = 
+                EmailNotificationEvent.builder()
                 .recipientEmail(request.email())
                 .subject("Password Reset Request")
-                .templateId(com.bondhub.common.constant.MailTemplate.FORGOT_PASSWORD_OTP_TEMPLATE_ID)
+                .templateId(MailTemplate.FORGOT_PASSWORD_OTP_TEMPLATE_ID)
                 .templateParams(java.util.Map.of(
                         "otpCode", otp,
                         "accountId", "Password Reset Request",

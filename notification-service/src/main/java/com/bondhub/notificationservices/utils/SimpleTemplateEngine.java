@@ -8,7 +8,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @Component
-public class TemplateEngine {
+public class SimpleTemplateEngine {
     public String render(String template, Map<String, Object> payload) {
         if (template == null) return "";
         if (payload == null) payload = Collections.emptyMap();

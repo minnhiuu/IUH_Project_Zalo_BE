@@ -86,14 +86,6 @@ jwt:
     expiration-web: 604800000 # 7 days
     expiration-mobile: 31536000000 # 1 year
 
-# Brevo Email Configuration
-brevo:
-  api-key: ${BREVO_API_KEY}
-  sender:
-    name: ${BREVO_SENDER_NAME}
-  template:
-    otp-verification-id: ${BREVO_OTP_TEMPLATE_ID}
-
 # OTP Configuration
 otp:
   length: 6 # Number of digits in OTP
