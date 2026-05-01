@@ -60,16 +60,19 @@ public class NotificationPersistenceServiceImpl implements NotificationPersisten
                 .set("isRead", false)
                 .set("lastModifiedAt", event.getLastOccurredAt());
 
-        Notification persisted = mongoTemplate.findAndModify(
+        Notification old = mongoTemplate.findAndModify(
                 query,
                 update,
-                FindAndModifyOptions.options().returnNew(true).upsert(true),
+                FindAndModifyOptions.options().returnNew(false).upsert(true),
                 Notification.class
         );
 
+        boolean shouldIncrement = (old == null || old.isRead());
+        Notification persisted = mongoTemplate.findOne(query, Notification.class);
+
         if (persisted == null) return null;
 
-        return finalizeAndSave(persisted, event);
+        return finalizeAndSave(persisted, event, shouldIncrement);
     }
 
     private Notification persistAggregate(BatchedNotificationEvent event) {
@@ -88,19 +91,22 @@ public class NotificationPersistenceServiceImpl implements NotificationPersisten
                 .set("isRead", false)
                 .set("lastModifiedAt", event.getLastOccurredAt());
 
-        Notification persisted = mongoTemplate.findAndModify(
+        Notification old = mongoTemplate.findAndModify(
                 query,
                 update,
-                FindAndModifyOptions.options().returnNew(true).upsert(true),
+                FindAndModifyOptions.options().returnNew(false).upsert(true),
                 Notification.class
         );
 
+        boolean shouldIncrement = (old == null || old.isRead());
+        Notification persisted = mongoTemplate.findOne(query, Notification.class);
+
         if (persisted == null) return null;
 
-        return finalizeAndSave(persisted, event);
+        return finalizeAndSave(persisted, event, shouldIncrement);
     }
 
-    private Notification finalizeAndSave(Notification persisted, BatchedNotificationEvent event) {
+    private Notification finalizeAndSave(Notification persisted, BatchedNotificationEvent event, boolean shouldIncrement) {
         Set<String> unique = new LinkedHashSet<>(persisted.getActorIds());
         List<String> finalActors = new ArrayList<>(unique);
         persisted.setActorIds(finalActors);
@@ -137,7 +143,9 @@ public class NotificationPersistenceServiceImpl implements NotificationPersisten
         persisted.setPayload(payloadMap);
         Notification saved = notificationRepository.save(persisted);
 
-        incrementUnreadCount(event.getRecipientId());
+        if (shouldIncrement) {
+            incrementUnreadCount(event.getRecipientId());
+        }
         return saved;
     }
 

@@ -1,7 +1,10 @@
 package com.bondhub.notificationservices.service.notification;
 
+import com.bondhub.common.dto.client.socketservice.SocketEvent;
+import com.bondhub.common.enums.SocketEventType;
 import com.bondhub.common.utils.LocalizationUtil;
 import com.bondhub.common.utils.SecurityUtil;
+import org.bson.types.ObjectId;
 import com.bondhub.notificationservices.client.UserServiceClient;
 import com.bondhub.notificationservices.dto.response.notification.*;
 import com.bondhub.notificationservices.dto.response.template.NotificationTemplateResponse;
@@ -12,6 +15,7 @@ import com.bondhub.notificationservices.mapper.NotificationMapper;
 import com.bondhub.notificationservices.model.Notification;
 import com.bondhub.notificationservices.model.UserNotificationState;
 import com.bondhub.notificationservices.publisher.RawNotificationPublisher;
+import com.bondhub.notificationservices.publisher.SocketEventPublisher;
 import com.bondhub.notificationservices.repository.UserNotificationStateRepository;
 import com.bondhub.notificationservices.service.template.NotificationTemplateService;
 import com.bondhub.notificationservices.service.user.preference.UserPreferenceService;
@@ -41,6 +45,7 @@ public class NotificationServiceImpl implements NotificationService {
 
     static final Duration FRESH_WINDOW = Duration.ofHours(2);
 
+    SocketEventPublisher socketEventPublisher;
     RawNotificationPublisher rawPublisher;
     MongoTemplate mongoTemplate;
     NotificationMapper notificationMapper;
@@ -69,8 +74,7 @@ public class NotificationServiceImpl implements NotificationService {
             int limit) {
         String userId = securityUtil.getCurrentUserId();
 
-        Criteria criteria = Criteria.where("userId").is(userId)
-                .and("active").is(true);
+        Criteria criteria = Criteria.where("userId").is(userId);
 
         if (Boolean.TRUE.equals(unreadOnly)) {
             criteria.and("isRead").is(false);
@@ -203,15 +207,30 @@ public class NotificationServiceImpl implements NotificationService {
 
     @Override
     public void deactivateByReferenceIdAndType(String userId, String referenceId, NotificationType type) {
-        Query query = new Query(Criteria.where("userId").is(userId)
-                .and("referenceId").is(referenceId)
-                .and("type").is(type)
-                .and("active").is(true));
+        Query query = new Query(Criteria.where("userId").is(new ObjectId(userId))
+                .and("referenceId").is(new ObjectId(referenceId))
+                .and("type").is(type));
 
-        Update update = new Update().set("active", false);
-        var result = mongoTemplate.updateMulti(query, update, Notification.class);
-        log.info("[Notification] Deactivated {} notifications for referenceId={}, type={}, userId={}", 
-                result.getModifiedCount(), referenceId, type, userId);
+        Notification existing = mongoTemplate.findOne(query, Notification.class);
+        if (existing != null) {
+            boolean wasUnread = !existing.isRead();
+            mongoTemplate.remove(existing);
+            log.info("[Notification] Removed notification for referenceId={}, type={}, userId={}, wasUnread={}",
+                    referenceId, type, userId, wasUnread);
+
+            if (wasUnread) {
+                decrementUnreadCount(userId);
+            }
+            socketEventPublisher.publishCleanup(userId, referenceId, type);
+        }
+    }
+
+    private void decrementUnreadCount(String userId) {
+        mongoTemplate.upsert(
+                new Query(Criteria.where("userId").is(userId)),
+                new Update().inc("unreadCount", -1L),
+                UserNotificationState.class
+        );
     }
 
     @Override

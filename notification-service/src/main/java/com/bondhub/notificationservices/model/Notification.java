@@ -18,10 +18,10 @@ import java.util.Map;
 @EqualsAndHashCode(callSuper = true)
 @Document("notifications")
 @CompoundIndexes({
-        @CompoundIndex(name = "user_active_last_modified_idx",
-                def = "{'userId': 1, 'active': 1, 'lastModifiedAt': -1}"),
-        @CompoundIndex(name = "user_active_unread_idx",
-                def = "{'userId': 1, 'active': 1, 'isRead': 1}"),
+        @CompoundIndex(name = "user_last_modified_idx",
+                def = "{'userId': 1, 'lastModifiedAt': -1}"),
+        @CompoundIndex(name = "user_unread_idx",
+                def = "{'userId': 1, 'isRead': 1}"),
         @CompoundIndex(name = "user_type_reference_unique",
                 def = "{'userId': 1, 'type': 1, 'referenceId': 1}",
                 unique = true)
