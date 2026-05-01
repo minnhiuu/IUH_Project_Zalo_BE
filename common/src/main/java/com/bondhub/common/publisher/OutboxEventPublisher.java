@@ -15,6 +15,7 @@ import com.bondhub.common.model.kafka.OutboxEvent;
 import com.bondhub.common.repository.OutboxEventRepository;
 import com.bondhub.common.event.friend.FriendshipChangedEvent;
 import com.bondhub.common.event.group.GroupMemberChangedEvent;
+import com.bondhub.common.event.notification.EmailNotificationEvent;
 import com.bondhub.common.event.user.UserCreatedEvent;
 import com.bondhub.common.event.user.UserUpdatedEvent;
 import com.bondhub.common.event.user.UserDeletedEvent;
@@ -154,6 +155,7 @@ public class OutboxEventPublisher {
             case POST_VIEW_RECORDED -> kafkaTopicProperties.getSocialFeedEvents().getPostViewRecorded();
             case POST_DISLIKE_RECORDED -> kafkaTopicProperties.getSocialFeedEvents().getPostDislikeRecorded();
             case MESSAGE_INDEX_REQUESTED -> kafkaTopicProperties.getMessageEvents().getIndexRequested();
+            case EMAIL_NOTIFICATION -> kafkaTopicProperties.getNotificationEvents().getEmail();
         };
     }
 
@@ -174,6 +176,7 @@ public class OutboxEventPublisher {
             case POST_COMMENT_COUNT_PROJECTION_REQUESTED -> PostCommentCountProjectionRequestedEvent.class;
             case USER_INTERACTION_RECORDED, POST_VIEW_RECORDED, POST_DISLIKE_RECORDED -> UserInteractionEvent.class;
             case MESSAGE_INDEX_REQUESTED -> MessageIndexRequestedEvent.class;
+            case EMAIL_NOTIFICATION -> EmailNotificationEvent.class;
         };
     }
 }

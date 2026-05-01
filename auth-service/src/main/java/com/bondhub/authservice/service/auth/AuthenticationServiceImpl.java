@@ -1,7 +1,6 @@
 package com.bondhub.authservice.service.auth;
 
 import com.bondhub.authservice.client.UserServiceClient;
-import com.bondhub.authservice.config.MailTemplate;
 import com.bondhub.authservice.dto.auth.request.*;
 import com.bondhub.authservice.dto.auth.response.ForgotPasswordResponse;
 import com.bondhub.authservice.dto.auth.response.RegisterInitResponse;
@@ -15,7 +14,6 @@ import com.bondhub.authservice.model.redis.RefreshTokenSession;
 import com.bondhub.authservice.repository.AccountRepository;
 import com.bondhub.authservice.repository.redis.PendingRegistrationRepository;
 import com.bondhub.authservice.service.device.DeviceService;
-import com.bondhub.authservice.service.mail.MailService;
 import com.bondhub.authservice.service.otp.OtpService;
 import com.bondhub.authservice.service.token.TokenStoreService;
 import com.bondhub.authservice.util.TokenProvider;
@@ -58,7 +56,6 @@ public class AuthenticationServiceImpl implements AuthenticationService {
     TokenStoreService tokenStoreService;
     SecurityUtil securityUtil;
     OtpService otpService;
-    MailService mailService;
     UserServiceClient userServiceClient;
     MessageSource messageSource;
     TokenProvider tokenProvider;
@@ -260,11 +257,27 @@ public class AuthenticationServiceImpl implements AuthenticationService {
 
         pendingRegistrationRepository.save(pendingReg);
 
-        mailService.sendOtpEmail(
-                request.email(),
-                otp,
-                MailTemplate.REGISTRATION_OTP_TEMPLATE_ID,
-                "Registration Verification");
+        com.bondhub.common.event.notification.EmailNotificationEvent emailEvent = 
+                com.bondhub.common.event.notification.EmailNotificationEvent.builder()
+                .recipientEmail(request.email())
+                .subject("Registration Verification")
+                .templateId(com.bondhub.common.constant.MailTemplate.REGISTRATION_OTP_TEMPLATE_ID)
+                .templateParams(java.util.Map.of(
+                        "otpCode", otp,
+                        "accountId", "Registration Verification",
+                        "companyName", "BondHub",
+                        "companyTagline", "Connecting people through shared bonds",
+                        "supportEmail", "support@bondhub.com",
+                        "currentYear", String.valueOf(java.time.Year.now().getValue())
+                ))
+                .build();
+
+        outboxEventPublisher.saveAndPublish(
+                request.email(), 
+                "ACCOUNT", 
+                EventType.EMAIL_NOTIFICATION, 
+                emailEvent
+        );
 
         log.info("✅ Registration initiated successfully for: {}", request.email());
 
@@ -344,11 +357,27 @@ public class AuthenticationServiceImpl implements AuthenticationService {
 
         String otp = otpService.generateAndStoreOtp(request.email(), OtpPurpose.PASSWORD_RESET);
 
-        mailService.sendOtpEmail(
-                request.email(),
-                otp,
-                MailTemplate.FORGOT_PASSWORD_OTP_TEMPLATE_ID,
-                "Password Reset Request");
+        com.bondhub.common.event.notification.EmailNotificationEvent emailEvent = 
+                com.bondhub.common.event.notification.EmailNotificationEvent.builder()
+                .recipientEmail(request.email())
+                .subject("Password Reset Request")
+                .templateId(com.bondhub.common.constant.MailTemplate.FORGOT_PASSWORD_OTP_TEMPLATE_ID)
+                .templateParams(java.util.Map.of(
+                        "otpCode", otp,
+                        "accountId", "Password Reset Request",
+                        "companyName", "BondHub",
+                        "companyTagline", "Connecting people through shared bonds",
+                        "supportEmail", "support@bondhub.com",
+                        "currentYear", String.valueOf(java.time.Year.now().getValue())
+                ))
+                .build();
+
+        outboxEventPublisher.saveAndPublish(
+                request.email(), 
+                "ACCOUNT", 
+                EventType.EMAIL_NOTIFICATION, 
+                emailEvent
+        );
 
         log.info("✅ Password reset OTP sent to: {}", request.email());
         return ForgotPasswordResponse.of(request.email());

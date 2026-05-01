@@ -1,11 +1,15 @@
 package com.bondhub.notificationservices.listener;
 
+import com.bondhub.common.constant.MailTemplate;
 import com.bondhub.common.event.notification.EmailNotificationEvent;
 import com.bondhub.notificationservices.service.mail.MailService;
+import com.bondhub.notificationservices.service.template.TemplateService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
+
+import java.util.Map;
 
 @Component
 @Slf4j
@@ -13,19 +17,37 @@ import org.springframework.stereotype.Component;
 public class EmailNotificationListener {
 
     private final MailService mailService;
+    private final TemplateService templateService;
 
     @KafkaListener(topics = "email-notifications", groupId = "${spring.kafka.consumer.group-id}")
     public void handleEmailNotification(EmailNotificationEvent event) {
         log.info("Received email notification event for: {}", event.getRecipientEmail());
         try {
-            mailService.sendEmail(
-                event.getRecipientEmail(),
-                event.getSubject(),
-                event.getTemplateId(),
-                event.getTemplateParams()
-            );
+            String templateName = getThymeleafTemplateName(event.getTemplateId());
+            
+            if (templateName != null) {
+                log.info("Processing Thymeleaf template: {}", templateName);
+                String htmlContent = templateService.process(templateName, event.getTemplateParams());
+                mailService.sendHtmlEmail(event.getRecipientEmail(), event.getSubject(), htmlContent);
+            } else {
+                log.info("Using Brevo Transactional Template: {}", event.getTemplateId());
+                mailService.sendEmail(
+                    event.getRecipientEmail(),
+                    event.getSubject(),
+                    event.getTemplateId(),
+                    event.getTemplateParams()
+                );
+            }
         } catch (Exception e) {
             log.error("Failed to process email notification: {}", e.getMessage(), e);
         }
+    }
+
+    private String getThymeleafTemplateName(String templateId) {
+        return switch (templateId) {
+            case MailTemplate.REGISTRATION_OTP_TEMPLATE_ID -> "otp-verification";
+            case MailTemplate.FORGOT_PASSWORD_OTP_TEMPLATE_ID -> "otp-verification";
+            default -> null;
+        };
     }
 }

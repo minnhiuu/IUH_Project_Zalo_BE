@@ -36,4 +36,7 @@ public enum EventType {
 
     // Message Search Events (message-service → search-service)
     MESSAGE_INDEX_REQUESTED,
+
+    // Notification Events
+    EMAIL_NOTIFICATION,
 }
