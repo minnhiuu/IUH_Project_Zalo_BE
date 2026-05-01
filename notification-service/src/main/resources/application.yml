@@ -16,3 +16,10 @@ spring:
 app:
   firebase:
     config-path: ${FIREBASE_CONFIG_PATH:firebase-adminsdk.json}
+
+brevo:
+  api-key: ${BREVO_API_KEY}
+  sender:
+    name: ${BREVO_SENDER_NAME:BondHub}
+
+BREVO_MAIL: ${BREVO_MAIL}
