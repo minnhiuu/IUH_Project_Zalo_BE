@@ -5,9 +5,8 @@ import com.bondhub.notificationservices.enums.Platform;
 import com.bondhub.notificationservices.model.Notification;
 import com.bondhub.notificationservices.model.UserDevice;
 import com.bondhub.notificationservices.repository.UserDeviceRepository;
-import com.bondhub.notificationservices.service.template.NotificationTemplateService;
+import com.bondhub.notificationservices.service.delivery.NotificationStrategyHelper;
 import com.bondhub.notificationservices.service.user.preference.UserPreferenceService;
-import com.bondhub.notificationservices.dto.response.template.NotificationTemplateResponse;
 import com.google.firebase.messaging.*;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
@@ -36,7 +35,7 @@ public class FcmDeliveryStrategy implements NotificationStrategy {
             .build();
 
     UserDeviceRepository userDeviceRepository;
-    NotificationTemplateService templateService;
+    NotificationStrategyHelper strategyHelper;
     UserPreferenceService userPreferenceService;
 
     @NonFinal
@@ -56,29 +55,8 @@ public class FcmDeliveryStrategy implements NotificationStrategy {
         var userPrefs = userPreferenceService.getPreferences(recipientId);
         String globalLocale = (userPrefs != null) ? userPrefs.getLanguage() : "vi";
 
-        int actorCount = persisted.getActorIds() != null ? persisted.getActorIds().size() : 0;
-        int othersCount = Math.max(0, actorCount - 1);
-
-        String lastActorId = getStr(persisted, "actorId");
-        String lastActorName = getStr(persisted, "actorName");
-        String lastActorAvatar = getStr(persisted, "actorAvatar");
-        String requestId = getStr(persisted, "requestId");
-
-        Map<String, Object> baseRenderData = new HashMap<>(persisted.getPayload() != null ? persisted.getPayload() : Collections.emptyMap());
-        baseRenderData.put("actorCount", actorCount);
-        baseRenderData.put("othersCount", actorCount > 2 ? actorCount - 1 : 0);
-        baseRenderData.put("showSecondActor", actorCount == 2);
-        baseRenderData.put("actorName", lastActorName != null ? lastActorName : "");
-        baseRenderData.put("actorAvatar", lastActorAvatar != null ? lastActorAvatar : "");
-
-        if (actorCount == 2) {
-            String secondActorName = getStr(persisted, "secondActorName");
-            baseRenderData.put("secondActorName", secondActorName != null ? secondActorName : "một người khác");
-        }
-
         String collapseKey = persisted.getType().name() + "_" + recipientId;
-
-        Map<String, NotificationTemplateResponse> templateCache = new HashMap<>();
+        Map<String, NotificationStrategyHelper.RenderedContent> contentCache = new HashMap<>();
 
         for (UserDevice device : devices) {
             String deviceLocale = device.getLocale();
@@ -97,34 +75,20 @@ public class FcmDeliveryStrategy implements NotificationStrategy {
                 continue;
             }
 
-            Map<String, Object> deviceRenderData = new HashMap<>(baseRenderData);
-            
-            String localeKey = deviceLocale.toLowerCase();
-            if (deviceRenderData.containsKey("message_" + localeKey)) {
-                deviceRenderData.put("message", deviceRenderData.get("message_" + localeKey));
-            }
-            if (deviceRenderData.containsKey("title_" + localeKey)) {
-                deviceRenderData.put("title", deviceRenderData.get("title_" + localeKey));
-            }
-
-            var template = templateCache.computeIfAbsent(deviceLocale, loc -> 
-                templateService.getTemplate(persisted.getType(), NotificationChannel.FCM, loc));
-
-            String title = templateService.render(template.titleTemplate(), deviceRenderData);
-            String body = templateService.render(template.bodyTemplate(), deviceRenderData);
+            // Render content for this device's locale (using cache to avoid redundant rendering)
+            var rendered = contentCache.computeIfAbsent(deviceLocale, loc -> 
+                strategyHelper.render(persisted, NotificationChannel.FCM, loc));
 
             log.info("FCM processing: type={}, recipientId={}, deviceId={}, locale={}, title='{}', body='{}'",
-                    persisted.getType(), recipientId, device.getDeviceId(), deviceLocale, title, body);
+                    persisted.getType(), recipientId, device.getDeviceId(), deviceLocale, rendered.title(), rendered.body());
 
-            if ("".equals(title) && "".equals(body)) {
+            if ("".equals(rendered.title()) && "".equals(rendered.body())) {
                 log.warn("FCM skip: both title and body are empty for device={}, type={}", device.getId(), persisted.getType());
                 continue;
             }
 
-            sendToDevice(device, title, body, collapseKey,
-                    recipientId, lastActorId, lastActorName, lastActorAvatar,
-                    actorCount, othersCount, persisted.getType().name(), requestId,
-                    persisted.getPayload());
+            sendToDevice(device, rendered.title(), rendered.body(), collapseKey,
+                    recipientId, persisted);
         }
     }
 
@@ -133,14 +97,16 @@ public class FcmDeliveryStrategy implements NotificationStrategy {
                               String body,
                               String collapseKey,
                               String recipientId,
-                              String lastActorId,
-                              String lastActorName,
-                              String lastActorAvatar,
-                              int actorCount,
-                              int othersCount,
-                              String type,
-                              String requestId,
-                              Map<String, Object> notificationPayload) {
+                              Notification persisted) {
+
+        String type = persisted.getType().name();
+        String lastActorId = getStr(persisted, "actorId");
+        String lastActorName = getStr(persisted, "actorName");
+        String lastActorAvatar = getStr(persisted, "actorAvatar");
+        String requestId = getStr(persisted, "requestId");
+        int actorCount = persisted.getActorIds() != null ? persisted.getActorIds().size() : 0;
+        int othersCount = Math.max(0, actorCount - 1);
+        Map<String, Object> notificationPayload = persisted.getPayload();
 
         String categoryIdentifier = "FRIEND_REQUEST".equals(type) ? "friend_request" : "";
 
