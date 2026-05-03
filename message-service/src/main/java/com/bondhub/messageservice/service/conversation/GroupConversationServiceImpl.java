@@ -576,6 +576,8 @@ public class GroupConversationServiceImpl implements GroupConversationService {
                     Conversation.class
             );
             saved.setJoinLinkToken(null);
+            systemMessageService.sendSystemMessage(conversationId, currentUserId, actorInfo.name(), actorInfo.avatar(),
+                    SystemActionType.DISABLE_JOIN_LINK, Map.of());
         }
 
         return helper.broadcastAndRespond(saved, currentUserId);

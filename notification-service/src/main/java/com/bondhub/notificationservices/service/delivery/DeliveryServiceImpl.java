@@ -5,6 +5,7 @@ import com.bondhub.notificationservices.model.Notification;
 import com.bondhub.notificationservices.service.delivery.strategy.NotificationStrategy;
 import com.bondhub.notificationservices.service.persistence.NotificationPersistenceService;
 import com.bondhub.notificationservices.service.user.preference.UserPreferenceService;
+import com.bondhub.common.enums.NotificationType;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
@@ -27,10 +28,15 @@ public class DeliveryServiceImpl implements DeliveryService {
     public void deliver(BatchedNotificationEvent event) {
         log.info("Processing delivery: type={}, recipientId={}", event.getType(), event.getRecipientId());
 
-        Notification persisted = persistenceService.persist(event);
+        Notification target;
+        if (isTransientType(event.getType())) {
+            target = persistenceService.buildTransient(event);
+        } else {
+            target = persistenceService.persist(event);
+        }
         
-        if (persisted == null) {
-            log.warn("Persistence failed - skipping strategies: recipientId={}", event.getRecipientId());
+        if (target == null) {
+            log.warn("Target notification creation failed - skipping strategies: recipientId={}", event.getRecipientId());
             return;
         }
 
@@ -43,10 +49,17 @@ public class DeliveryServiceImpl implements DeliveryService {
 
         for (NotificationStrategy strategy : strategies) {
             try {
-                strategy.execute(persisted);
+                strategy.execute(target);
             } catch (Exception e) {
                 log.error("Strategy {} failed: {}", strategy.getClass().getSimpleName(), e.getMessage(), e);
             }
         }
+    }
+
+    private boolean isTransientType(NotificationType type) {
+        return type == NotificationType.MESSAGE_DIRECT || 
+               type == NotificationType.MESSAGE_GROUP || 
+               type == NotificationType.CALL ||
+               type == NotificationType.SYSTEM;
     }
 }

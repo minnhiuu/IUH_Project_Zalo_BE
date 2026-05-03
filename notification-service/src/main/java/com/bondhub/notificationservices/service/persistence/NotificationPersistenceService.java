@@ -5,4 +5,5 @@ import com.bondhub.notificationservices.model.Notification;
 
 public interface NotificationPersistenceService {
     Notification persist(BatchedNotificationEvent event);
+    Notification buildTransient(BatchedNotificationEvent event);
 }

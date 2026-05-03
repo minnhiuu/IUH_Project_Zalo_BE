@@ -1,5 +1,7 @@
 package com.bondhub.notificationservices.service.delivery.strategy;
 
+import com.bondhub.common.utils.S3UtilV2;
+import com.bondhub.notificationservices.client.SocketServiceClient;
 import com.bondhub.notificationservices.enums.NotificationChannel;
 import com.bondhub.notificationservices.enums.Platform;
 import com.bondhub.notificationservices.model.Notification;
@@ -37,6 +39,8 @@ public class FcmDeliveryStrategy implements NotificationStrategy {
     UserDeviceRepository userDeviceRepository;
     NotificationStrategyHelper strategyHelper;
     UserPreferenceService userPreferenceService;
+    SocketServiceClient socketServiceClient;
+    S3UtilV2 s3UtilV2;
 
     @NonFinal
     @Value("${bondhub.frontend-url}")
@@ -45,6 +49,21 @@ public class FcmDeliveryStrategy implements NotificationStrategy {
     @Override
     public void execute(Notification persisted) {
         String recipientId = persisted.getUserId();
+
+        // For chat messages: only push FCM when user is OFFLINE.
+        // When online, messages are already delivered via WebSocket in real-time.
+        if (isChatMessageType(persisted.getType())) {
+            try {
+                boolean isOnline = socketServiceClient.isUserOnline(recipientId);
+                if (isOnline) {
+                    log.debug("FCM skip: user {} is online, type={}", recipientId, persisted.getType());
+                    return;
+                }
+            } catch (Exception e) {
+                // If presence check fails, proceed with FCM (fail-safe: better to send than miss)
+                log.warn("FCM presence check failed for user {}, proceeding with push: {}", recipientId, e.getMessage());
+            }
+        }
 
         List<UserDevice> devices = userDeviceRepository.findByUserId(recipientId);
         if (devices.isEmpty()) {
@@ -100,10 +119,10 @@ public class FcmDeliveryStrategy implements NotificationStrategy {
                               Notification persisted) {
 
         String type = persisted.getType().name();
-        String lastActorId = getStr(persisted, "actorId");
-        String lastActorName = getStr(persisted, "actorName");
-        String lastActorAvatar = getStr(persisted, "actorAvatar");
-        String requestId = getStr(persisted, "requestId");
+        String lastActorId = strategyHelper.getStr(persisted, "actorId");
+        String lastActorName = strategyHelper.getStr(persisted, "actorName");
+        String lastActorAvatar = strategyHelper.getStr(persisted, "actorAvatar");
+        String requestId = strategyHelper.getStr(persisted, "requestId");
         int actorCount = persisted.getActorIds() != null ? persisted.getActorIds().size() : 0;
         int othersCount = Math.max(0, actorCount - 1);
         Map<String, Object> notificationPayload = persisted.getPayload();
@@ -113,13 +132,18 @@ public class FcmDeliveryStrategy implements NotificationStrategy {
         String url = frontendUrl;
         if (!url.endsWith("/")) url += "/";
 
+        String iconUrl = strategyHelper.resolveAvatar(persisted, s3UtilV2.getS3BaseUrl());
+        if (iconUrl == null || iconUrl.isEmpty()) {
+            iconUrl = url + "images/logo.jpg";
+        }
+
         Map<String, String> dataPayload = new HashMap<>();
         dataPayload.put("type", type);
         dataPayload.put("title", title != null ? title : "");
         dataPayload.put("body", body != null ? body : "");
         dataPayload.put("actorId", lastActorId != null ? lastActorId : "");
         dataPayload.put("actorName", lastActorName != null ? lastActorName : "");
-        dataPayload.put("actorAvatar", lastActorAvatar != null ? lastActorAvatar : "");
+        dataPayload.put("actorAvatar", iconUrl);
         dataPayload.put("actorCount", String.valueOf(actorCount));
         dataPayload.put("othersCount", String.valueOf(othersCount));
         dataPayload.put("categoryIdentifier", categoryIdentifier);
@@ -150,7 +174,6 @@ public class FcmDeliveryStrategy implements NotificationStrategy {
                 .putAllData(dataPayload);
 
         if (device.getPlatform() == Platform.WEB) {
-            String iconUrl = lastActorAvatar != null && !lastActorAvatar.isEmpty() ? lastActorAvatar : "/images/logo.jpg";
             log.info("[FCM] Sending data-only message to WEB with icon: {}", iconUrl);
             
             messageBuilder.setWebpushConfig(WebpushConfig.builder()
@@ -158,12 +181,12 @@ public class FcmDeliveryStrategy implements NotificationStrategy {
                     .build());
         }
 
-//        if (device.getPlatform() == Platform.ANDROID || device.getPlatform() == Platform.IOS) {
-//             messageBuilder.setNotification(com.google.firebase.messaging.Notification.builder()
-//                    .setTitle(title)
-//                    .setBody(body)
-//                    .build());
-//        }
+        // if (device.getPlatform() == Platform.ANDROID || device.getPlatform() == Platform.IOS || device.getPlatform() == Platform.WEB) {
+        //      messageBuilder.setNotification(com.google.firebase.messaging.Notification.builder()
+        //             .setTitle(title)
+        //             .setBody(body)
+        //             .build());
+        // }
 
         if (device.getPlatform() == Platform.ANDROID) {
             messageBuilder.setAndroidConfig(AndroidConfig.builder()
@@ -213,9 +236,9 @@ public class FcmDeliveryStrategy implements NotificationStrategy {
         }
     }
 
-    private String getStr(Notification n, String key) {
-        if (n.getPayload() == null) return null;
-        Object v = n.getPayload().get(key);
-        return v != null ? v.toString() : null;
+    private boolean isChatMessageType(com.bondhub.common.enums.NotificationType type) {
+        return type == com.bondhub.common.enums.NotificationType.MESSAGE_DIRECT ||
+               type == com.bondhub.common.enums.NotificationType.MESSAGE_GROUP ||
+               type == com.bondhub.common.enums.NotificationType.CALL;
     }
 }

@@ -2,6 +2,7 @@ package com.bondhub.notificationservices.service.delivery.strategy;
 
 import com.bondhub.common.dto.client.socketservice.SocketEvent;
 import com.bondhub.common.enums.SocketEventType;
+import com.bondhub.common.enums.NotificationType;
 import com.bondhub.notificationservices.dto.response.notification.NotificationResponse;
 import com.bondhub.notificationservices.enums.NotificationChannel;
 import com.bondhub.notificationservices.mapper.NotificationMapper;
@@ -26,6 +27,15 @@ public class InAppDeliveryStrategy implements NotificationStrategy {
 
     @Override
     public void execute(Notification persisted) {
+        // MESSAGE_DIRECT and CALL have their own dedicated WebSocket channels
+        // (/queue/messages, /queue/call-signals). Skip to avoid duplicate realtime notifications.
+        if (persisted.getType() == NotificationType.MESSAGE_DIRECT ||
+            persisted.getType() == NotificationType.MESSAGE_GROUP ||
+            persisted.getType() == NotificationType.CALL) {
+            log.debug("[InApp] Skipping realtime for direct-channel type: {}", persisted.getType());
+            return;
+        }
+
         String recipientId = persisted.getUserId();
         log.info("[InApp] Preparing real-time signal for notification: {} for user: {}", persisted.getId(), recipientId);
 

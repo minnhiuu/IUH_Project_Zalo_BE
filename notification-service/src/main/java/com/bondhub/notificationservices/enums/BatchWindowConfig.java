@@ -25,6 +25,7 @@ public enum BatchWindowConfig {
 
     // --- KHÔNG ĐƯỢC BATCH ---
     MESSAGE_DIRECT  (NotificationType.MESSAGE_DIRECT,  0,   false),
+    MESSAGE_GROUP   (NotificationType.MESSAGE_GROUP,   0,   false),
     CALL            (NotificationType.CALL,            0,   false),
     SYSTEM          (NotificationType.SYSTEM,          0,   false),
     DLQ_ALERT       (NotificationType.DLQ_ALERT,       30,  true);

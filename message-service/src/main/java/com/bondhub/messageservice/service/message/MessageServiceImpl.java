@@ -23,10 +23,13 @@ import com.bondhub.messageservice.repository.ConversationRepository;
 import com.bondhub.messageservice.repository.MessageRepository;
 import com.bondhub.messageservice.repository.ChatUserRepository;
 import com.bondhub.messageservice.service.conversation.ConversationService;
+import com.bondhub.common.enums.NotificationType;
+import com.bondhub.common.event.notification.RawNotificationEvent;
 import com.bondhub.common.dto.client.messageservice.MessageSendRequest;
 import com.bondhub.common.event.ai.AiMessageSaveEvent;
 import com.bondhub.common.dto.client.socketservice.SocketEvent;
 import com.bondhub.common.enums.SocketEventType;
+import com.bondhub.common.publisher.RawNotificationEventPublisher;
 import com.bondhub.messageservice.publisher.MessageIndexEventPublisher;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -74,6 +77,7 @@ public class MessageServiceImpl implements MessageService {
     private final ConversationHelper conversationHelper;
     private final S3UtilV2 s3UtilV2;
     private final MessageIndexEventPublisher messageIndexEventPublisher;
+    private final RawNotificationEventPublisher rawNotificationEventPublisher;
 
     @Value("${kafka.topics.socket-events}")
     private String socketEventsTopic;
@@ -397,20 +401,65 @@ public class MessageServiceImpl implements MessageService {
         enrichNotifications(notifPrototypes);
         ChatNotification baseNotif = notifPrototypes.get(0);
 
+        NotificationType notiType = finalRoom.isGroup() ? NotificationType.MESSAGE_GROUP : NotificationType.MESSAGE_DIRECT;
+
         finalRoom.getMembers().stream()
             .filter(this::isActiveMember)
+            .filter(member -> {
+                // Respect visibility if restricted
+                if (message.getVisibleTo() != null && !message.getVisibleTo().isEmpty()) {
+                    return message.getVisibleTo().contains(member.getUserId());
+                }
+                return true;
+            })
             .forEach(member -> {
-            boolean isFromMe = member.getUserId().equals(currentUserId);
-            Integer unreadCount = finalRoom.getUnreadCounts().getOrDefault(member.getUserId(), 0);
+                boolean isFromMe = member.getUserId().equals(currentUserId);
+                Integer unreadCount = finalRoom.getUnreadCounts().getOrDefault(member.getUserId(), 0);
 
-            ChatNotification personalNotif = baseNotif.toBuilder()
-                    .isFromMe(isFromMe)
-                    .unreadCount(unreadCount)
-                    .build();
+                ChatNotification personalNotif = baseNotif.toBuilder()
+                        .isFromMe(isFromMe)
+                        .unreadCount(unreadCount)
+                        .build();
 
-            kafkaTemplate.send(socketEventsTopic,
-                    new SocketEvent(SocketEventType.MESSAGE, member.getUserId(),
-                            "/queue/messages", personalNotif));
+                    kafkaTemplate.send(socketEventsTopic,
+                            new SocketEvent(SocketEventType.MESSAGE, member.getUserId(),
+                                    "/queue/messages", personalNotif));
+
+                    // Publish RawNotificationEvent for push notifications (only for others)
+                    if (!isFromMe) {
+                        String dynamicGroupName = finalRoom.getName();
+                        if (finalRoom.isGroup() && (dynamicGroupName == null || dynamicGroupName.isBlank())) {
+                            // Fetch minimal user info for dynamic name generation
+                            Set<String> memberIdsToFetch = finalRoom.getMembers().stream()
+                                    .filter(this::isActiveMember)
+                                    .map(ConversationMember::getUserId)
+                                    .limit(5)
+                                    .collect(Collectors.toSet());
+                            Map<String, ChatUser> groupUserCache = chatUserRepository.findAllById(memberIdsToFetch).stream()
+                                    .collect(Collectors.toMap(ChatUser::getId, u -> u));
+                            dynamicGroupName = conversationHelper.getDynamicGroupName(finalRoom, member.getUserId(), groupUserCache);
+                        }
+
+                        RawNotificationEvent rawEvent = RawNotificationEvent.builder()
+                                .recipientId(member.getUserId())
+                                .actorId(currentUserId)
+                                .actorName(sender != null ? sender.getFullName() : "Người dùng")
+                                .actorAvatar(sender != null && sender.getAvatar() != null ? baseUrl + sender.getAvatar() : null)
+                                .type(notiType)
+                                .referenceId(message.getId())
+                                .payload(Map.of(
+                                        "conversationId", finalRoom.getId(),
+                                        "messageId", message.getId(),
+                                        "content", message.getContent() != null ? message.getContent() : "Đã gửi một tin nhắn",
+                                        "isGroup", finalRoom.isGroup(),
+                                        "groupName", dynamicGroupName != null ? dynamicGroupName : "",
+                                        "conversationAvatar", finalRoom.isGroup() ? (finalRoom.getAvatar() != null ? baseUrl + finalRoom.getAvatar() : "") : (sender != null && sender.getAvatar() != null ? baseUrl + sender.getAvatar() : "")
+                                ))
+                                .occurredAt(message.getCreatedAt())
+                                .build();
+
+                        rawNotificationEventPublisher.publish(rawEvent);
+                    }
                 });
 
         // 7. Ingest vào AI system

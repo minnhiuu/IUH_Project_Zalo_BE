@@ -149,6 +149,31 @@ public class NotificationPersistenceServiceImpl implements NotificationPersisten
         return saved;
     }
 
+    @Override
+    public Notification buildTransient(BatchedNotificationEvent event) {
+        List<Map<String, Object>> payloads = event.getRawPayloads() != null ? event.getRawPayloads() : List.of();
+        Map<String, Object> basePayload = !payloads.isEmpty() ? payloads.get(payloads.size() - 1) : Map.of();
+        Map<String, Object> payloadMap = new HashMap<>(basePayload);
+
+        String convAvatar = (String) basePayload.get("conversationAvatar");
+        payloadMap.put("actorName", event.getLastActorName());
+        payloadMap.put("actorAvatar", (convAvatar != null && !convAvatar.isEmpty()) ? convAvatar : event.getLastActorAvatar());
+        payloadMap.put("actorCount", 1);
+        payloadMap.put("othersCount", 0);
+        payloadMap.put("totalEventCount", 1);
+        payloadMap.put("showSecondActor", false);
+
+        return Notification.builder()
+                .userId(event.getRecipientId())
+                .type(event.getType())
+                .referenceId(event.getReferenceId())
+                .actorIds(List.of(event.getLastActorId()))
+                .payload(payloadMap)
+                .isRead(false)
+                .lastModifiedAt(event.getLastOccurredAt())
+                .build();
+    }
+
     private String getTranslatedFallback(String localeStr) {
         Locale locale = localeStr != null ? Locale.forLanguageTag(localeStr) : new Locale("vi");
         return messageSource.getMessage("notification.another_person", null, locale);

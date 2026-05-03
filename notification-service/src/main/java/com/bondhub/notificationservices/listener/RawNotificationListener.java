@@ -1,12 +1,14 @@
 package com.bondhub.notificationservices.listener;
 
 import com.bondhub.notificationservices.batch.BatcherService;
+import com.bondhub.notificationservices.client.SocketServiceClient;
 import com.bondhub.notificationservices.client.UserServiceClient;
 import com.bondhub.notificationservices.event.BatchedNotificationEvent;
 import com.bondhub.notificationservices.publisher.ReadyNotificationPublisher;
 import com.bondhub.notificationservices.service.notification.NotificationService;
 import com.bondhub.notificationservices.service.user.preference.UserPreferenceService;
 import com.bondhub.common.event.notification.CleanupNotificationEvent;
+import com.bondhub.common.enums.NotificationType;
 import com.bondhub.common.event.notification.RawNotificationEvent;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
@@ -35,6 +37,7 @@ import java.util.Map;
 public class RawNotificationListener {
 
     UserServiceClient userServiceClient;
+    SocketServiceClient socketServiceClient;
     BatcherService batcherService;
     ReadyNotificationPublisher readyPublisher;
     UserPreferenceService userPreferenceService;
@@ -63,6 +66,7 @@ public class RawNotificationListener {
             ack(acknowledgment);
             return;
         }
+
 
         try {
             var prefs = userPreferenceService.getPreferences(event.getRecipientId());
@@ -181,3 +185,4 @@ public class RawNotificationListener {
         if (ack != null) ack.acknowledge();
     }
 }
+
