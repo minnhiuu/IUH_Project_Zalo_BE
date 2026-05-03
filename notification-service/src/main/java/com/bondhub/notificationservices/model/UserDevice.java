@@ -58,6 +58,7 @@ public class UserDevice extends BaseModel {
     boolean dndEnabled = false;
     String dndStartTime;
     String dndEndTime;
-    String dndTimezone;
+    @Builder.Default
+    String dndTimezone = "GMT+07:00";
     List<DayOfWeek> activeDays;
 }

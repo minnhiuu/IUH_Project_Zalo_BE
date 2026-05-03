@@ -90,7 +90,17 @@ public class FcmDeliveryStrategy implements NotificationStrategy {
             if (deviceLocale == null) deviceLocale = "vi";
             
             if (!userPreferenceService.allow(userPrefs, device.getDeviceId(), persisted.getType())) {
-                log.debug("FCM skip: filtered by device preference: recipient={}, device={}", recipientId, device.getDeviceId());
+                log.debug("FCM skip: filtered by device preference: recipient={}, device={}",
+                        recipientId, device.getDeviceId());
+                continue;
+            }
+
+            if (userPreferenceService.shouldSilenceByDnd(recipientId, userPrefs, device.getDeviceId())) {
+                log.info("FCM skip: silenced by DND: recipient={}, device={}, type={}",
+                        recipientId,
+                        device.getDeviceId(),
+                        persisted.getType()
+                );
                 continue;
             }
 

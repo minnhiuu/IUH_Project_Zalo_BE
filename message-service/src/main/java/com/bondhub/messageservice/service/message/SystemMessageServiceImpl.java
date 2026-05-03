@@ -95,10 +95,15 @@ public class SystemMessageServiceImpl implements SystemMessageService {
                 || action == SystemActionType.ADD_MEMBERS
                 || action == SystemActionType.CREATE_GROUP;
 
+        boolean isQuietModeAutoReply = action == SystemActionType.DND_AUTO_REPLY;
+
         Conversation room;
         Query query = new Query(Criteria.where("id").is(conversationId));
 
-        if (isRestricted) {
+        if (isQuietModeAutoReply) {
+            // Skip updating lastMessage for DND_AUTO_REPLY to keep sidebar as is
+            room = mongoTemplate.findOne(query, Conversation.class);
+        } else if (isRestricted) {
             Conversation existing = mongoTemplate.findOne(query, Conversation.class);
             LocalDateTime preservedTimestamp = (existing != null && existing.getLastMessage() != null
                     && existing.getLastMessage().getTimestamp() != null)
@@ -184,8 +189,8 @@ public class SystemMessageServiceImpl implements SystemMessageService {
                                 "/queue/messages", notification));
 
                 // Publish RawNotificationEvent for push notifications
-                // Skip for sender, negative actions (Leave/Remove/Block/Add), and restricted visibility
-                if (!isFromMe && !isNegativeAction) {
+                // Skip for sender, negative actions, restricted visibility, and Quiet Mode Auto Reply
+                if (!isFromMe && !isNegativeAction && !isQuietModeAutoReply) {
                     String dynamicGroupName = room.getName();
                     if (room.isGroup() && (dynamicGroupName == null || dynamicGroupName.isBlank())) {
                         Set<String> memberIdsToFetch = room.getMembers().stream()

@@ -8,4 +8,10 @@ public interface UserPreferenceService {
     UserNotificationPreferenceResponse getPreferences(String userId);
 
     boolean allow(UserNotificationPreferenceResponse prefs, String deviceId, NotificationType type);
+
+    boolean shouldSilenceByDnd(
+            String userId,
+            UserNotificationPreferenceResponse data,
+            String deviceId
+    );
 }

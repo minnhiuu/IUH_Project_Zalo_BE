@@ -98,7 +98,7 @@ public class UserSetting {
         private boolean dndEnabled = false;
         private String dndStartTime = "22:00";
         private String dndEndTime = "07:00";
-        private String dndTimezone = "GMT+7";
+        private String dndTimezone = "GMT+07:00";
         private List<DayOfWeek> activeDays = Arrays.asList(DayOfWeek.values());
     }
 

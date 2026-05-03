@@ -28,7 +28,8 @@ public enum BatchWindowConfig {
     MESSAGE_GROUP   (NotificationType.MESSAGE_GROUP,   0,   false),
     CALL            (NotificationType.CALL,            0,   false),
     SYSTEM          (NotificationType.SYSTEM,          0,   false),
-    DLQ_ALERT       (NotificationType.DLQ_ALERT,       30,  true);
+    DLQ_ALERT       (NotificationType.DLQ_ALERT,       30,  true),
+    DND_SUMMARY     (NotificationType.DND_SUMMARY,     0,   false);
 
     private final NotificationType type;
     private final int windowSeconds;

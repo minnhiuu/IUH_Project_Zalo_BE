@@ -235,6 +235,55 @@ public class DataInitializer {
         seedIfAbsent(NotificationType.USER_WARNED, NotificationChannel.FCM, "en",
                 "Account Warning",
                 "You have received a warning from an administrator.{{#adminNote}} Note: {{adminNote}}{{/adminNote}}");
+
+        // --- DND SUMMARY ---
+        // Use a force update approach for DND_SUMMARY to ensure latest placeholders are present
+        seedOrUpdate(NotificationType.DND_SUMMARY, NotificationChannel.FCM, "vi",
+                "Tóm tắt chế độ im lặng",
+                "Bạn có {{totalCount}} thông báo mới khi đang ở chế độ im lặng: {{summaryText}}.");
+        seedOrUpdate(NotificationType.DND_SUMMARY, NotificationChannel.FCM, "en",
+                "Quiet Mode Summary",
+                "You have {{totalCount}} new notifications while in quiet mode: {{summaryText}}.");
+
+        seedOrUpdate(NotificationType.DND_SUMMARY, NotificationChannel.IN_APP, "vi",
+                "Tóm tắt chế độ im lặng",
+                "Bạn có <b>{{totalCount}}</b> thông báo mới khi đang ở chế độ im lặng: {{summaryText}}.");
+        seedOrUpdate(NotificationType.DND_SUMMARY, NotificationChannel.IN_APP, "en",
+                "Quiet Mode Summary",
+                "You have <b>{{totalCount}}</b> new notifications while in quiet mode: {{summaryText}}.");
+
+        // --- DND SUMMARY FRAGMENTS ---
+        seedOrUpdate(NotificationType.DND_SUMMARY_MESSAGE, NotificationChannel.FCM, "vi",
+                "", "{{messageCount}} tin nhắn trong {{conversationCount}} cuộc trò chuyện");
+        seedOrUpdate(NotificationType.DND_SUMMARY_MESSAGE, NotificationChannel.FCM, "en",
+                "", "{{messageCount}} messages in {{conversationCount}} conversations");
+
+        seedOrUpdate(NotificationType.DND_SUMMARY_FRIEND, NotificationChannel.FCM, "vi",
+                "", "{{count}} lời mời kết bạn");
+        seedOrUpdate(NotificationType.DND_SUMMARY_FRIEND, NotificationChannel.FCM, "en",
+                "", "{{count}} friend requests");
+
+        seedOrUpdate(NotificationType.DND_SUMMARY_POST, NotificationChannel.FCM, "vi",
+                "", "{{interactionCount}} tương tác trên {{postCount}} bài viết");
+        seedOrUpdate(NotificationType.DND_SUMMARY_POST, NotificationChannel.FCM, "en",
+                "", "{{interactionCount}} interactions on {{postCount}} posts");
+
+        seedOrUpdate(NotificationType.DND_SUMMARY_OTHER, NotificationChannel.FCM, "vi",
+                "", "{{count}} thông báo khác");
+        seedOrUpdate(NotificationType.DND_SUMMARY_OTHER, NotificationChannel.FCM, "en",
+                "", "{{count}} other notifications");
+    }
+
+    private void seedOrUpdate(NotificationType type, NotificationChannel channel, String locale, String title, String body) {
+        templateRepository.findByTypeAndChannelAndLocaleAndActiveTrue(type, channel, locale)
+                .ifPresentOrElse(
+                    existing -> {
+                        existing.setTitleTemplate(title);
+                        existing.setBodyTemplate(body);
+                        templateRepository.save(existing);
+                    },
+                    () -> seedIfAbsent(type, channel, locale, title, body)
+                );
     }
 
     private static final List<String> NAMES = List.of(

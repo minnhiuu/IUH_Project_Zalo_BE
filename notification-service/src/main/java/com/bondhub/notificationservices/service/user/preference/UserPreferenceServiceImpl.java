@@ -11,10 +11,11 @@ import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.time.DayOfWeek;
 import java.time.LocalTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.util.List;
 
 @Service
 @Slf4j
@@ -24,8 +25,6 @@ public class UserPreferenceServiceImpl implements UserPreferenceService {
 
     UserServiceClient userServiceClient;
     UserDeviceRepository userDeviceRepository;
-    
-    static final ZoneId DEFAULT_ZONE = ZoneId.of("GMT+7");
 
     @Override
     public UserNotificationPreferenceResponse getPreferences(String userId) {
@@ -48,22 +47,10 @@ public class UserPreferenceServiceImpl implements UserPreferenceService {
             if (deviceOpt.isPresent()) {
                 UserDevice device = deviceOpt.get();
                 if (!device.isAllowNotifications()) return false;
-                
-                // 1.1 Check DND Schedule (Time + Day)
-                if (device.isDndEnabled()) {
-                    String tz = device.getDndTimezone() != null ? device.getDndTimezone() : "GMT+7";
-                    ZoneId deviceZone = ZoneId.of(tz);
-                    LocalDateTime now = LocalDateTime.now(deviceZone);
-                    DayOfWeek currentDay = now.getDayOfWeek();
-                    
-                    if (device.getActiveDays() == null || device.getActiveDays().contains(currentDay)) {
-                        if (isWithinTimeRange(now.toLocalTime(), device.getDndStartTime(), device.getDndEndTime())) {
-                            log.info("Notification silenced by DND schedule for device: {}", deviceId);
-                            return false;
-                        }
-                    }
-                }
-                
+
+                // DND check has been moved to shouldSilenceByDnd()
+                // to cleanly separate DISABLED_BY_USER vs SILENCED_BY_DND
+
                 return switch (type) {
                     case FRIEND_REQUEST -> device.isNotifFriendRequests();
                     case MESSAGE_DIRECT -> device.isNotifMessages();
@@ -91,22 +78,122 @@ public class UserPreferenceServiceImpl implements UserPreferenceService {
         return data.isAllowNotifications();
     }
 
-    private boolean isWithinTimeRange(LocalTime now, String startTimeStr, String endTimeStr) {
-        if (startTimeStr == null || endTimeStr == null) return false;
-        
-        try {
-            LocalTime start = LocalTime.parse(startTimeStr);
-            LocalTime end = LocalTime.parse(endTimeStr);
-            
-            if (start.isBefore(end)) {
-                return !now.isBefore(start) && !now.isAfter(end);
-            } else {
-                // Crosses midnight (e.g., 22:00 to 07:00)
-                return !now.isBefore(start) || !now.isAfter(end);
+    @Override
+    public boolean shouldSilenceByDnd(String userId, UserNotificationPreferenceResponse data, String deviceId) {
+        // 1. Check specific device-level DND from local snapshot
+        if (deviceId != null) {
+            var deviceOpt = userDeviceRepository.findByDeviceId(deviceId);
+
+            if (deviceOpt.isPresent()) {
+                UserDevice device = deviceOpt.get();
+                return isDeviceInDnd(device);
             }
-        } catch (Exception e) {
-            log.warn("Failed to parse DND time range: {} - {}", startTimeStr, endTimeStr);
+        }
+
+        // 2. If no deviceId specified, check if ANY device for this user is in DND
+        if (userId != null) {
+            List<UserDevice> devices = userDeviceRepository.findByUserId(userId);
+            for (UserDevice device : devices) {
+                if (isDeviceInDnd(device)) {
+                    return true;
+                }
+            }
+        }
+
+        // No global DND info available in UserNotificationPreferenceResponse,
+        // DND is managed per-device via UserDevice snapshots synced from user-service.
+        return false;
+    }
+
+    private boolean isDeviceInDnd(UserDevice device) {
+        if (!device.isDndEnabled()) {
             return false;
         }
+
+        if (device.getDndStartTime() == null || device.getDndEndTime() == null) {
+            return false;
+        }
+
+        try {
+            String timezone = device.getDndTimezone() != null
+                    ? device.getDndTimezone()
+                    : "Asia/Ho_Chi_Minh";
+
+            // Normalize "GMT+X" or "GMT-X" to "GMT+0X:00" to avoid DateTimeException
+            if (timezone.startsWith("GMT") && (timezone.contains("+") || timezone.contains("-"))) {
+                String prefix = timezone.substring(0, 4); // "GMT+" or "GMT-"
+                String offset = timezone.substring(4);   // "7" or "7:00"
+                if (!offset.contains(":")) {
+                    if (offset.length() == 1) offset = "0" + offset + ":00";
+                    else if (offset.length() == 2) offset = offset + ":00";
+                } else {
+                    String[] parts = offset.split(":");
+                    if (parts[0].length() == 1) offset = "0" + offset;
+                }
+                timezone = prefix + offset;
+            }
+
+            ZoneId zoneId = ZoneId.of(timezone);
+            ZonedDateTime nowZoned = ZonedDateTime.now(zoneId);
+
+            LocalTime now = nowZoned.toLocalTime();
+            LocalTime start = LocalTime.parse(device.getDndStartTime());
+            LocalTime end = LocalTime.parse(device.getDndEndTime());
+
+            return isWithinDndWindow(
+                    nowZoned,
+                    now,
+                    start,
+                    end,
+                    device.getActiveDays()
+            );
+        } catch (Exception e) {
+            log.warn("Failed to check device DND: deviceId={}, error={}",
+                    device.getDeviceId(), e.getMessage());
+            return false;
+        }
+    }
+
+    private boolean isWithinDndWindow(
+            ZonedDateTime nowZoned,
+            LocalTime now,
+            LocalTime start,
+            LocalTime end,
+            List<DayOfWeek> activeDays
+    ) {
+        boolean hasActiveDays = activeDays != null && !activeDays.isEmpty();
+
+        // Case 1: Same day window, e.g. 09:00 -> 17:00
+        if (start.isBefore(end)) {
+            if (hasActiveDays && !activeDays.contains(nowZoned.getDayOfWeek())) {
+                return false;
+            }
+
+            return !now.isBefore(start) && now.isBefore(end);
+        }
+
+        // Case 2: Crosses midnight, e.g. 23:00 -> 07:00
+        boolean inNightPart = !now.isBefore(start);
+        boolean inMorningPart = now.isBefore(end);
+
+        if (inNightPart) {
+            if (hasActiveDays && !activeDays.contains(nowZoned.getDayOfWeek())) {
+                return false;
+            }
+
+            return true;
+        }
+
+        if (inMorningPart) {
+            DayOfWeek previousDay = nowZoned.minusDays(1).getDayOfWeek();
+
+            if (hasActiveDays && !activeDays.contains(previousDay)) {
+                return false;
+            }
+
+            return true;
+        }
+
+        return false;
     }
 }

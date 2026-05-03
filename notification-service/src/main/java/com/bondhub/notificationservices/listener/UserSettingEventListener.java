@@ -21,19 +21,18 @@ public class UserSettingEventListener {
     UserDeviceRepository userDeviceRepository;
 
     @KafkaListener(topics = "${kafka.topics.user-events.updated:user.updated}", groupId = "notification-service-settings-group")
-    public void handleNotificationSettingsUpdated(NotificationSettingsUpdatedEvent event, Acknowledgment ack) {
-        log.info("Received NOTIFICATION_SETTINGS_UPDATED for user: {}", event.getUserId());
+    public void handleNotificationSettingsUpdated(NotificationSettingsUpdatedEvent settingsEvent, Acknowledgment ack) {
+        log.info("Received NOTIFICATION_SETTINGS_UPDATED for user: {}", settingsEvent.getUserId());
 
         try {
-            var devices = userDeviceRepository.findAllByUserId(event.getUserId());
-            
+            var devices = userDeviceRepository.findAllByUserId(settingsEvent.getUserId());
             for (var device : devices) {
                 var deviceId = device.getDeviceId();
                 
                 // 1. Get settings for this specific device if available
                 NotificationSettingsUpdatedEvent.DeviceSettings deviceSettings = null;
-                if (event.getDeviceSettingsMap() != null) {
-                    deviceSettings = event.getDeviceSettingsMap().get(deviceId);
+                if (settingsEvent.getDeviceSettingsMap() != null) {
+                    deviceSettings = settingsEvent.getDeviceSettingsMap().get(deviceId);
                 }
 
                 // 2. Map settings to local UserDevice model
@@ -54,9 +53,9 @@ public class UserSettingEventListener {
                         device.setActiveDays(deviceSettings.getDndSettings().getActiveDays() == null ? null :
                                 deviceSettings.getDndSettings().getActiveDays().stream().map(DayOfWeek::valueOf).toList());
                     }
-                } else if (event.getGlobalSettings() != null) {
+                } else if (settingsEvent.getGlobalSettings() != null) {
                     // Fallback to global settings
-                    var global = event.getGlobalSettings();
+                    var global = settingsEvent.getGlobalSettings();
                     device.setAllowNotifications(global.isAllowNotifications());
                     device.setNotifSound(global.isNotifSound());
                     device.setNotifVibration(global.isNotifVibration());
@@ -76,13 +75,11 @@ public class UserSettingEventListener {
             }
             
             userDeviceRepository.saveAll(devices);
-            log.info("Successfully synchronized notification settings for {} devices of user {}", devices.size(), event.getUserId());
+            log.info("Successfully synchronized notification settings for {} devices of user {}", devices.size(), settingsEvent.getUserId());
             ack.acknowledge();
             
         } catch (Exception e) {
-            log.error("Error synchronizing notification settings for user {}: {}", event.getUserId(), e.getMessage(), e);
-            // In case of error, we still acknowledge to avoid blocking other updates, 
-            // as this is a "best-effort" synchronization
+            log.error("Error synchronizing notification settings for user {}: {}", settingsEvent.getUserId(), e.getMessage(), e);
             ack.acknowledge();
         }
     }
