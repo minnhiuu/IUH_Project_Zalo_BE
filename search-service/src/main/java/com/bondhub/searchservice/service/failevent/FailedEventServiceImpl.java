@@ -8,7 +8,7 @@ import com.bondhub.searchservice.dto.request.FailedEventFilter;
 import com.bondhub.searchservice.dto.response.FailedEventResponse;
 import com.bondhub.searchservice.mapper.FailedEventMapper;
 import com.bondhub.searchservice.model.mongodb.FailedEvent;
-import com.bondhub.searchservice.repository.FailedEventRepository;
+import com.bondhub.searchservice.repository.mongodb.FailedEventRepository;
 import com.bondhub.common.event.message.MessageIndexRequestedEvent;
 import com.bondhub.common.event.user.UserIndexDeletedEvent;
 import com.bondhub.common.event.user.UserIndexRequestedEvent;

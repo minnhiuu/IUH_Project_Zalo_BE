@@ -1,4 +1,4 @@
-package com.bondhub.searchservice.repository;
+package com.bondhub.searchservice.repository.mongodb;
 
 import com.bondhub.common.model.kafka.EventType;
 import com.bondhub.searchservice.model.mongodb.FailedEvent;

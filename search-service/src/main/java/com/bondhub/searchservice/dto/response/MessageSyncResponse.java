@@ -8,6 +8,12 @@ import java.util.List;
 public record MessageSyncResponse(
         String id,
         String conversationId,
+        List<String> participantIds,
+        List<String> participantNames,
+        List<String> participantAvatars,
+        String conversationName,
+        String conversationAvatar,
+        boolean group,
         String senderId,
         String senderName,
         String senderAvatar,
@@ -20,6 +26,8 @@ public record MessageSyncResponse(
         String linkUrl,
         String originalFileName,
         Long size,
+        String searchableText,
+        String conversationSearchText,
         Instant createdAt,
         List<String> deletedBy,
         List<String> visibleTo
