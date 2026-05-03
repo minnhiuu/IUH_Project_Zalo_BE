@@ -14,8 +14,5 @@ public record GroupMemberListItemResponse(
         MemberRole role,
         OffsetDateTime joinedAt,
         boolean isFriend,
-        boolean isCurrentUser,
-        String joinMethod,
-        String addedBy,
-        String addedByName
+        boolean isCurrentUser
 ) {}

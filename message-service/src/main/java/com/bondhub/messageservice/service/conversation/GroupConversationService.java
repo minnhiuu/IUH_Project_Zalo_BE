@@ -19,7 +19,7 @@ public interface GroupConversationService {
 
     ConversationResponse addMembersToGroup(String conversationId, List<String> memberIds);
 
-    ConversationResponse removeMemberFromGroup(String conversationId, String targetUserId, boolean blockFromGroup);
+    ConversationResponse removeMemberFromGroup(String conversationId, String targetUserId);
 
     ConversationResponse promoteToAdmin(String conversationId, String targetUserId);
 
@@ -58,7 +58,5 @@ public interface GroupConversationService {
     PageResponse<List<SearchMemberResponse>> getBlockedMembers(String conversationId, int page, int size);
 
     PageResponse<List<SearchMemberResponse>> getBlockCandidates(String conversationId, String query, int page, int size);
-
-    PageResponse<List<ConversationResponse>> getMyGroupConversations(String query, String sort, String filter, int page, int size);
 
 }

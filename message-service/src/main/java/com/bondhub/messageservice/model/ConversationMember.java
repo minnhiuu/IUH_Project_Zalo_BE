@@ -1,6 +1,5 @@
 package com.bondhub.messageservice.model;
 
-import com.bondhub.messageservice.model.enums.JoinMethod;
 import com.bondhub.messageservice.model.enums.MemberRole;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -24,7 +23,4 @@ public class ConversationMember {
 
     LocalDateTime removedAt;
     String removedBy;
-
-    JoinMethod joinMethod;
-    String addedBy;  
 }
