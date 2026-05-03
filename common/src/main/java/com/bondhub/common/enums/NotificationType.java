@@ -7,6 +7,7 @@ public enum NotificationType {
     FRIEND_ACCEPT,
 
     MESSAGE_DIRECT,
+    MESSAGE_GROUP,
     CALL,
 
     POST_LIKE,

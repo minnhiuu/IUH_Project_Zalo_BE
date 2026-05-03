@@ -16,6 +16,7 @@ public enum EventType {
 
     USER_INDEX_REQUESTED,
     USER_INDEX_DELETED,
+    NOTIFICATION_SETTINGS_UPDATED,
 
     // Social Feed Events (social-feed-service)
     POST_CREATED,
