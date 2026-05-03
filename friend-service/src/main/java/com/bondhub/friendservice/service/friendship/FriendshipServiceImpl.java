@@ -466,7 +466,15 @@ public class FriendshipServiceImpl implements FriendshipService {
 
         for (FriendShip fs : friendships) {
             String targetId = fs.getRequested().equals(currentUserId) ? fs.getReceived() : fs.getRequested();
-            result.put(targetId, fs.getFriendStatus().name());
+            
+            String currentStatus = result.get(targetId);
+            String newStatus = fs.getFriendStatus().name();
+            
+            if (currentStatus == null || 
+                newStatus.equals("ACCEPTED") || 
+                (newStatus.equals("PENDING") && !currentStatus.equals("ACCEPTED"))) {
+                result.put(targetId, newStatus);
+            }
         }
         return result;
     }

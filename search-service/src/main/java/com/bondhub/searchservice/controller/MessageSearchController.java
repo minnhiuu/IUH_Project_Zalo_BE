@@ -3,8 +3,8 @@ package com.bondhub.searchservice.controller;
 import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.common.dto.PageResponse;
 import com.bondhub.common.utils.SecurityUtil;
+import com.bondhub.common.dto.client.messageservice.ConversationSearchResponse;
 import com.bondhub.searchservice.dto.request.MessageSearchRequest;
-import com.bondhub.searchservice.dto.response.MessageSearchOverviewResponse;
 import com.bondhub.searchservice.dto.response.MessageSearchResponse;
 import com.bondhub.searchservice.enums.MessageSearchSection;
 import com.bondhub.searchservice.service.index.message.MessageSearchService;
@@ -43,14 +43,12 @@ public class MessageSearchController {
                 messageSearchService.searchMessages(securityUtil.getCurrentUserId(), request, section, pageable)));
     }
 
-    @GetMapping("/overview")
-    public ResponseEntity<ApiResponse<MessageSearchOverviewResponse>> getMessageSearchOverview(
-            @Valid @ModelAttribute MessageSearchRequest request,
-            @RequestParam(defaultValue = "5") int sectionSize) {
+    @GetMapping("/senders")
+    public ResponseEntity<ApiResponse<List<ConversationSearchResponse>>> getMessageSearchSenders(
+            @RequestParam String keyword) {
         return ResponseEntity.ok(ApiResponse.success(
-                messageSearchService.searchMessageOverview(
+                messageSearchService.searchMessageSenders(
                         securityUtil.getCurrentUserId(),
-                        request,
-                        sectionSize)));
+                        keyword)));
     }
 }

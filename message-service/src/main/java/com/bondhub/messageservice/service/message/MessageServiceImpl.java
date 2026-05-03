@@ -1,6 +1,5 @@
 package com.bondhub.messageservice.service.message;
 
-import com.bondhub.common.utils.S3Util;
 import com.bondhub.common.utils.S3UtilV2;
 import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.common.exception.AppException;
@@ -275,6 +274,13 @@ public class MessageServiceImpl implements MessageService {
 
         securityCriteria.add(Criteria.where("deletedBy").ne(currentUserId));
         securityCriteria.add(Criteria.where("createdAt").gt(effectiveStartTime));
+
+        // Visibility filter: visibleTo is null OR visibleTo contains currentUserId
+        securityCriteria.add(new Criteria().orOperator(
+                Criteria.where("visibleTo").is(null),
+                Criteria.where("visibleTo").size(0),
+                Criteria.where("visibleTo").is(currentUserId)
+        ));
 
         if (!isActive) {
             securityCriteria.add(Criteria.where("type").is(MessageType.SYSTEM));
@@ -698,6 +704,23 @@ public class MessageServiceImpl implements MessageService {
                 .collect(Collectors.toList());
     }
 
+    @Override
+    public MessageResponse findById(String messageId) {
+        String currentUserId = securityUtil.getCurrentUserId();
+        Message message = messageRepository.findById(messageId)
+                .orElseThrow(() -> new AppException(ErrorCode.MESSAGE_NOT_FOUND));
+
+        Conversation room = conversationRepository.findById(message.getConversationId())
+                .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
+        assertConversationMember(room, currentUserId);
+
+        String baseUrl = s3UtilV2.getS3BaseUrl();
+        MessageResponse dto = messageMapper.mapToMessageResponse(message, baseUrl);
+        List<MessageResponse> dtos = new ArrayList<>(List.of(dto));
+        enrichMessages(dtos);
+        return dtos.get(0);
+    }
+
     // ─────────────────────────── Private helpers ───────────────────────────
 
     /**
@@ -976,14 +999,22 @@ public class MessageServiceImpl implements MessageService {
     private List<AttachmentInfo> mapAttachments(MessageSendRequest request) {
         if (request.attachments() == null || request.attachments().isEmpty()) return List.of();
         return request.attachments().stream()
-                .map(a -> AttachmentInfo.builder()
-                        .key(a.key())
-                        .url(a.url())
-                        .fileName(a.fileName())
-                        .originalFileName(a.originalFileName())
-                        .contentType(a.contentType())
-                        .size(a.size())
-                        .build())
+                .map(a -> {
+                    String originalFileName = a.originalFileName();
+                    String extension = null;
+                    if (originalFileName != null && originalFileName.contains(".")) {
+                        extension = originalFileName.substring(originalFileName.lastIndexOf(".") + 1).toLowerCase().trim();
+                    }
+                    return AttachmentInfo.builder()
+                            .key(a.key())
+                            .url(a.url())
+                            .fileName(a.fileName())
+                            .originalFileName(originalFileName)
+                            .extension(extension)
+                            .contentType(a.contentType())
+                            .size(a.size())
+                            .build();
+                })
                 .toList();
     }
 

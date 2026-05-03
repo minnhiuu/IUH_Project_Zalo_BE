@@ -72,4 +72,5 @@ public interface MessageService {
     CursorPageResponse<MessageResponse> findChatMessagesV2(
             String conversationId, String cursor, int limit, String direction, String aroundMessageId);
 
+    MessageResponse findById(String messageId);
 }

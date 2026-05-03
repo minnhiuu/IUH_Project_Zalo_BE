@@ -1,18 +1,22 @@
 package com.bondhub.searchservice.service.index.message;
 
 import co.elastic.clients.elasticsearch._types.SortOrder;
+import co.elastic.clients.elasticsearch._types.aggregations.Aggregate;
 import co.elastic.clients.elasticsearch._types.query_dsl.Query;
+import co.elastic.clients.elasticsearch._types.aggregations.Aggregation;
+import co.elastic.clients.elasticsearch._types.aggregations.StringTermsBucket;
+import co.elastic.clients.elasticsearch.core.search.Hit;
 import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.common.dto.PageResponse;
 import com.bondhub.common.dto.client.messageservice.ConversationMemberLookupResponse;
+import com.bondhub.common.dto.client.messageservice.ConversationSearchResponse;
 import com.bondhub.common.enums.MessageStatus;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
-import com.bondhub.common.utils.S3Util;
+import com.bondhub.common.utils.S3UtilV2;
 import com.bondhub.searchservice.client.ConversationMemberClient;
 import com.bondhub.searchservice.config.ElasticsearchProperties;
 import com.bondhub.searchservice.dto.request.MessageSearchRequest;
-import com.bondhub.searchservice.dto.response.MessageSearchOverviewResponse;
 import com.bondhub.searchservice.dto.response.MessageSearchResponse;
 import com.bondhub.searchservice.enums.MessageSearchSection;
 import com.bondhub.searchservice.model.elasticsearch.MessageIndex;
@@ -25,6 +29,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.elasticsearch.client.elc.ElasticsearchAggregation;
+import org.springframework.data.elasticsearch.client.elc.ElasticsearchAggregations;
 import org.springframework.data.elasticsearch.client.elc.NativeQuery;
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
 import org.springframework.data.elasticsearch.core.SearchHit;
@@ -70,14 +76,26 @@ public class MessageSearchServiceImpl implements MessageSearchService {
     ElasticsearchOperations esOperations;
     ElasticsearchProperties esProperties;
     ConversationMemberClient conversationMemberClient;
+    S3UtilV2 s3UtilV2;
 
-    @NonFinal
-    @Value("${aws.s3.bucket.name}")
-    String bucketName;
+    @Override
+    public PageResponse<List<ConversationSearchResponse>> searchConversations(
+            String userId,
+            String keyword,
+            Boolean isGroup,
+            Pageable pageable) {
+        ApiResponse<PageResponse<List<ConversationSearchResponse>>> response =
+                conversationMemberClient.searchConversations(
+                        userId,
+                        keyword,
+                        isGroup,
+                        pageable.getPageNumber(),
+                        pageable.getPageSize());
 
-    @NonFinal
-    @Value("${cloud.aws.region.static}")
-    String region;
+        return response != null && response.data() != null
+                ? response.data()
+                : PageResponse.empty(pageable);
+    }
 
     @Override
     public PageResponse<List<MessageSearchResponse>> searchMessages(
@@ -85,12 +103,12 @@ public class MessageSearchServiceImpl implements MessageSearchService {
             MessageSearchRequest request,
             MessageSearchSection section,
             Pageable pageable) {
-        ConversationMemberLookupResponse membership = getConversationMembership(request.conversationId(), userId);
+        ConversationMemberLookupResponse membership = resolveConversationMembership(request.conversationId(), userId);
 
         NativeQuery query = buildQuery(
                 userId,
                 request,
-                membership.joinedAt(),
+                membership != null ? membership.joinedAt() : null,
                 section,
                 pageable);
 
@@ -105,28 +123,132 @@ public class MessageSearchServiceImpl implements MessageSearchService {
     }
 
     @Override
-    public MessageSearchOverviewResponse searchMessageOverview(
-            String userId,
-            MessageSearchRequest request,
-            int sectionSize) {
-        ConversationMemberLookupResponse membership = getConversationMembership(request.conversationId(), userId);
-        int normalizedSectionSize = Math.max(sectionSize, 1);
-        Pageable sectionPageable = PageRequest.of(0, normalizedSectionSize);
+    public List<ConversationSearchResponse> searchMessageSenders(String userId, String keyword) {
+        if (!hasText(keyword)) {
+            return List.of();
+        }
 
-        PageResponse<List<MessageSearchResponse>> messages = executeSearch(
-                userId,
-                request,
-                membership.joinedAt(),
-                MessageSearchSection.MESSAGES,
-                sectionPageable);
-        PageResponse<List<MessageSearchResponse>> files = executeSearch(
-                userId,
-                request,
-                membership.joinedAt(),
-                MessageSearchSection.FILES,
-                sectionPageable);
+        log.info("searchMessageSenders called with userId={}, keyword={}", userId, keyword);
 
-        return new MessageSearchOverviewResponse(messages, files);
+        Query query = Query.of(q -> q.bool(b -> {
+            b.must(m -> m.matchPhrasePrefix(mm -> mm
+                    .field("searchableText")
+                    .query(keyword)
+            ));
+
+            b.filter(f -> f.term(t -> t
+                    .field("participantIds")
+                    .value(userId)
+            ));
+
+            b.filter(f -> f.terms(t -> t
+                    .field("type")
+                    .terms(values -> values.value(List.of(
+                            co.elastic.clients.elasticsearch._types.FieldValue.of("CHAT"),
+                            co.elastic.clients.elasticsearch._types.FieldValue.of(LINK_MESSAGE_TYPE)
+                    )))
+            ));
+
+            b.filter(f -> f.bool(vb -> {
+                vb.should(s -> s.bool(nb -> nb.mustNot(mn -> mn.exists(e -> e.field("visibleTo")))));
+                vb.should(s -> s.term(t -> t.field("visibleTo").value(userId)));
+                vb.minimumShouldMatch("1");
+                return vb;
+            }));
+
+            b.mustNot(mn -> mn.term(t -> t.field("deletedBy").value(userId)));
+            b.mustNot(mn -> mn.term(t -> t
+                    .field("status")
+                    .value(MessageStatus.DELETED_BY_ADMIN.name())
+            ));
+
+            return b;
+        }));
+
+        NativeQuery nativeQuery = NativeQuery.builder()
+                .withQuery(query)
+                .withMaxResults(0)
+                .withAggregation("senders", Aggregation.of(a -> a
+                        .terms(t -> t.field("senderId").size(50))
+                        .aggregations("top_sender_hit", Aggregation.of(sub -> sub
+                                .topHits(th -> th.size(1))
+                        ))
+                ))
+                .build();
+
+        SearchHits<MessageIndex> searchHits = esOperations.search(nativeQuery, MessageIndex.class, IndexCoordinates.of(esProperties.getMessageAlias()));
+
+        log.info("searchMessageSenders totalHits={}, hasAggregations={}", searchHits.getTotalHits(), searchHits.hasAggregations());
+
+        if (!searchHits.hasAggregations()) {
+            return List.of();
+        }
+
+        ElasticsearchAggregations aggregationsContainer = (ElasticsearchAggregations) Objects.requireNonNull(searchHits.getAggregations());
+        ElasticsearchAggregation sendersAggregation = aggregationsContainer.get("senders");
+
+        if (sendersAggregation == null) {
+            log.warn("searchMessageSenders: 'senders' aggregation is null");
+            return List.of();
+        }
+
+        List<StringTermsBucket> buckets = sendersAggregation.aggregation().getAggregate().sterms().buckets().array();
+        log.info("searchMessageSenders: found {} sender buckets", buckets.size());
+
+        return buckets.stream()
+                .map(bucket -> {
+                    String senderId = bucket.key().stringValue();
+                    log.debug("Processing sender bucket: senderId={}, docCount={}", senderId, bucket.docCount());
+
+                    var topHits = bucket.aggregations().get("top_sender_hit").topHits();
+                    if (topHits.hits().hits().isEmpty()) {
+                        log.debug("No top hits for senderId={}", senderId);
+                        return null;
+                    }
+
+                    var hit = topHits.hits().hits().get(0);
+
+                    if (hit.source() == null) {
+                        log.debug("No _source for senderId={}", senderId);
+                        return null;
+                    }
+
+                    String senderName = null;
+                    String senderAvatar = null;
+                    try {
+                        var sourceJson = hit.source().toJson().asJsonObject();
+                        senderName = sourceJson.containsKey("senderName") && !sourceJson.isNull("senderName")
+                                ? sourceJson.getString("senderName") : null;
+                        senderAvatar = sourceJson.containsKey("senderAvatar") && !sourceJson.isNull("senderAvatar")
+                                ? sourceJson.getString("senderAvatar") : null;
+                    } catch (Exception e) {
+                        log.error("Error extracting sender fields for senderId={}: {}", senderId, e.getMessage());
+                    }
+
+                    if (senderName == null) {
+                        log.warn("Could not resolve senderName for senderId={}, skipping", senderId);
+                        return null;
+                    }
+
+                    log.debug("Resolved sender: id={}, name={}", senderId, senderName);
+
+                    return ConversationSearchResponse.builder()
+                            .recipientId(senderId)
+                            .name(senderName)
+                            .avatar(s3UtilV2.getFullUrl(senderAvatar))
+                            .group(false)
+                            .build();
+                })
+                .filter(Objects::nonNull)
+                .toList();
+    }
+
+    private ConversationMemberLookupResponse resolveConversationMembership(String conversationId, String userId) {
+        if (!hasText(conversationId)) {
+            return null;
+        }
+
+        return getConversationMembership(conversationId, userId);
     }
 
     private ConversationMemberLookupResponse getConversationMembership(String conversationId, String userId) {
@@ -155,7 +277,7 @@ public class MessageSearchServiceImpl implements MessageSearchService {
             Pageable pageable) {
 
         Instant lowerBound = resolveLowerBound(request, joinedAt);
-        Instant upperBound = request.to();
+        Instant upperBound = request.to() != null ? Instant.ofEpochMilli(request.to()) : null;
         boolean hasKeyword = hasText(request.keyword());
 
         if (lowerBound != null && upperBound != null && lowerBound.isAfter(upperBound)) {
@@ -170,10 +292,17 @@ public class MessageSearchServiceImpl implements MessageSearchService {
                 ));
             }
 
-            b.filter(f -> f.term(t -> t
-                    .field("conversationId")
-                    .value(request.conversationId())
-            ));
+            if (hasText(request.conversationId())) {
+                b.filter(f -> f.term(t -> t
+                        .field("conversationId")
+                        .value(request.conversationId())
+                ));
+            } else {
+                b.filter(f -> f.term(t -> t
+                        .field("participantIds")
+                        .value(userId)
+                ));
+            }
 
             if (request.senderId() != null) {
                 b.filter(f -> f.term(t -> t
@@ -187,10 +316,44 @@ public class MessageSearchServiceImpl implements MessageSearchService {
                         .field("type")
                         .value(FILE_MESSAGE_TYPE)
                 ));
+
+                if (request.fileType() != null) {
+                    String ft = request.fileType().toUpperCase(Locale.ROOT);
+                    b.filter(ff -> {
+                        switch (ft) {
+                            case "PDF" -> ff.term(t -> t.field("fileExtension").value("pdf"));
+                            case "WORD" -> ff.terms(t -> t.field("fileExtension").terms(v -> v.value(List.of(
+                                    co.elastic.clients.elasticsearch._types.FieldValue.of("doc"),
+                                    co.elastic.clients.elasticsearch._types.FieldValue.of("docx")
+                            ))));
+                            case "EXCEL" -> ff.terms(t -> t.field("fileExtension").terms(v -> v.value(List.of(
+                                    co.elastic.clients.elasticsearch._types.FieldValue.of("xls"),
+                                    co.elastic.clients.elasticsearch._types.FieldValue.of("xlsx")
+                            ))));
+                            case "POWERPOINT" -> ff.terms(t -> t.field("fileExtension").terms(v -> v.value(List.of(
+                                    co.elastic.clients.elasticsearch._types.FieldValue.of("ppt"),
+                                    co.elastic.clients.elasticsearch._types.FieldValue.of("pptx")
+                            ))));
+                        }
+                        return ff;
+                    });
+                }
             } else if (section == MessageSearchSection.MESSAGES) {
-                b.mustNot(mn -> mn.term(t -> t
+                b.filter(f -> f.terms(t -> t
                         .field("type")
-                        .value(FILE_MESSAGE_TYPE)
+                        .terms(values -> values.value(List.of(
+                                co.elastic.clients.elasticsearch._types.FieldValue.of("CHAT"),
+                                co.elastic.clients.elasticsearch._types.FieldValue.of(LINK_MESSAGE_TYPE)
+                        )))
+                ));
+            } else {
+                b.filter(f -> f.terms(t -> t
+                        .field("type")
+                        .terms(values -> values.value(List.of(
+                                co.elastic.clients.elasticsearch._types.FieldValue.of("CHAT"),
+                                co.elastic.clients.elasticsearch._types.FieldValue.of(FILE_MESSAGE_TYPE),
+                                co.elastic.clients.elasticsearch._types.FieldValue.of(LINK_MESSAGE_TYPE)
+                        )))
                 ));
             }
 
@@ -274,7 +437,7 @@ public class MessageSearchServiceImpl implements MessageSearchService {
             lowerBounds.add(joinedAt);
         }
         if (request.from() != null) {
-            lowerBounds.add(request.from());
+            lowerBounds.add(Instant.ofEpochMilli(request.from()));
         }
 
         Instant shorthandBound = resolveDateRange(request.dateRange());
@@ -313,15 +476,22 @@ public class MessageSearchServiceImpl implements MessageSearchService {
                 .conversationId(message.getConversationId())
                 .senderId(message.getSenderId())
                 .senderName(message.getSenderName())
-                .senderAvatar(message.getSenderAvatar() != null
-                        ? S3Util.getS3BaseUrl(bucketName, region) + message.getSenderAvatar()
-                        : null)
+                .senderAvatar(s3UtilV2.getFullUrl(message.getSenderAvatar()))
                 .displayContent(displayContent)
                 .size(message.getSize())
                 .type(message.getType())
                 .status(message.getStatus())
                 .hasAttachment(message.isHasAttachment())
                 .hasLink(message.isHasLink())
+                .isGroup(message.isGroup())
+                .conversationName(message.getConversationName())
+                .conversationAvatar(s3UtilV2.getFullUrl(message.getConversationAvatar()))
+                .participantNames(message.getParticipantNames())
+                .participantAvatars(message.getParticipantAvatars() != null
+                        ? message.getParticipantAvatars().stream()
+                                .map(s3UtilV2::getFullUrl)
+                                .toList()
+                        : null)
                 .createdAt(message.getCreatedAt())
                 .displayHighlights(displayHighlights)
                 .build();

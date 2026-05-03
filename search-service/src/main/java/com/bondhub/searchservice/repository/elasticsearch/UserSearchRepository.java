@@ -1,4 +1,4 @@
-package com.bondhub.searchservice.repository;
+package com.bondhub.searchservice.repository.elasticsearch;
 
 import com.bondhub.searchservice.model.elasticsearch.UserIndex;
 import org.springframework.data.elasticsearch.repository.ElasticsearchRepository;
