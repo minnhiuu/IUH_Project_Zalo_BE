@@ -42,7 +42,6 @@ public class Message extends BaseModel {
     MessageStatus status = MessageStatus.NORMAL;
 
     Map<String, Object> metadata; // system message action data
-    String deletedByAdminId;       // userId of admin/owner who deleted this message
     List<AttachmentInfo> attachments;
 
     LinkPreview linkPreview;
