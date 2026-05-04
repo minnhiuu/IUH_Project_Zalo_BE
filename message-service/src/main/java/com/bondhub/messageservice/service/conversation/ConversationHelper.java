@@ -52,8 +52,6 @@ public class ConversationHelper {
     private final MongoTemplate mongoTemplate;
     private final S3UtilV2 s3UtilV2;
 
-
-
     @Value("${kafka.topics.socket-events}")
     private String socketEventsTopic;
 

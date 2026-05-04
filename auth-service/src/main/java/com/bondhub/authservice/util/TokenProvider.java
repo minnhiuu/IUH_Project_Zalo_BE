@@ -5,20 +5,27 @@ import com.bondhub.authservice.dto.auth.response.TokenResponse;
 import com.bondhub.authservice.dto.device.request.DeviceCreateRequest;
 import com.bondhub.authservice.enums.DeviceType;
 import com.bondhub.authservice.model.Account;
+import com.bondhub.authservice.model.redis.RefreshTokenSession;
 import com.bondhub.authservice.service.device.DeviceService;
 import com.bondhub.authservice.service.token.TokenStoreService;
+import com.bondhub.common.dto.client.socketservice.SocketEvent;
 import com.bondhub.common.enums.NotificationType;
+import com.bondhub.common.enums.SocketEventType;
 import com.bondhub.common.event.notification.RawNotificationEvent;
 import com.bondhub.common.publisher.RawNotificationEventPublisher;
 import com.bondhub.common.utils.JwtUtil;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
+import lombok.experimental.NonFinal;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -33,6 +40,11 @@ public class TokenProvider {
     UserServiceClient userServiceClient;
     DeviceService deviceService;
     RawNotificationEventPublisher rawNotificationEventPublisher;
+    KafkaTemplate<String, Object> kafkaTemplate;
+
+    @NonFinal
+    @Value("${kafka.topics.socket-events:socket-events}")
+    String socketEventsTopic;
 
     public TokenResponse generateFullTokenResponse(Account account, String deviceId, DeviceType deviceType,
             String userAgent, String ipAddress) {
@@ -58,7 +70,7 @@ public class TokenProvider {
 
         String accessTokenJti = jwtUtil.extractJti(accessToken);
 
-        tokenStoreService.createRefreshSession(
+        List<RefreshTokenSession> kickedSessions = tokenStoreService.createRefreshSession(
                 sessionId,
                 account.getId(),
                 account.getPhoneNumber(),
@@ -69,6 +81,11 @@ public class TokenProvider {
                 userAgent,
                 ipAddress,
                 refreshExpirationMs / 1000);
+
+        // For web logins: force-logout any previously active web sessions
+        if (deviceType == DeviceType.WEB && userId != null && !kickedSessions.isEmpty()) {
+            forceLogoutKickedWebSessions(kickedSessions, account.getId(), userId);
+        }
 
         // Persist / update the device in MongoDB
         try {
@@ -103,6 +120,35 @@ public class TokenProvider {
                 System.currentTimeMillis() + (accessTokenTtlSeconds * 1000));
 
         return TokenResponse.of(accessToken, refreshToken, refreshExpirationMs);
+    }
+
+    /**
+     * Blacklists the access token and sends a FORCE_LOGOUT socket event for every
+     * web session that was displaced by the new login.  Fire-and-forget; any single
+     * failure is logged and swallowed so it never blocks the login response.
+     */
+    private void forceLogoutKickedWebSessions(List<RefreshTokenSession> kicked, String accountId, String userId) {
+        long accessTokenTtlMs = jwtUtil.getAccessTokenExpirationSeconds() * 1000;
+        for (RefreshTokenSession session : kicked) {
+            try {
+                String jti = session.getAccessTokenJti();
+                if (jti != null && !jti.isBlank() && accessTokenTtlMs > 0) {
+                    tokenStoreService.blacklistAccessToken(jti, accountId, null,
+                            accessTokenTtlMs / 1000, "NewWebLogin");
+                }
+
+                Map<String, String> payload = Map.of(
+                        "type", "FORCE_LOGOUT",
+                        "sessionId", session.getSessionId(),
+                        "reason", "NewWebLogin");
+                kafkaTemplate.send(socketEventsTopic, new SocketEvent(
+                        SocketEventType.FORCE_LOGOUT, userId, "/queue/session", payload));
+                log.info("[Auth] Published FORCE_LOGOUT for displaced web session: userId={}, sessionId={}",
+                        userId, session.getSessionId());
+            } catch (Exception e) {
+                log.warn("[Auth] Failed to force-logout kicked web session={}: {}", session.getSessionId(), e.getMessage());
+            }
+        }
     }
 
     /**
