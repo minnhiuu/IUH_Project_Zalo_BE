@@ -19,6 +19,7 @@ import org.springframework.retry.annotation.Recover;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 
 @Service
 @Slf4j
@@ -67,22 +68,35 @@ public class FcmServiceImpl implements FcmService {
 
         Message.Builder messageBuilder = Message.builder()
                 .setToken(device.getFcmToken())
+                .setNotification(Notification.builder()
+                        .setTitle(title)
+                        .setBody(body)
+                        .build())
                 .putAllData(dataPayload);
 
         if (device.getPlatform() == Platform.WEB) {
             messageBuilder.setWebpushConfig(WebpushConfig.builder()
                     .setFcmOptions(WebpushFcmOptions.withLink(clickUrl))
+                    .putHeader("Topic", notificationId != null ? notificationId : UUID.randomUUID().toString())
+                    .setNotification(WebpushNotification.builder()
+                            .setTitle(title)
+                            .setBody(body)
+                            .setIcon("http://localhost:5173/images/logo.jpg") // <--- Logo từ Frontend của bạn
+                            .setTag(notificationId != null ? notificationId : UUID.randomUUID().toString())
+                            .build())
                     .build());
         }
 
         if (device.getPlatform() == Platform.ANDROID) {
             messageBuilder.setAndroidConfig(AndroidConfig.builder()
                     .setPriority(AndroidConfig.Priority.HIGH)
+                    .setCollapseKey(notificationId != null ? notificationId : UUID.randomUUID().toString())
                     .build());
         }
 
         if (device.getPlatform() == Platform.IOS) {
             messageBuilder.setApnsConfig(ApnsConfig.builder()
+                    .putHeader("apns-collapse-id", notificationId != null ? notificationId : UUID.randomUUID().toString())
                     .setAps(Aps.builder()
                             .setContentAvailable(true)
                             .setMutableContent(true)
@@ -95,8 +109,8 @@ public class FcmServiceImpl implements FcmService {
             FirebaseMessaging.getInstance().send(messageBuilder.build());
             log.info("[FCM] Sent push to device: {} (type={})", device.getDeviceId(), type);
             
-            // Mark as SENT if not already
-            if (notificationId != null) {
+            // Mark as SENT if not already (only if it's a valid ObjectId string)
+            if (notificationId != null && notificationId.matches("^[0-9a-fA-F]{24}$")) {
                 notificationRepository.findById(notificationId).ifPresent(n -> {
                     if (n.getDeliveryStatus() != DeliveryStatus.SENT) {
                         n.setDeliveryStatus(DeliveryStatus.SENT);
@@ -125,7 +139,7 @@ public class FcmServiceImpl implements FcmService {
     public void recover(RuntimeException e, String notificationId, UserDevice device, String title, String body, String type, Map<String, Object> metadata) {
         log.error("[FCM-RECOVER] All retries failed for device {}. Final error: {}", device.getDeviceId(), e.getMessage());
         
-        if (notificationId != null) {
+        if (notificationId != null && notificationId.matches("^[0-9a-fA-F]{24}$")) {
             notificationRepository.findById(notificationId).ifPresent(n -> {
                 if (n.getDeliveryStatus() == DeliveryStatus.PENDING) {
                     n.setDeliveryStatus(DeliveryStatus.FAILED);
