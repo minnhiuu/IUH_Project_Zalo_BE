@@ -21,6 +21,8 @@ public interface PostRepository extends MongoRepository<Post, String> {
 
     Page<Post> findByPostTypeInAndActiveTrueAndIsCurrentTrueOrderByUploadedAtDesc(List<PostType> postTypes, Pageable pageable);
 
+    Page<Post> findByPostTypeInAndActiveTrueAndIsCurrentTrueAndIdNotInOrderByUploadedAtDesc(List<PostType> postTypes, List<String> excludedIds, Pageable pageable);
+
     // ── Internal / recommendation queries ─────────────────────────────────────
 
     /** Fetch posts by a set of author IDs — used by the recommendation service. */

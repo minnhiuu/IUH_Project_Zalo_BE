@@ -25,6 +25,9 @@ import com.bondhub.socialfeedservice.repository.HashtagRepository;
 import com.bondhub.socialfeedservice.repository.PostRepository;
 import com.bondhub.socialfeedservice.repository.ReactionRepository;
 import com.bondhub.socialfeedservice.repository.UserSummaryRepository;
+import com.bondhub.socialfeedservice.repository.UserInteractionRepository;
+import com.bondhub.common.event.socialfeed.InteractionType;
+import com.bondhub.socialfeedservice.model.UserInteraction;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
@@ -60,6 +63,7 @@ public class PostServiceImpl implements PostService {
     final PostEventPublisher postEventPublisher;
     final ReactionRepository reactionRepository;
     final UserSummaryRepository userSummaryRepository;
+    final UserInteractionRepository userInteractionRepository;
     final S3UtilV2 s3UtilV2;
 
     @Override
@@ -139,13 +143,27 @@ public class PostServiceImpl implements PostService {
     @Override
     public PageResponse<List<PostResponse>> getFeedAndSharePosts(int page, int size) {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "uploadedAt"));
+        String currentUserId = securityUtil.getCurrentUserId();
 
-        Page<Post> posts = postRepository.findByPostTypeInAndActiveTrueAndIsCurrentTrueOrderByUploadedAtDesc(
-                List.of(PostType.FEED, PostType.SHARE),
-                pageable);
+        List<String> viewedPostIds = userInteractionRepository
+                .findByUserIdAndInteractionType(currentUserId, InteractionType.VIEW)
+                .stream()
+                .map(UserInteraction::getPostId)
+                .toList();
+
+        Page<Post> posts;
+        if (viewedPostIds.isEmpty()) {
+            posts = postRepository.findByPostTypeInAndActiveTrueAndIsCurrentTrueOrderByUploadedAtDesc(
+                    List.of(PostType.FEED, PostType.SHARE),
+                    pageable);
+        } else {
+            posts = postRepository.findByPostTypeInAndActiveTrueAndIsCurrentTrueAndIdNotInOrderByUploadedAtDesc(
+                    List.of(PostType.FEED, PostType.SHARE),
+                    viewedPostIds,
+                    pageable);
+        }
 
         String s3BaseUrl = getS3BaseUrl();
-        String currentUserId = securityUtil.getCurrentUserId();
         Map<String, UserSummary> authorMap = buildAuthorMap(posts.getContent());
         Map<String, Post> sharedPostMap = buildSharedPostMap(posts.getContent());
 
