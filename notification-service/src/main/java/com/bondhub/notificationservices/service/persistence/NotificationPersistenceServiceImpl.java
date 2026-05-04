@@ -1,5 +1,6 @@
 package com.bondhub.notificationservices.service.persistence;
 
+import com.bondhub.common.enums.NotificationType;
 import com.bondhub.notificationservices.enums.BatchWindowConfig;
 import com.bondhub.notificationservices.event.BatchedNotificationEvent;
 import com.bondhub.notificationservices.model.Notification;
@@ -142,8 +143,14 @@ public class NotificationPersistenceServiceImpl implements NotificationPersisten
 
         // Aggregation logic for Chat messages
         if (event.getType() == NotificationType.MESSAGE_DIRECT || event.getType() == NotificationType.MESSAGE_GROUP) {
-            List<String> snippets = (List<String>) persisted.getPayload().get("snippets");
-            if (snippets == null) snippets = new ArrayList<>();
+            // If it's a "new" notification (previous was read or null), start a fresh snippets list
+            List<String> snippets;
+            if (shouldIncrement) {
+                snippets = new ArrayList<>();
+            } else {
+                snippets = (List<String>) persisted.getPayload().get("snippets");
+                if (snippets == null) snippets = new ArrayList<>();
+            }
             
             String actorName = event.getLastActorName();
             String content = (String) basePayload.get("content");
@@ -152,14 +159,14 @@ public class NotificationPersistenceServiceImpl implements NotificationPersisten
                     ? actorName + ": " + content 
                     : content;
                 
-                // Add if not duplicate of the last one (avoid double-saving issues)
+                // Add if not duplicate of the last one
                 if (snippets.isEmpty() || !snippets.get(snippets.size() - 1).equals(newSnippet)) {
                     snippets.add(newSnippet);
                 }
                 
-                // Keep only last 5
-                if (snippets.size() > 5) {
-                    snippets = snippets.subList(snippets.size() - 5, snippets.size());
+                // Safe limit of 20 to avoid FCM payload size limits
+                if (snippets.size() > 20) {
+                    snippets = snippets.subList(snippets.size() - 20, snippets.size());
                 }
                 payloadMap.put("snippets", snippets);
             }
