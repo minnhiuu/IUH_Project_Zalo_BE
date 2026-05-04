@@ -141,6 +141,15 @@ public class DeviceServiceImpl implements DeviceService {
         // No existing device found → create a new one
         log.info("Creating new device (upsert) with sessionId: {}", request.sessionId());
         Device device = deviceMapper.toEntity(request);
+
+        // Mark as root if this is the first-ever MOBILE device registered for this account.
+        // Only one root device exists per account; subsequent mobile logins do not displace it.
+        if (request.deviceType() == com.bondhub.authservice.enums.DeviceType.MOBILE
+                && !deviceRepository.existsByAccountIdAndIsRootDeviceTrue(request.accountId())) {
+            device.setIsRootDevice(true);
+            log.info("[Device] Designated root mobile device for accountId: {}", request.accountId());
+        }
+
         Device savedDevice = deviceRepository.save(device);
         log.info("Device created (upsert) with id: {}", savedDevice.getId());
         return deviceMapper.toResponse(savedDevice, isSessionActive(savedDevice.getSessionId()));
@@ -228,6 +237,12 @@ public class DeviceServiceImpl implements DeviceService {
         return refreshTokenSessionRepository.findById(sessionId)
                 .map(RefreshTokenSession::isValid)
                 .orElse(false);
+    }
+
+    @Override
+    public java.util.Optional<String> getRootMobileDeviceId(String accountId) {
+        return deviceRepository.findFirstByAccountIdAndIsRootDeviceTrue(accountId)
+                .map(Device::getDeviceId);
     }
 
 }

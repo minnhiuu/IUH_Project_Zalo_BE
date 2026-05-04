@@ -16,6 +16,12 @@ public interface PostService {
 
     PageResponse<List<PostResponse>> getMyPosts(int page, int size);
 
+    /**
+     * Fetch the public FEED &amp; SHARE posts of any user by their ID, newest first.
+     * Visibility rules are intentionally permissive here (profile page view).
+     */
+    PageResponse<List<PostResponse>> getUserPosts(String userId, int page, int size);
+
     PageResponse<List<PostResponse>> getFeedAndSharePosts(int page, int size);
 
     List<StoryGroupResponse> getStoryPosts(int page, int size);

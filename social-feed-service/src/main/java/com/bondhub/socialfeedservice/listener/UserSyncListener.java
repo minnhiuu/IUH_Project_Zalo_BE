@@ -1,7 +1,7 @@
 package com.bondhub.socialfeedservice.listener;
 
 import com.bondhub.common.event.user.UserCreatedEvent;
-import com.bondhub.common.event.user.UserUpdatedEvent;
+import com.bondhub.common.event.user.UserProfileUpdatedEvent;
 import com.bondhub.socialfeedservice.model.UserSummary;
 import com.bondhub.socialfeedservice.repository.UserSummaryRepository;
 import lombok.AccessLevel;
@@ -62,29 +62,29 @@ public class UserSyncListener {
             containerFactory = "kafkaListenerContainerFactory"
     )
     public void handleUserUpdated(
-            @Payload UserUpdatedEvent event,
+            @Payload UserProfileUpdatedEvent event,
             @Header(KafkaHeaders.RECEIVED_TOPIC) String topic,
             @Header(KafkaHeaders.RECEIVED_PARTITION) int partition,
             @Header(KafkaHeaders.OFFSET) long offset,
             Acknowledgment acknowledgment) {
 
         log.info("Received USER_UPDATED event: topic={}, partition={}, offset={}, userId={}",
-                topic, partition, offset, event.getUserId());
+                topic, partition, offset, event.userId());
 
-        if (event.getUserId() == null || event.getUserId().isBlank()) {
+        if (event.userId() == null || event.userId().isBlank()) {
             log.warn("Skipping USER_UPDATED with blank userId");
             acknowledgment.acknowledge();
             return;
         }
 
-        UserSummary summary = userSummaryRepository.findById(event.getUserId())
-                .orElseGet(() -> UserSummary.builder().id(event.getUserId()).build());
+        UserSummary summary = userSummaryRepository.findById(event.userId())
+                .orElseGet(() -> UserSummary.builder().id(event.userId()).build());
 
-        summary.setFullName(event.getFullName());
-        summary.setAvatar(event.getAvatar());
+        summary.setFullName(event.fullName());
+        summary.setAvatar(event.avatar());
 
         userSummaryRepository.save(summary);
-        log.info("Updated UserSummary for userId={}", event.getUserId());
+        log.info("Updated UserSummary for userId={}", event.userId());
 
         acknowledgment.acknowledge();
     }
