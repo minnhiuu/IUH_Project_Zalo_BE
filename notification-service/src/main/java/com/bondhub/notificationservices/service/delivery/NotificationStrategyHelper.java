@@ -33,8 +33,7 @@ public class NotificationStrategyHelper {
         // 1. Determine Locale
         String locale = forceLocale;
         if (locale == null) {
-            var userPrefs = userPreferenceService.getPreferences(recipientId);
-            locale = (userPrefs != null) ? userPrefs.getLanguage() : "vi";
+            locale = userPreferenceService.getLocale(recipientId);
         }
         if (locale == null) locale = "vi";
 

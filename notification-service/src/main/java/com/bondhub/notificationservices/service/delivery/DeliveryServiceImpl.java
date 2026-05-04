@@ -33,20 +33,17 @@ public class DeliveryServiceImpl implements DeliveryService {
         log.info("Processing delivery: type={}, recipientId={}",
                 event.getType(), event.getRecipientId());
 
-        var prefs = userPreferenceService.getPreferences(event.getRecipientId());
-
-        if (!userPreferenceService.allow(prefs, null, event.getType())) {
+        // Step 1: Check notification type allowed (local UserDevice first, Feign fallback)
+        if (!userPreferenceService.allow(event.getRecipientId(), event.getType())) {
             log.info("Notification disabled by user preference: recipientId={}, type={}",
                     event.getRecipientId(), event.getType());
             return;
         }
 
-        boolean silencedByDnd = userPreferenceService.shouldSilenceByDnd(
-                event.getRecipientId(),
-                prefs,
-                null
-        );
+        // Step 2: Check DND (purely local, no Feign needed)
+        boolean silencedByDnd = userPreferenceService.shouldSilenceByDnd(event.getRecipientId());
 
+        // Step 3: Persist or build transient notification
         Notification target;
 
         if (isTransientType(event.getType())) {
@@ -61,6 +58,7 @@ public class DeliveryServiceImpl implements DeliveryService {
             return;
         }
 
+        // Step 4: If DND active, record as missed and optionally auto-reply
         if (silencedByDnd) {
             log.info("Notification silenced by DND: recipientId={}, type={}",
                     event.getRecipientId(), event.getType());
@@ -74,6 +72,7 @@ public class DeliveryServiceImpl implements DeliveryService {
             return;
         }
 
+        // Step 5: Execute delivery strategies (FCM, InApp, Email)
         for (NotificationStrategy strategy : strategies) {
             try {
                 strategy.execute(target);

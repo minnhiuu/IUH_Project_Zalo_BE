@@ -1,6 +1,5 @@
 package com.bondhub.notificationservices.service.user.preference;
 
-import com.bondhub.common.dto.client.userservice.user.response.UserNotificationPreferenceResponse;
 import com.bondhub.common.enums.NotificationType;
 import com.bondhub.notificationservices.client.UserServiceClient;
 import com.bondhub.notificationservices.repository.UserDeviceRepository;
@@ -27,81 +26,85 @@ public class UserPreferenceServiceImpl implements UserPreferenceService {
     UserDeviceRepository userDeviceRepository;
 
     @Override
-    public UserNotificationPreferenceResponse getPreferences(String userId) {
+    public boolean recipientExists(String userId) {
+        List<UserDevice> devices = userDeviceRepository.findByUserId(userId);
+        if (!devices.isEmpty()) {
+            return true;
+        }
+
         try {
-            var response = userServiceClient.getNotificationPreferences(userId);
+            var response = userServiceClient.existsById(userId);
             if (response.getBody() != null && response.getBody().data() != null) {
                 return response.getBody().data();
             }
         } catch (Exception e) {
-            log.warn("Failed to fetch fresh preferences for user {}, falling back to local snapshots.", userId);
+            log.warn("[Prefs] Feign existsById failed for user {}: {}", userId, e.getMessage());
         }
-        return null;
+
+        return false;
     }
 
     @Override
-    public boolean allow(UserNotificationPreferenceResponse data, String deviceId, NotificationType type) {
-        // 1. Try local snapshot if deviceId is provided
-        if (deviceId != null) {
-            var deviceOpt = userDeviceRepository.findByDeviceId(deviceId);
-            if (deviceOpt.isPresent()) {
-                UserDevice device = deviceOpt.get();
-                if (!device.isAllowNotifications()) return false;
-
-                // DND check has been moved to shouldSilenceByDnd()
-                // to cleanly separate DISABLED_BY_USER vs SILENCED_BY_DND
-
-                return switch (type) {
-                    case FRIEND_REQUEST -> device.isNotifFriendRequests();
-                    case MESSAGE_DIRECT -> device.isNotifMessages();
-                    case MESSAGE_GROUP -> device.isNotifGroups();
-                    default -> true;
-                };
+    public String getLocale(String userId) {
+        List<UserDevice> devices = userDeviceRepository.findByUserId(userId);
+        for (UserDevice device : devices) {
+            if (device.getLocale() != null) {
+                return device.getLocale();
             }
         }
 
-        // 2. Fallback to passed 'data' (from Feign) if snapshot not available
-        if (data == null) return true;
-
-        if (deviceId != null && data.getDevicePreferences() != null) {
-            var devicePref = data.getDevicePreferences().get(deviceId);
-            if (devicePref != null) {
-                if (!devicePref.isAllowNotifications()) return false;
-                return switch (type) {
-                    case FRIEND_REQUEST -> devicePref.isNotifFriendRequests();
-                    case MESSAGE_DIRECT -> devicePref.isNotifMessages();
-                    default -> true;
-                };
+        try {
+            var response = userServiceClient.getNotificationPreferences(userId);
+            if (response.getBody() != null && response.getBody().data() != null) {
+                String lang = response.getBody().data().getLanguage();
+                if (lang != null) return lang;
             }
+        } catch (Exception e) {
+            log.warn("[Prefs] Feign getLocale fallback failed for user {}: {}", userId, e.getMessage());
         }
 
-        return data.isAllowNotifications();
+        return "vi";
     }
 
     @Override
-    public boolean shouldSilenceByDnd(String userId, UserNotificationPreferenceResponse data, String deviceId) {
-        // 1. Check specific device-level DND from local snapshot
-        if (deviceId != null) {
-            var deviceOpt = userDeviceRepository.findByDeviceId(deviceId);
+    public boolean allow(String userId, NotificationType type) {
+        List<UserDevice> devices = userDeviceRepository.findByUserId(userId);
 
-            if (deviceOpt.isPresent()) {
-                UserDevice device = deviceOpt.get();
-                return isDeviceInDnd(device);
-            }
+        if (!devices.isEmpty()) {
+            return devices.stream().anyMatch(device -> isAllowedOnDevice(device, type));
         }
 
-        // 2. If no deviceId specified, check if ANY device for this user is in DND
-        if (userId != null) {
-            List<UserDevice> devices = userDeviceRepository.findByUserId(userId);
-            for (UserDevice device : devices) {
-                if (isDeviceInDnd(device)) {
-                    return true;
-                }
+        try {
+            var response = userServiceClient.getNotificationPreferences(userId);
+            if (response.getBody() != null && response.getBody().data() != null) {
+                return response.getBody().data().isAllowNotifications();
             }
+        } catch (Exception e) {
+            log.warn("[Prefs] Feign allow fallback failed for user {}: {}", userId, e.getMessage());
         }
 
-        // No global DND info available in UserNotificationPreferenceResponse,
-        // DND is managed per-device via UserDevice snapshots synced from user-service.
+        return true;
+    }
+
+    private boolean isAllowedOnDevice(UserDevice device, NotificationType type) {
+        if (!device.isAllowNotifications()) return false;
+
+        return switch (type) {
+            case FRIEND_REQUEST -> device.isNotifFriendRequests();
+            case MESSAGE_DIRECT -> device.isNotifMessages();
+            case MESSAGE_GROUP -> device.isNotifGroups();
+            default -> true;
+        };
+    }
+
+    @Override
+    public boolean shouldSilenceByDnd(String userId) {
+        List<UserDevice> devices = userDeviceRepository.findByUserId(userId);
+        for (UserDevice device : devices) {
+            if (isDeviceInDnd(device)) {
+                return true;
+            }
+        }
         return false;
     }
 

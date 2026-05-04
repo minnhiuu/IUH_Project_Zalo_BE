@@ -1,5 +1,6 @@
 package com.bondhub.notificationservices.service.delivery.strategy;
 
+import com.bondhub.common.enums.NotificationType;
 import com.bondhub.common.utils.S3UtilV2;
 import com.bondhub.notificationservices.client.SocketServiceClient;
 import com.bondhub.notificationservices.enums.NotificationChannel;
@@ -8,7 +9,6 @@ import com.bondhub.notificationservices.model.Notification;
 import com.bondhub.notificationservices.model.UserDevice;
 import com.bondhub.notificationservices.repository.UserDeviceRepository;
 import com.bondhub.notificationservices.service.delivery.NotificationStrategyHelper;
-import com.bondhub.notificationservices.service.user.preference.UserPreferenceService;
 import com.google.firebase.messaging.*;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
@@ -19,7 +19,10 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.retry.support.RetryTemplate;
 import org.springframework.stereotype.Component;
 
-import java.util.Collections;
+import java.time.DayOfWeek;
+import java.time.LocalTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -38,7 +41,6 @@ public class FcmDeliveryStrategy implements NotificationStrategy {
 
     UserDeviceRepository userDeviceRepository;
     NotificationStrategyHelper strategyHelper;
-    UserPreferenceService userPreferenceService;
     SocketServiceClient socketServiceClient;
     S3UtilV2 s3UtilV2;
 
@@ -71,31 +73,23 @@ public class FcmDeliveryStrategy implements NotificationStrategy {
             return;
         }
 
-        var userPrefs = userPreferenceService.getPreferences(recipientId);
-        String globalLocale = (userPrefs != null) ? userPrefs.getLanguage() : "vi";
-
         String collapseKey = persisted.getType().name() + "_" + recipientId;
         Map<String, NotificationStrategyHelper.RenderedContent> contentCache = new HashMap<>();
 
         for (UserDevice device : devices) {
-            String deviceLocale = device.getLocale();
-            
-            if (deviceLocale == null) {
-                Map<String, String> deviceLocales = userPrefs != null && userPrefs.getLanguageByDeviceId() != null 
-                        ? userPrefs.getLanguageByDeviceId() 
-                        : Map.of();
-                deviceLocale = deviceLocales.getOrDefault(device.getDeviceId(), globalLocale);
-            }
-            
-            if (deviceLocale == null) deviceLocale = "vi";
-            
-            if (!userPreferenceService.allow(userPrefs, device.getDeviceId(), persisted.getType())) {
+            // Use device-level locale, fallback to "vi"
+            String deviceLocale = device.getLocale() != null ? device.getLocale() : "vi";
+
+            // Check device-level notification preference
+            if (!isAllowedOnDevice(device, persisted.getType())) {
                 log.debug("FCM skip: filtered by device preference: recipient={}, device={}",
                         recipientId, device.getDeviceId());
                 continue;
             }
 
-            if (userPreferenceService.shouldSilenceByDnd(recipientId, userPrefs, device.getDeviceId())) {
+            // DND is already checked at DeliveryService level,
+            // but we still check per-device here for granular control
+            if (isDeviceInDnd(device)) {
                 log.info("FCM skip: silenced by DND: recipient={}, device={}, type={}",
                         recipientId,
                         device.getDeviceId(),
@@ -246,9 +240,59 @@ public class FcmDeliveryStrategy implements NotificationStrategy {
         }
     }
 
-    private boolean isChatMessageType(com.bondhub.common.enums.NotificationType type) {
-        return type == com.bondhub.common.enums.NotificationType.MESSAGE_DIRECT ||
-               type == com.bondhub.common.enums.NotificationType.MESSAGE_GROUP ||
-               type == com.bondhub.common.enums.NotificationType.CALL;
+    private boolean isChatMessageType(NotificationType type) {
+        return type == NotificationType.MESSAGE_DIRECT ||
+               type == NotificationType.MESSAGE_GROUP ||
+               type == NotificationType.CALL;
+    }
+
+    private boolean isAllowedOnDevice(UserDevice device, NotificationType type) {
+        if (!device.isAllowNotifications()) return false;
+        return switch (type) {
+            case FRIEND_REQUEST -> device.isNotifFriendRequests();
+            case MESSAGE_DIRECT -> device.isNotifMessages();
+            case MESSAGE_GROUP -> device.isNotifGroups();
+            default -> true;
+        };
+    }
+
+    private boolean isDeviceInDnd(UserDevice device) {
+        if (!device.isDndEnabled()) return false;
+        if (device.getDndStartTime() == null || device.getDndEndTime() == null) return false;
+        try {
+            String tz = device.getDndTimezone() != null ? device.getDndTimezone() : "Asia/Ho_Chi_Minh";
+            if (tz.startsWith("GMT") && (tz.contains("+") || tz.contains("-"))) {
+                String prefix = tz.substring(0, 4);
+                String offset = tz.substring(4);
+                if (!offset.contains(":")) {
+                    if (offset.length() == 1) offset = "0" + offset + ":00";
+                    else if (offset.length() == 2) offset = offset + ":00";
+                } else {
+                    String[] parts = offset.split(":");
+                    if (parts[0].length() == 1) offset = "0" + offset;
+                }
+                tz = prefix + offset;
+            }
+            ZonedDateTime nowZoned = ZonedDateTime.now(ZoneId.of(tz));
+            LocalTime now = nowZoned.toLocalTime();
+            LocalTime start = LocalTime.parse(device.getDndStartTime());
+            LocalTime end = LocalTime.parse(device.getDndEndTime());
+            List<DayOfWeek> activeDays = device.getActiveDays();
+            boolean hasActiveDays = activeDays != null && !activeDays.isEmpty();
+            if (start.isBefore(end)) {
+                if (hasActiveDays && !activeDays.contains(nowZoned.getDayOfWeek())) return false;
+                return !now.isBefore(start) && now.isBefore(end);
+            }
+            if (!now.isBefore(start)) {
+                return !hasActiveDays || activeDays.contains(nowZoned.getDayOfWeek());
+            }
+            if (now.isBefore(end)) {
+                return !hasActiveDays || activeDays.contains(nowZoned.minusDays(1).getDayOfWeek());
+            }
+            return false;
+        } catch (Exception e) {
+            log.warn("FCM DND check failed: deviceId={}, error={}", device.getDeviceId(), e.getMessage());
+            return false;
+        }
     }
 }

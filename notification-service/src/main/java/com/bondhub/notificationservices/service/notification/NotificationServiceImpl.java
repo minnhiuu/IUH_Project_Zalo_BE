@@ -245,8 +245,7 @@ public class NotificationServiceImpl implements NotificationService {
         String userId = securityUtil.getCurrentUserId();
         log.info("[FCM] Triggering test notification for userId: {}", userId);
 
-        var prefs = userPreferenceService.getPreferences(userId);
-        String locale = prefs != null ? prefs.getLanguage() : "vi";
+        String locale = userPreferenceService.getLocale(userId);
         String actorName = "BondHub Tester";
         String actorAvatar = "";
 

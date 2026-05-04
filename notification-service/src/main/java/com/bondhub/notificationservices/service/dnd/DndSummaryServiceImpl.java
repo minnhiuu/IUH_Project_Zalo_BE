@@ -67,8 +67,7 @@ public class DndSummaryServiceImpl implements DndSummaryService {
         }
 
         // 1. Build summary items
-        var prefs = userPreferenceService.getPreferences(userId);
-        String locale = (prefs != null) ? prefs.getLanguage() : "vi";
+        String locale = userPreferenceService.getLocale(userId);
         if (locale == null) locale = "vi";
 
         List<DndSummaryItem> summaryItems = buildSummaryItems(grouped, locale);

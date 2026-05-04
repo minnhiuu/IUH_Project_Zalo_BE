@@ -62,8 +62,7 @@ public class SystemNotificationDeliveryServiceImpl implements SystemNotification
             return;
         }
 
-        var prefs = userPreferenceService.getPreferences(event.getRecipientId());
-        if (!userPreferenceService.allow(prefs, null, event.getType())) {
+        if (!userPreferenceService.allow(event.getRecipientId(), event.getType())) {
             log.info("[SystemDelivery] Filtered by user preference: recipient={}, type={}",
                     event.getRecipientId(), event.getType());
             return;
@@ -113,8 +112,7 @@ public class SystemNotificationDeliveryServiceImpl implements SystemNotification
             return;
         }
 
-        var userPrefs = userPreferenceService.getPreferences(recipientId);
-        String globalLocale = (userPrefs != null) ? userPrefs.getLanguage() : "vi";
+        String globalLocale = userPreferenceService.getLocale(recipientId);
 
         Map<String, Object> renderData = new HashMap<>();
         if (event.getMetadata() != null) {
@@ -126,9 +124,9 @@ public class SystemNotificationDeliveryServiceImpl implements SystemNotification
         Map<String, NotificationTemplateResponse> templateCache = new HashMap<>();
 
         for (UserDevice device : devices) {
-            String deviceLocale = resolveDeviceLocale(device, userPrefs, globalLocale);
+            String deviceLocale = device.getLocale() != null ? device.getLocale() : globalLocale;
 
-            if (!userPreferenceService.allow(userPrefs, device.getDeviceId(), persisted.getType())) {
+            if (!isAllowedOnDevice(device, persisted.getType())) {
                 log.debug("[SystemDelivery] FCM skip: filtered by preference: recipient={}, device={}",
                         recipientId, device.getDeviceId());
                 continue;
@@ -241,11 +239,13 @@ public class SystemNotificationDeliveryServiceImpl implements SystemNotification
         }
     }
 
-    private String resolveDeviceLocale(UserDevice device, Object userPrefs, String globalLocale) {
-        String deviceLocale = device.getLocale();
-        if (deviceLocale == null) {
-            deviceLocale = globalLocale;
-        }
-        return deviceLocale != null ? deviceLocale : "vi";
+    private boolean isAllowedOnDevice(UserDevice device, NotificationType type) {
+        if (!device.isAllowNotifications()) return false;
+        return switch (type) {
+            case FRIEND_REQUEST -> device.isNotifFriendRequests();
+            case MESSAGE_DIRECT -> device.isNotifMessages();
+            case MESSAGE_GROUP -> device.isNotifGroups();
+            default -> true;
+        };
     }
 }
