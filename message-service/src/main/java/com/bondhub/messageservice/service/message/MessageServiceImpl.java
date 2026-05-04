@@ -457,6 +457,8 @@ public class MessageServiceImpl implements MessageService {
                                         "conversationId", finalRoom.getId(),
                                         "messageId", message.getId(),
                                         "content", message.getContent() != null ? message.getContent() : "Đã gửi một tin nhắn",
+                                        "senderId", currentUserId,
+                                        "senderName", sender != null ? sender.getFullName() : "Người dùng",
                                         "isGroup", finalRoom.isGroup(),
                                         "groupName", dynamicGroupName != null ? dynamicGroupName : "",
                                         "conversationAvatar", finalRoom.isGroup() ? (finalRoom.getAvatar() != null ? baseUrl + finalRoom.getAvatar() : "") : (sender != null && sender.getAvatar() != null ? baseUrl + sender.getAvatar() : "")

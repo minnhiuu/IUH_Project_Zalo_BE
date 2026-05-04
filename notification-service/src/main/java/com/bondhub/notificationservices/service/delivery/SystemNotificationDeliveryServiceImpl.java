@@ -13,6 +13,7 @@ import com.bondhub.notificationservices.service.template.NotificationTemplateSer
 import com.bondhub.notificationservices.service.user.preference.UserPreferenceService;
 import com.bondhub.notificationservices.dto.response.template.NotificationTemplateResponse;
 import com.bondhub.notificationservices.service.push.FcmService;
+import com.bondhub.notificationservices.service.delivery.strategy.InAppDeliveryStrategy;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
@@ -41,6 +42,7 @@ public class SystemNotificationDeliveryServiceImpl implements SystemNotification
     NotificationStrategyHelper strategyHelper;
     FcmService fcmService;
     MongoTemplate mongoTemplate;
+    InAppDeliveryStrategy inAppDeliveryStrategy;
 
     @NonFinal
     @Value("${bondhub.frontend-url}")
@@ -64,6 +66,13 @@ public class SystemNotificationDeliveryServiceImpl implements SystemNotification
         }
 
         sendFcm(persisted, event);
+
+        // Send realtime socket event
+        try {
+            inAppDeliveryStrategy.execute(persisted);
+        } catch (Exception e) {
+            log.error("[SystemDelivery] InApp Delivery failed: recipient={}", event.getRecipientId(), e);
+        }
     }
 
     private Notification persist(SystemNotificationEvent event) {
@@ -88,8 +97,9 @@ public class SystemNotificationDeliveryServiceImpl implements SystemNotification
         Notification saved = notificationRepository.save(notification);
 
         mongoTemplate.upsert(
-                new Query(Criteria.where("userId").is(event.getRecipientId())),
-                new Update().inc("unreadCount", 1L),
+                new Query(Criteria.where("_id").is(event.getRecipientId())),
+                new Update().inc("unreadCount", 1L)
+                        .addToSet("unreadActorIds", (event.getActorId() != null ? event.getActorId() : "system") + "_" + event.getType().name() + (event.getReferenceId() != null ? "_" + event.getReferenceId() : "")),
                 UserNotificationState.class
         );
 

@@ -167,15 +167,25 @@ public class NotificationServiceImpl implements NotificationService {
                         .unreadCount(0)
                         .build());
 
-        return notificationMapper.toStateResponse(state);
+        long uniqueCount = state.getUnreadActorIds() != null ? state.getUnreadActorIds().size() : 0;
+
+        return UserNotificationStateResponse.builder()
+                .unreadCount(state.getUnreadCount())
+                .uniqueActorCount(uniqueCount)
+                .unreadActorIds(state.getUnreadActorIds())
+                .lastCheckedAt(state.getLastCheckedAt())
+                .build();
     }
 
     @Override
     public void markHistoryAsChecked() {
         String userId = securityUtil.getCurrentUserId();
         mongoTemplate.upsert(
-                new Query(Criteria.where("userId").is(userId)),
-                new Update().set("lastCheckedAt", LocalDateTime.now()).set("unreadCount", 0L),
+                new Query(Criteria.where("_id").is(userId)),
+                new Update()
+                        .set("lastCheckedAt", LocalDateTime.now())
+                        .set("unreadCount", 0L)
+                        .set("unreadActorIds", new ArrayList<>()), // Xóa danh sách người gửi khi đã check
                 UserNotificationState.class
         );
     }

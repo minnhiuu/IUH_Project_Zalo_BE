@@ -144,7 +144,8 @@ public class NotificationPersistenceServiceImpl implements NotificationPersisten
         Notification saved = notificationRepository.save(persisted);
 
         if (shouldIncrement) {
-            incrementUnreadCount(event.getRecipientId());
+            updateUnreadState(event.getRecipientId(), event.getLastActorId(), event.getType(), event.getReferenceId());
+            incrementRawUnreadCount(event.getRecipientId());
         }
         return saved;
     }
@@ -179,9 +180,25 @@ public class NotificationPersistenceServiceImpl implements NotificationPersisten
         return messageSource.getMessage("notification.another_person", null, locale);
     }
 
-    private void incrementUnreadCount(String userId) {
+    @Override
+    public void updateUnreadState(String userId, String actorId, com.bondhub.common.enums.NotificationType type, String referenceId) {
+        if (actorId == null || type == null) return;
+        
+        String compositeKey = actorId + "_" + type.name();
+        if (referenceId != null) {
+            compositeKey += "_" + referenceId;
+        }
+
+        Query query = new Query(Criteria.where("_id").is(userId));
+        Update update = new Update()
+                .addToSet("unreadActorIds", compositeKey);
+        
+        mongoTemplate.upsert(query, update, UserNotificationState.class);
+    }
+
+    private void incrementRawUnreadCount(String userId) {
         mongoTemplate.upsert(
-                new Query(Criteria.where("userId").is(userId)),
+                new Query(Criteria.where("_id").is(userId)),
                 new Update().inc("unreadCount", 1L),
                 UserNotificationState.class
         );

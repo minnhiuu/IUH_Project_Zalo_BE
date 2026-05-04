@@ -3,6 +3,7 @@ package com.bondhub.notificationservices.service.delivery;
 import com.bondhub.common.enums.NotificationType;
 import com.bondhub.notificationservices.event.BatchedNotificationEvent;
 import com.bondhub.notificationservices.model.Notification;
+import com.bondhub.notificationservices.service.delivery.strategy.InAppDeliveryStrategy;
 import com.bondhub.notificationservices.service.delivery.strategy.NotificationStrategy;
 import com.bondhub.notificationservices.service.dnd.AutoReplyService;
 import com.bondhub.notificationservices.service.dnd.DndMissedNotificationService;
@@ -52,13 +53,27 @@ public class DeliveryServiceImpl implements DeliveryService {
             target = persistenceService.persist(event);
         }
 
+        persistenceService.updateUnreadState(event.getRecipientId(), event.getLastActorId(), event.getType(), event.getReferenceId());
+
         if (target == null) {
             log.warn("Target notification creation failed - skipping strategies: recipientId={}",
                     event.getRecipientId());
             return;
         }
 
-        // Step 4: If DND active, record as missed and optionally auto-reply
+        // Step 4: Execute InAppDeliveryStrategy regardless of DND so the sidebar updates in real-time
+        strategies.stream()
+                .filter(s -> s instanceof InAppDeliveryStrategy)
+                .findFirst()
+                .ifPresent(strategy -> {
+                    try {
+                        strategy.execute(target);
+                    } catch (Exception e) {
+                        log.error("InAppDeliveryStrategy failed: {}", e.getMessage(), e);
+                    }
+                });
+
+        // Step 5: If DND active, record as missed and optionally auto-reply
         if (silencedByDnd) {
             log.info("Notification silenced by DND: recipientId={}, type={}",
                     event.getRecipientId(), event.getType());
@@ -72,8 +87,11 @@ public class DeliveryServiceImpl implements DeliveryService {
             return;
         }
 
-        // Step 5: Execute delivery strategies (FCM, InApp, Email)
+        // Step 6: Execute other delivery strategies (FCM, Email)
         for (NotificationStrategy strategy : strategies) {
+            if (strategy instanceof InAppDeliveryStrategy) {
+                continue; // Already executed
+            }
             try {
                 strategy.execute(target);
             } catch (Exception e) {
