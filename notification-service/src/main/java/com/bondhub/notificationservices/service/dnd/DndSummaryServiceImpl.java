@@ -11,9 +11,9 @@ import com.bondhub.notificationservices.model.UserDevice;
 import com.bondhub.notificationservices.repository.DndMissedNotificationRepository;
 import com.bondhub.notificationservices.repository.UserDeviceRepository;
 import com.bondhub.notificationservices.service.delivery.NotificationStrategyHelper;
+import com.bondhub.notificationservices.service.push.FcmService;
 import com.bondhub.notificationservices.service.template.NotificationTemplateService;
 import com.bondhub.notificationservices.service.user.preference.UserPreferenceService;
-import com.google.firebase.messaging.*;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
@@ -40,6 +40,7 @@ public class DndSummaryServiceImpl implements DndSummaryService {
     UserPreferenceService userPreferenceService;
     NotificationStrategyHelper strategyHelper;
     NotificationTemplateService templateService;
+    FcmService fcmService;
 
     @NonFinal
     @Value("${bondhub.frontend-url}")
@@ -62,46 +63,65 @@ public class DndSummaryServiceImpl implements DndSummaryService {
         Map<String, List<DndMissedNotification>> grouped = missed.stream()
                 .collect(Collectors.groupingBy(DndMissedNotification::getSummaryGroupKey));
 
-        if (grouped.isEmpty()) {
+        if (grouped.isEmpty()) return;
+
+        // 1. Get all user devices
+        List<UserDevice> devices = userDeviceRepository.findByUserId(userId);
+        if (devices.isEmpty()) {
+            log.info("[DND Summary] User {} has no devices, skipping push.", userId);
+            markAsSummarized(missed);
             return;
         }
 
-        // 1. Build summary items
-        String locale = userPreferenceService.getLocale(userId);
-        if (locale == null) locale = "vi";
+        // 2. Cache rendered content per locale to avoid redundant processing
+        Map<String, NotificationStrategyHelper.RenderedContent> renderedCache = new HashMap<>();
+        int totalCount = missed.size();
 
-        List<DndSummaryItem> summaryItems = buildSummaryItems(grouped, locale);
+        for (UserDevice device : devices) {
+            if (!device.isAllowNotifications()) continue;
 
-        int totalCount = summaryItems.stream()
-                .mapToInt(DndSummaryItem::count)
-                .sum();
+            String locale = device.getLocale() != null ? device.getLocale() : "vi";
 
-        // 2. Build detailed summary text
-        String summaryText = buildSummaryText(summaryItems);
+            NotificationStrategyHelper.RenderedContent rendered = renderedCache.computeIfAbsent(locale, loc -> {
+                List<DndSummaryItem> summaryItems = buildSummaryItems(grouped, loc);
+                String summaryText = buildSummaryText(summaryItems);
 
-        // 3. Render localized content from DATABASE Template (which is now force-updated by DataInitializer)
-        Notification mockNoti = Notification.builder()
-                .userId(userId)
-                .type(NotificationType.DND_SUMMARY)
-                .payload(Map.of(
-                        "count", totalCount,
-                        "totalCount", totalCount,
-                        "summaryText", summaryText
-                ))
-                .build();
-        
-        var rendered = strategyHelper.render(mockNoti, NotificationChannel.FCM, locale);
+                Notification mockNoti = Notification.builder()
+                        .userId(userId)
+                        .type(NotificationType.DND_SUMMARY)
+                        .payload(Map.of(
+                                "count", totalCount,
+                                "totalCount", totalCount,
+                                "summaryText", summaryText
+                        ))
+                        .build();
 
-        log.info("[DND Summary] Pushing summary to user {}: {}", userId, rendered.body());
-        sendSummaryPush(userId, rendered.title(), rendered.body(), totalCount);
+                return strategyHelper.render(mockNoti, NotificationChannel.FCM, loc);
+            });
 
+            // 3. Send to this specific device
+            Map<String, Object> metadata = new HashMap<>();
+            metadata.put("totalCount", totalCount);
+            metadata.put("actorAvatar", frontendUrl + (frontendUrl.endsWith("/") ? "" : "/") + "images/logo.jpg");
+
+            fcmService.sendPush(device, rendered.title(), rendered.body(), NotificationType.DND_SUMMARY.name(), metadata);
+        }
+
+        // 4. Update status
+        markAsSummarized(missed);
+    }
+
+    private void markAsSummarized(List<DndMissedNotification> missed) {
         LocalDateTime now = LocalDateTime.now();
         for (DndMissedNotification item : missed) {
             item.setStatus(DndMissedStatus.SUMMARIZED);
             item.setSummarizedAt(now);
         }
         missedRepository.saveAll(missed);
+        log.info("[DND Summary] Marked {} notifications as summarized", missed.size());
     }
+
+
 
     private String buildSummaryText(List<DndSummaryItem> items) {
         if (items.isEmpty()) return "";
@@ -110,10 +130,7 @@ public class DndSummaryServiceImpl implements DndSummaryService {
                 .collect(Collectors.joining(", "));
     }
 
-    private List<DndSummaryItem> buildSummaryItems(
-            Map<String, List<DndMissedNotification>> grouped,
-            String locale
-    ) {
+    private List<DndSummaryItem> buildSummaryItems(Map<String, List<DndMissedNotification>> grouped, String locale) {
         List<DndSummaryItem> items = new ArrayList<>();
         boolean isVi = "vi".equalsIgnoreCase(locale);
 
@@ -197,53 +214,6 @@ public class DndSummaryServiceImpl implements DndSummaryService {
         } catch (Exception e) {
             log.warn("[DND Summary] Failed to render fragment {}: {}", type, e.getMessage());
             return "";
-        }
-    }
-
-    private void sendSummaryPush(String userId, String title, String body, int totalCount) {
-        List<UserDevice> devices = userDeviceRepository.findByUserId(userId);
-        if (devices.isEmpty()) return;
-
-        String url = frontendUrl;
-        if (!url.endsWith("/")) url += "/";
-        String clickUrl = url + "?noti_open=true";
-        String iconUrl = url + "images/logo.jpg";
-
-        for (UserDevice device : devices) {
-            if (!device.isAllowNotifications()) continue;
-
-            Map<String, String> dataPayload = new HashMap<>();
-            // Use SYSTEM_INFO to bypass FE override
-            dataPayload.put("type", "SYSTEM_INFO"); 
-            dataPayload.put("title", title);
-            dataPayload.put("body", body);
-            dataPayload.put("totalCount", String.valueOf(totalCount));
-            dataPayload.put("url", clickUrl);
-            dataPayload.put("actorAvatar", iconUrl);
-
-            if (device.getPlatform() == Platform.ANDROID) {
-                dataPayload.put("customTitle", title);
-                dataPayload.put("customBody", body);
-                dataPayload.remove("title");
-                dataPayload.remove("body");
-            }
-
-            Message.Builder builder = Message.builder()
-                    .setToken(device.getFcmToken())
-                    .putAllData(dataPayload);
-
-            if (device.getPlatform() == Platform.WEB) {
-                builder.setWebpushConfig(WebpushConfig.builder()
-                        .setFcmOptions(WebpushFcmOptions.withLink(clickUrl))
-                        .build());
-            }
-
-            try {
-                FirebaseMessaging.getInstance().send(builder.build());
-                log.info("[DND Summary] Push sent: user={}, device={}", userId, device.getDeviceId());
-            } catch (Exception e) {
-                log.error("[DND Summary] Push failed: user={}, error={}", userId, e.getMessage());
-            }
         }
     }
 }

@@ -7,13 +7,21 @@ import com.bondhub.notificationservices.dto.response.notification.NotificationRe
 import com.bondhub.notificationservices.enums.NotificationChannel;
 import com.bondhub.notificationservices.mapper.NotificationMapper;
 import com.bondhub.notificationservices.model.Notification;
+import com.bondhub.notificationservices.model.UserDevice;
 import com.bondhub.notificationservices.publisher.SocketEventPublisher;
+import com.bondhub.notificationservices.repository.UserDeviceRepository;
 import com.bondhub.notificationservices.service.delivery.NotificationStrategyHelper;
+import com.bondhub.notificationservices.service.user.preference.UserPreferenceService;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Component
 @Slf4j
@@ -24,6 +32,8 @@ public class InAppDeliveryStrategy implements NotificationStrategy {
     SocketEventPublisher socketEventPublisher;
     NotificationStrategyHelper strategyHelper;
     NotificationMapper notificationMapper;
+    UserDeviceRepository userDeviceRepository;
+    UserPreferenceService userPreferenceService;
 
     @Override
     public void execute(Notification persisted) {
@@ -40,13 +50,45 @@ public class InAppDeliveryStrategy implements NotificationStrategy {
         log.info("[InApp] Preparing real-time signal for notification: {} for user: {}", persisted.getId(), recipientId);
 
         try {
-            // 1. Render content using the shared renderer
-            var rendered = strategyHelper.render(persisted, NotificationChannel.IN_APP, null);
+            // 1. Get unique locales across all user devices
+            List<UserDevice> devices = userDeviceRepository.findByUserId(recipientId);
+            List<String> locales = devices.stream()
+                    .map(d -> d.getLocale() != null ? d.getLocale() : "vi")
+                    .distinct()
+                    .collect(Collectors.toList());
+            
+            // Ensure at least the user's global preferred locale is included
+            String globalLocale = userPreferenceService.getLocale(recipientId);
+            if (!locales.contains(globalLocale)) locales.add(globalLocale);
 
-            // 2. Map to Response DTO
-            NotificationResponse response = notificationMapper.toResponse(persisted, rendered.title(), rendered.body());
+            // 2. Render for each locale and build translations map
+            Map<String, NotificationResponse.LocalizedContent> translations = new HashMap<>();
+            for (String loc : locales) {
+                var rendered = strategyHelper.render(persisted, NotificationChannel.IN_APP, loc);
+                translations.put(loc, NotificationResponse.LocalizedContent.builder()
+                        .title(rendered.title())
+                        .body(rendered.body())
+                        .build());
+            }
 
-            // 3. Create Socket Event
+            // 3. Map to Response DTO with translations
+            var defaultRender = translations.getOrDefault(globalLocale, translations.values().iterator().next());
+            
+            NotificationResponse response = NotificationResponse.builder()
+                    .id(persisted.getId())
+                    .type(persisted.getType())
+                    .referenceId(persisted.getReferenceId())
+                    .title(defaultRender.title())
+                    .body(defaultRender.body())
+                    .translations(translations)
+                    .actorIds(persisted.getActorIds())
+                    .actorCount(persisted.getActorIds() != null ? persisted.getActorIds().size() : 0)
+                    .read(persisted.isRead())
+                    .lastModifiedAt(persisted.getLastModifiedAt())
+                    .payload(persisted.getPayload())
+                    .build();
+
+            // 4. Create Socket Event
             SocketEvent socketEvent = new SocketEvent(
                     SocketEventType.NOTIFICATION,
                     recipientId,
@@ -54,7 +96,7 @@ public class InAppDeliveryStrategy implements NotificationStrategy {
                     response
             );
 
-            // 4. Publish to Kafka
+            // 5. Publish to Kafka
             socketEventPublisher.publish(socketEvent);
 
             log.info("[InApp] Real-time signal sent for notification: {} to user: {}", 

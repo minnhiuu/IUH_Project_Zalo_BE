@@ -12,7 +12,7 @@ import com.bondhub.notificationservices.repository.UserDeviceRepository;
 import com.bondhub.notificationservices.service.template.NotificationTemplateService;
 import com.bondhub.notificationservices.service.user.preference.UserPreferenceService;
 import com.bondhub.notificationservices.dto.response.template.NotificationTemplateResponse;
-import com.google.firebase.messaging.*;
+import com.bondhub.notificationservices.service.push.FcmService;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
@@ -23,7 +23,6 @@ import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
-import org.springframework.retry.support.RetryTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -35,16 +34,12 @@ import java.util.*;
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public class SystemNotificationDeliveryServiceImpl implements SystemNotificationDeliveryService {
 
-    static final RetryTemplate FCM_RETRY = RetryTemplate.builder()
-            .maxAttempts(3)
-            .exponentialBackoff(500, 2, 4000)
-            .retryOn(RuntimeException.class)
-            .build();
-
     NotificationRepository notificationRepository;
     UserDeviceRepository userDeviceRepository;
     NotificationTemplateService templateService;
     UserPreferenceService userPreferenceService;
+    NotificationStrategyHelper strategyHelper;
+    FcmService fcmService;
     MongoTemplate mongoTemplate;
 
     @NonFinal
@@ -151,93 +146,16 @@ public class SystemNotificationDeliveryServiceImpl implements SystemNotification
                 continue;
             }
 
-            sendToDevice(device, title, body, collapseKey, recipientId, persisted.getType().name(),
-                    event.getMetadata());
+            Map<String, Object> metadata = new HashMap<>();
+            if (event.getMetadata() != null) {
+                metadata.putAll(event.getMetadata());
+            }
+
+            fcmService.sendPush(device, title, body, persisted.getType().name(), metadata);
         }
     }
 
-    private void sendToDevice(UserDevice device, String title, String body, String collapseKey,
-                              String recipientId, String type, Map<String, Object> metadata) {
-        String url = frontendUrl;
-        if (!url.endsWith("/")) url += "/";
 
-        Map<String, String> dataPayload = new HashMap<>();
-        dataPayload.put("type", type);
-        dataPayload.put("title", title != null ? title : "");
-        dataPayload.put("body", body != null ? body : "");
-        dataPayload.put("url", url);
-
-        if (metadata != null) {
-            for (Map.Entry<String, Object> entry : metadata.entrySet()) {
-                if (!dataPayload.containsKey(entry.getKey()) && entry.getValue() != null) {
-                    dataPayload.put(entry.getKey(), entry.getValue().toString());
-                }
-            }
-        }
-
-        if (device.getPlatform() == Platform.ANDROID) {
-            dataPayload.put("customTitle", title != null ? title : "");
-            dataPayload.put("customBody", body != null ? body : "");
-            dataPayload.remove("title");
-            dataPayload.remove("body");
-        }
-
-        Message.Builder messageBuilder = Message.builder()
-                .setToken(device.getFcmToken())
-                .putAllData(dataPayload);
-
-        if (device.getPlatform() == Platform.WEB) {
-            messageBuilder.setWebpushConfig(WebpushConfig.builder()
-                    .setFcmOptions(WebpushFcmOptions.withLink(url))
-                    .build());
-        }
-
-        if (device.getPlatform() == Platform.ANDROID) {
-            messageBuilder.setAndroidConfig(AndroidConfig.builder()
-                    .setPriority(AndroidConfig.Priority.HIGH)
-                    .setCollapseKey(collapseKey)
-                    .build());
-        }
-
-        if (device.getPlatform() == Platform.IOS) {
-            messageBuilder.setApnsConfig(ApnsConfig.builder()
-                    .setAps(Aps.builder()
-                            .setThreadId(collapseKey)
-                            .setContentAvailable(true)
-                            .setMutableContent(true)
-                            .setSound("default")
-                            .build())
-                    .build());
-        }
-
-        Message message = messageBuilder.build();
-
-        try {
-            String messageId = FCM_RETRY.execute(ctx -> {
-                try {
-                    return FirebaseMessaging.getInstance().send(message);
-                } catch (FirebaseMessagingException e) {
-                    MessagingErrorCode code = e.getMessagingErrorCode();
-                    if (code == MessagingErrorCode.UNREGISTERED || code == MessagingErrorCode.INVALID_ARGUMENT) {
-                        log.warn("[SystemDelivery] FCM stale token, removing device: recipient={}, device={}, code={}",
-                                recipientId, device.getId(), code);
-                        userDeviceRepository.delete(device);
-                        return null;
-                    }
-                    log.warn("[SystemDelivery] FCM transient error [attempt {}]: recipient={}, device={}, error={}",
-                            ctx.getRetryCount() + 1, recipientId, device.getId(), e.getMessage());
-                    throw new RuntimeException("FCM transient error: " + e.getMessage(), e);
-                }
-            });
-            if (messageId != null) {
-                log.info("[SystemDelivery] FCM sent: recipient={}, device={}, messageId={}",
-                        recipientId, device.getId(), messageId);
-            }
-        } catch (Exception e) {
-            log.error("[SystemDelivery] FCM failed after retries: recipient={}, device={}, error={}",
-                    recipientId, device.getId(), e.getMessage());
-        }
-    }
 
     private boolean isAllowedOnDevice(UserDevice device, NotificationType type) {
         if (!device.isAllowNotifications()) return false;
