@@ -113,6 +113,13 @@ public class NotificationStrategyHelper {
     }
 
     private String renderChatBody(Notification notification) {
+        // 1. Try to use aggregated snippets if available
+        Object snippetsObj = notification.getPayload().get("snippets");
+        if (snippetsObj instanceof java.util.List<?> snippets && !snippets.isEmpty()) {
+            return String.join("\n", snippets.stream().map(Object::toString).toList());
+        }
+
+        // 2. Fallback to single message rendering
         boolean isGroup = Boolean.TRUE.equals(notification.getPayload().get("isGroup"));
         String content = getStr(notification, "content");
         if (isGroup) {

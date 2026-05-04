@@ -140,12 +140,40 @@ public class NotificationPersistenceServiceImpl implements NotificationPersisten
             }
         }
 
+        // Aggregation logic for Chat messages
+        if (event.getType() == NotificationType.MESSAGE_DIRECT || event.getType() == NotificationType.MESSAGE_GROUP) {
+            List<String> snippets = (List<String>) persisted.getPayload().get("snippets");
+            if (snippets == null) snippets = new ArrayList<>();
+            
+            String actorName = event.getLastActorName();
+            String content = (String) basePayload.get("content");
+            if (content != null) {
+                String newSnippet = (event.getType() == NotificationType.MESSAGE_GROUP) 
+                    ? actorName + ": " + content 
+                    : content;
+                
+                // Add if not duplicate of the last one (avoid double-saving issues)
+                if (snippets.isEmpty() || !snippets.get(snippets.size() - 1).equals(newSnippet)) {
+                    snippets.add(newSnippet);
+                }
+                
+                // Keep only last 5
+                if (snippets.size() > 5) {
+                    snippets = snippets.subList(snippets.size() - 5, snippets.size());
+                }
+                payloadMap.put("snippets", snippets);
+            }
+        }
+
         persisted.setPayload(payloadMap);
         Notification saved = notificationRepository.save(persisted);
 
         if (shouldIncrement) {
-            updateUnreadState(event.getRecipientId(), event.getLastActorId(), event.getType(), event.getReferenceId());
-            incrementRawUnreadCount(event.getRecipientId());
+            boolean isChat = event.getType() == NotificationType.MESSAGE_DIRECT || event.getType() == NotificationType.MESSAGE_GROUP;
+            if (!isChat) {
+                updateUnreadState(event.getRecipientId(), event.getLastActorId(), event.getType(), event.getReferenceId());
+                incrementRawUnreadCount(event.getRecipientId());
+            }
         }
         return saved;
     }

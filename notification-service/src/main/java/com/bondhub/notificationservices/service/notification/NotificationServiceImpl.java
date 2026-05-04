@@ -85,6 +85,7 @@ public class NotificationServiceImpl implements NotificationService {
         }
 
         criteria.and("active").is(true);
+        criteria.and("type").nin(NotificationType.MESSAGE_DIRECT, NotificationType.MESSAGE_GROUP);
 
         Query query = new Query(criteria)
                 .with(Sort.by(Sort.Direction.DESC, "lastModifiedAt"))

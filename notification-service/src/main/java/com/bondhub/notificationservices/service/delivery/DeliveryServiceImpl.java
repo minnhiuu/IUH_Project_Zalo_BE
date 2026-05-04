@@ -123,9 +123,7 @@ public class DeliveryServiceImpl implements DeliveryService {
     }
 
     private boolean isTransientType(NotificationType type) {
-        return type == NotificationType.MESSAGE_DIRECT
-                || type == NotificationType.MESSAGE_GROUP
-                || type == NotificationType.CALL
+        return type == NotificationType.CALL
                 || type == NotificationType.SYSTEM;
     }
 }
