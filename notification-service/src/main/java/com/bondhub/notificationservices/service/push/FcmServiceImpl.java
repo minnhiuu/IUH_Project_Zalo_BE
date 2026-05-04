@@ -65,6 +65,18 @@ public class FcmServiceImpl implements FcmService {
             dataPayload.remove("title");
             dataPayload.remove("body");
         }
+        
+        // Determine the logical Grouping ID (Collapse Key / Tag)
+        String groupingId = notificationId;
+        if (type != null && (type.equals("MESSAGE_DIRECT") || type.equals("MESSAGE_GROUP"))) {
+            String conversationId = (String) metadata.get("conversationId");
+            if (conversationId != null) {
+                groupingId = "CHAT_" + conversationId;
+            }
+        }
+        if (groupingId == null) {
+            groupingId = UUID.randomUUID().toString();
+        }
 
         Message.Builder messageBuilder = Message.builder()
                 .setToken(device.getFcmToken())
@@ -77,12 +89,12 @@ public class FcmServiceImpl implements FcmService {
         if (device.getPlatform() == Platform.WEB) {
             messageBuilder.setWebpushConfig(WebpushConfig.builder()
                     .setFcmOptions(WebpushFcmOptions.withLink(clickUrl))
-                    .putHeader("Topic", notificationId != null ? notificationId : UUID.randomUUID().toString())
+                    .putHeader("Topic", groupingId)
                     .setNotification(WebpushNotification.builder()
                             .setTitle(title)
                             .setBody(body)
                             .setIcon("http://localhost:5173/images/logo.jpg") // <--- Logo từ Frontend của bạn
-                            .setTag(notificationId != null ? notificationId : UUID.randomUUID().toString())
+                            .setTag(groupingId)
                             .build())
                     .build());
         }
@@ -90,13 +102,13 @@ public class FcmServiceImpl implements FcmService {
         if (device.getPlatform() == Platform.ANDROID) {
             messageBuilder.setAndroidConfig(AndroidConfig.builder()
                     .setPriority(AndroidConfig.Priority.HIGH)
-                    .setCollapseKey(notificationId != null ? notificationId : UUID.randomUUID().toString())
+                    .setCollapseKey(groupingId)
                     .build());
         }
 
         if (device.getPlatform() == Platform.IOS) {
             messageBuilder.setApnsConfig(ApnsConfig.builder()
-                    .putHeader("apns-collapse-id", notificationId != null ? notificationId : UUID.randomUUID().toString())
+                    .putHeader("apns-collapse-id", groupingId)
                     .setAps(Aps.builder()
                             .setContentAvailable(true)
                             .setMutableContent(true)
