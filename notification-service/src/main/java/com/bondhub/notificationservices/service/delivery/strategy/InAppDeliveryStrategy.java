@@ -37,15 +37,6 @@ public class InAppDeliveryStrategy implements NotificationStrategy {
 
     @Override
     public void execute(Notification persisted) {
-        // MESSAGE_DIRECT and CALL have their own dedicated WebSocket channels
-        // (/queue/messages, /queue/call-signals). Skip to avoid duplicate realtime notifications.
-        if (persisted.getType() == NotificationType.MESSAGE_DIRECT ||
-            persisted.getType() == NotificationType.MESSAGE_GROUP ||
-            persisted.getType() == NotificationType.CALL) {
-            log.debug("[InApp] Skipping realtime for direct-channel type: {}", persisted.getType());
-            return;
-        }
-
         String recipientId = persisted.getUserId();
         log.info("[InApp] Preparing real-time signal for notification: {} for user: {}", persisted.getId(), recipientId);
 
@@ -74,6 +65,10 @@ public class InAppDeliveryStrategy implements NotificationStrategy {
             // 3. Map to Response DTO with translations
             var defaultRender = translations.getOrDefault(globalLocale, translations.values().iterator().next());
             
+            boolean isSilent = persisted.getType() == NotificationType.MESSAGE_DIRECT ||
+                              persisted.getType() == NotificationType.MESSAGE_GROUP ||
+                              persisted.getType() == NotificationType.CALL;
+
             NotificationResponse response = NotificationResponse.builder()
                     .id(persisted.getId())
                     .type(persisted.getType())
@@ -86,6 +81,7 @@ public class InAppDeliveryStrategy implements NotificationStrategy {
                     .read(persisted.isRead())
                     .lastModifiedAt(persisted.getLastModifiedAt())
                     .payload(persisted.getPayload())
+                    .silent(isSilent) // Add this field
                     .build();
 
             // 4. Create Socket Event

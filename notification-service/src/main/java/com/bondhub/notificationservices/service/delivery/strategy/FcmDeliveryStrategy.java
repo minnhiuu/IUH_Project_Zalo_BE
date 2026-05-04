@@ -104,7 +104,7 @@ public class FcmDeliveryStrategy implements NotificationStrategy {
             // Prepare metadata
             Map<String, Object> metadata = prepareMetadata(persisted);
 
-            fcmService.sendPush(device, rendered.title(), rendered.body(), persisted.getType().name(), metadata);
+            fcmService.sendPush(persisted.getId(), device, rendered.title(), rendered.body(), persisted.getType().name(), metadata);
         }
     }
 

@@ -19,7 +19,8 @@ public record NotificationResponse(
         int actorCount,
         boolean read,
         LocalDateTime lastModifiedAt,
-        Map<String, Object> payload
+        Map<String, Object> payload,
+        boolean silent
 ) {
     @Builder
     public record LocalizedContent(String title, String body) {}

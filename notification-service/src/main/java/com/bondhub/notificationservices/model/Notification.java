@@ -11,6 +11,8 @@ import org.springframework.data.mongodb.core.mapping.Field;
 import org.springframework.data.mongodb.core.mapping.FieldType;
 import org.springframework.data.mongodb.core.mapping.MongoId;
 
+import com.bondhub.notificationservices.enums.DeliveryStatus;
+
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -51,4 +53,7 @@ public class Notification extends BaseModel {
     boolean isRead;
 
     LocalDateTime readAt;
+
+    @Builder.Default
+    DeliveryStatus deliveryStatus = DeliveryStatus.PENDING;
 }

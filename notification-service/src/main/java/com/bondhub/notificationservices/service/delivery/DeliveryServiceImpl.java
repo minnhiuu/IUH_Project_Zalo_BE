@@ -53,7 +53,9 @@ public class DeliveryServiceImpl implements DeliveryService {
             target = persistenceService.persist(event);
         }
 
-        persistenceService.updateUnreadState(event.getRecipientId(), event.getLastActorId(), event.getType(), event.getReferenceId());
+        if (!isTransientType(event.getType())) {
+            persistenceService.updateUnreadState(event.getRecipientId(), event.getLastActorId(), event.getType(), event.getReferenceId());
+        }
 
         if (target == null) {
             log.warn("Target notification creation failed - skipping strategies: recipientId={}",
@@ -87,19 +89,35 @@ public class DeliveryServiceImpl implements DeliveryService {
             return;
         }
 
-        // Step 6: Execute other delivery strategies (FCM, Email)
-        for (NotificationStrategy strategy : strategies) {
-            if (strategy instanceof InAppDeliveryStrategy) {
-                continue; // Already executed
-            }
+        // Step 6: Execute delivery strategies with Fallback (Push -> Email)
+        boolean pushSuccess = false;
+        
+        // Find FCM strategy
+        NotificationStrategy fcmStrategy = strategies.stream()
+                .filter(s -> s instanceof com.bondhub.notificationservices.service.delivery.strategy.FcmDeliveryStrategy)
+                .findFirst().orElse(null);
+        
+        // Find Email strategy
+        NotificationStrategy emailStrategy = strategies.stream()
+                .filter(s -> s instanceof com.bondhub.notificationservices.service.delivery.strategy.EmailDeliveryStrategy)
+                .findFirst().orElse(null);
+
+        if (fcmStrategy != null) {
             try {
-                strategy.execute(target);
+                log.info("[Delivery] Attempting primary channel: FCM");
+                fcmStrategy.execute(target);
+                pushSuccess = true;
             } catch (Exception e) {
-                log.error("Strategy {} failed: {}",
-                        strategy.getClass().getSimpleName(),
-                        e.getMessage(),
-                        e
-                );
+                log.error("[Delivery] FCM failed after retries: {}. Falling back to Email.", e.getMessage());
+            }
+        }
+
+        if (!pushSuccess && emailStrategy != null) {
+            try {
+                log.info("[Delivery] Attempting fallback channel: Email");
+                emailStrategy.execute(target);
+            } catch (Exception e) {
+                log.error("[Delivery] Fallback Email strategy also failed: {}", e.getMessage());
             }
         }
     }

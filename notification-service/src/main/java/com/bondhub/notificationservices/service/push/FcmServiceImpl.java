@@ -1,7 +1,9 @@
 package com.bondhub.notificationservices.service.push;
 
+import com.bondhub.notificationservices.enums.DeliveryStatus;
 import com.bondhub.notificationservices.enums.Platform;
 import com.bondhub.notificationservices.model.UserDevice;
+import com.bondhub.notificationservices.repository.NotificationRepository;
 import com.bondhub.notificationservices.repository.UserDeviceRepository;
 import com.google.firebase.messaging.*;
 import lombok.AccessLevel;
@@ -11,6 +13,9 @@ import lombok.experimental.NonFinal;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Retryable;
+import org.springframework.retry.annotation.Recover;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -22,13 +27,19 @@ import java.util.Map;
 public class FcmServiceImpl implements FcmService {
 
     UserDeviceRepository userDeviceRepository;
+    NotificationRepository notificationRepository;
 
     @NonFinal
     @Value("${bondhub.frontend-url}")
     String frontendUrl;
 
     @Override
-    public void sendPush(UserDevice device, String title, String body, String type, Map<String, Object> metadata) {
+    @Retryable(
+        value = { RuntimeException.class },
+        maxAttempts = 3,
+        backoff = @Backoff(delay = 2000, multiplier = 2)
+    )
+    public void sendPush(String notificationId, UserDevice device, String title, String body, String type, Map<String, Object> metadata) {
         String url = frontendUrl;
         if (!url.endsWith("/")) url += "/";
         String clickUrl = url + "?noti_open=true";
@@ -83,13 +94,44 @@ public class FcmServiceImpl implements FcmService {
         try {
             FirebaseMessaging.getInstance().send(messageBuilder.build());
             log.info("[FCM] Sent push to device: {} (type={})", device.getDeviceId(), type);
-        } catch (Exception e) {
+            
+            // Mark as SENT if not already
+            if (notificationId != null) {
+                notificationRepository.findById(notificationId).ifPresent(n -> {
+                    if (n.getDeliveryStatus() != DeliveryStatus.SENT) {
+                        n.setDeliveryStatus(DeliveryStatus.SENT);
+                        notificationRepository.save(n);
+                    }
+                });
+            }
+        } catch (FirebaseMessagingException e) {
             log.error("[FCM] Push failed for device {}: {}", device.getDeviceId(), e.getMessage());
-            if (e instanceof FirebaseMessagingException fme && 
-                (fme.getMessagingErrorCode() == MessagingErrorCode.UNREGISTERED)) {
+            
+            if (e.getMessagingErrorCode() == MessagingErrorCode.UNREGISTERED) {
                 log.warn("[FCM] Stale token detected, removing device: {}", device.getDeviceId());
                 userDeviceRepository.delete(device);
+                return; // No retry for unregistered tokens
             }
+            
+            // For other errors, throw to trigger @Retryable
+            throw new RuntimeException("FCM delivery failed: " + e.getMessage(), e);
+        } catch (Exception e) {
+            log.error("[FCM] Unexpected error for device {}: {}", device.getDeviceId(), e.getMessage());
+            throw new RuntimeException("Unexpected FCM error", e);
+        }
+    }
+
+    @Recover
+    public void recover(RuntimeException e, String notificationId, UserDevice device, String title, String body, String type, Map<String, Object> metadata) {
+        log.error("[FCM-RECOVER] All retries failed for device {}. Final error: {}", device.getDeviceId(), e.getMessage());
+        
+        if (notificationId != null) {
+            notificationRepository.findById(notificationId).ifPresent(n -> {
+                if (n.getDeliveryStatus() == DeliveryStatus.PENDING) {
+                    n.setDeliveryStatus(DeliveryStatus.FAILED);
+                    notificationRepository.save(n);
+                }
+            });
         }
     }
 }

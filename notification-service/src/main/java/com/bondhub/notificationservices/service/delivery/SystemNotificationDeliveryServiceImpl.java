@@ -14,6 +14,7 @@ import com.bondhub.notificationservices.service.user.preference.UserPreferenceSe
 import com.bondhub.notificationservices.dto.response.template.NotificationTemplateResponse;
 import com.bondhub.notificationservices.service.push.FcmService;
 import com.bondhub.notificationservices.service.delivery.strategy.InAppDeliveryStrategy;
+import com.bondhub.notificationservices.service.delivery.strategy.EmailDeliveryStrategy;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
@@ -43,6 +44,7 @@ public class SystemNotificationDeliveryServiceImpl implements SystemNotification
     FcmService fcmService;
     MongoTemplate mongoTemplate;
     InAppDeliveryStrategy inAppDeliveryStrategy;
+    EmailDeliveryStrategy emailDeliveryStrategy;
 
     @NonFinal
     @Value("${bondhub.frontend-url}")
@@ -65,7 +67,21 @@ public class SystemNotificationDeliveryServiceImpl implements SystemNotification
             return;
         }
 
-        sendFcm(persisted, event);
+        boolean pushSuccess = false;
+        try {
+            sendFcm(persisted, event);
+            pushSuccess = true;
+        } catch (Exception e) {
+            log.error("[SystemDelivery] FCM delivery failed after retries: {}. Falling back to Email.", e.getMessage());
+        }
+
+        if (!pushSuccess) {
+            try {
+                emailDeliveryStrategy.execute(persisted);
+            } catch (Exception e) {
+                log.error("[SystemDelivery] Fallback Email failed: {}", e.getMessage());
+            }
+        }
 
         // Send realtime socket event
         try {
@@ -161,7 +177,7 @@ public class SystemNotificationDeliveryServiceImpl implements SystemNotification
                 metadata.putAll(event.getMetadata());
             }
 
-            fcmService.sendPush(device, title, body, persisted.getType().name(), metadata);
+            fcmService.sendPush(persisted.getId(), device, title, body, persisted.getType().name(), metadata);
         }
     }
 

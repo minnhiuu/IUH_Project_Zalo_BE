@@ -104,7 +104,7 @@ public class DndSummaryServiceImpl implements DndSummaryService {
             metadata.put("totalCount", totalCount);
             metadata.put("actorAvatar", frontendUrl + (frontendUrl.endsWith("/") ? "" : "/") + "images/logo.jpg");
 
-            fcmService.sendPush(device, rendered.title(), rendered.body(), NotificationType.DND_SUMMARY.name(), metadata);
+            fcmService.sendPush(null, device, rendered.title(), rendered.body(), NotificationType.DND_SUMMARY.name(), metadata);
         }
 
         // 4. Update status

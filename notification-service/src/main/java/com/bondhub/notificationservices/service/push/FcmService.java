@@ -4,5 +4,5 @@ import com.bondhub.notificationservices.model.UserDevice;
 import java.util.Map;
 
 public interface FcmService {
-    void sendPush(UserDevice device, String title, String body, String type, Map<String, Object> metadata);
+    void sendPush(String notificationId, UserDevice device, String title, String body, String type, Map<String, Object> metadata);
 }
