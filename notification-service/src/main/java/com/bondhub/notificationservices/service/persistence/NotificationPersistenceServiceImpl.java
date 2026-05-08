@@ -28,12 +28,21 @@ import java.util.*;
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public class NotificationPersistenceServiceImpl implements NotificationPersistenceService {
 
+    private static final int MAX_CHAT_SNIPPET_WORDS = 80;
+
     NotificationRepository notificationRepository;
     MongoTemplate mongoTemplate;
     MessageSource messageSource;
 
     @Override
     public Notification persist(BatchedNotificationEvent event) {
+        if (isChatMessageType(event.getType())) {
+            String conversationId = resolveConversationId(event);
+            return conversationId != null
+                    ? persistPerEntity(event, conversationId)
+                    : persistAggregate(event);
+        }
+
         BatchWindowConfig cfg = BatchWindowConfig.of(event.getType());
 
         if (!cfg.isIncludeReferenceInKey()) {
@@ -46,6 +55,10 @@ public class NotificationPersistenceServiceImpl implements NotificationPersisten
     }
 
     private Notification persistPerEntity(BatchedNotificationEvent event) {
+        return persistPerEntity(event, event.getReferenceId());
+    }
+
+    private Notification persistPerEntity(BatchedNotificationEvent event, String referenceId) {
         List<String> rawActorIds = event.getActorIds() != null ? event.getActorIds() : List.of();
         List<ObjectId> actorObjectIds = rawActorIds.stream()
                 .filter(ObjectId::isValid)
@@ -54,7 +67,7 @@ public class NotificationPersistenceServiceImpl implements NotificationPersisten
 
         Query query = new Query(Criteria.where("userId").is(event.getRecipientId())
                 .and("type").is(event.getType())
-                .and("referenceId").is(event.getReferenceId()));
+                .and("referenceId").is(referenceId));
 
         Update update = new Update()
                 .push("actorIds").atPosition(Update.Position.LAST).each(actorObjectIds.toArray())
@@ -142,7 +155,7 @@ public class NotificationPersistenceServiceImpl implements NotificationPersisten
         }
 
         // Aggregation logic for Chat messages
-        if (event.getType() == NotificationType.MESSAGE_DIRECT || event.getType() == NotificationType.MESSAGE_GROUP) {
+        if (isChatMessageType(event.getType())) {
             // If it's a "new" notification (previous was read or null), start a fresh snippets list
             List<String> snippets;
             if (shouldIncrement) {
@@ -152,10 +165,10 @@ public class NotificationPersistenceServiceImpl implements NotificationPersisten
                 if (snippets == null) snippets = new ArrayList<>();
             }
             
-            String actorName = event.getLastActorName();
-            String content = (String) basePayload.get("content");
+            String actorName = normalizeSnippet(event.getLastActorName());
+            String content = normalizeSnippet((String) basePayload.get("content"));
             if (content != null) {
-                String newSnippet = (event.getType() == NotificationType.MESSAGE_GROUP) 
+                String newSnippet = (event.getType() == NotificationType.MESSAGE_GROUP && actorName != null) 
                     ? actorName + ": " + content 
                     : content;
                 
@@ -164,11 +177,7 @@ public class NotificationPersistenceServiceImpl implements NotificationPersisten
                     snippets.add(newSnippet);
                 }
                 
-                // Safe limit of 20 to avoid FCM payload size limits
-                if (snippets.size() > 20) {
-                    snippets = snippets.subList(snippets.size() - 20, snippets.size());
-                }
-                payloadMap.put("snippets", snippets);
+                payloadMap.put("snippets", limitByWordCount(snippets, MAX_CHAT_SNIPPET_WORDS));
             }
         }
 
@@ -176,8 +185,7 @@ public class NotificationPersistenceServiceImpl implements NotificationPersisten
         Notification saved = notificationRepository.save(persisted);
 
         if (shouldIncrement) {
-            boolean isChat = event.getType() == NotificationType.MESSAGE_DIRECT || event.getType() == NotificationType.MESSAGE_GROUP;
-            if (!isChat) {
+            if (!isChatMessageType(event.getType())) {
                 updateUnreadState(event.getRecipientId(), event.getLastActorId(), event.getType(), event.getReferenceId());
                 incrementRawUnreadCount(event.getRecipientId());
             }
@@ -200,6 +208,7 @@ public class NotificationPersistenceServiceImpl implements NotificationPersisten
         payloadMap.put("showSecondActor", false);
 
         return Notification.builder()
+                .id(UUID.randomUUID().toString())
                 .userId(event.getRecipientId())
                 .type(event.getType())
                 .referenceId(event.getReferenceId())
@@ -213,6 +222,67 @@ public class NotificationPersistenceServiceImpl implements NotificationPersisten
     private String getTranslatedFallback(String localeStr) {
         Locale locale = localeStr != null ? Locale.forLanguageTag(localeStr) : new Locale("vi");
         return messageSource.getMessage("notification.another_person", null, locale);
+    }
+
+    private List<String> limitByWordCount(List<String> snippets, int maxWords) {
+        LinkedList<String> result = new LinkedList<>();
+        int totalWords = 0;
+
+        ListIterator<String> iterator = snippets.listIterator(snippets.size());
+        while (iterator.hasPrevious()) {
+            String snippet = normalizeSnippet(iterator.previous());
+            if (snippet == null) continue;
+            int wordCount = countWords(snippet);
+
+            if (wordCount > maxWords) {
+                snippet = truncateWords(snippet, maxWords);
+                wordCount = countWords(snippet);
+            }
+
+            if (!result.isEmpty() && totalWords + wordCount > maxWords) {
+                break;
+            }
+
+            result.addFirst(snippet);
+            totalWords += wordCount;
+        }
+
+        return result;
+    }
+
+    private String normalizeSnippet(String value) {
+        if (value == null) return null;
+        String normalized = value.replaceAll("\\s+", " ").trim();
+        return normalized.isEmpty() ? null : normalized;
+    }
+
+    private int countWords(String value) {
+        if (value == null || value.isBlank()) return 0;
+        return value.trim().split("\\s+").length;
+    }
+
+    private String truncateWords(String value, int maxWords) {
+        if (value == null || value.isBlank()) return "";
+        String[] words = value.trim().split("\\s+");
+        if (words.length <= maxWords) return value;
+
+        return String.join(" ", Arrays.copyOf(words, maxWords)) + "...";
+    }
+
+    private boolean isChatMessageType(NotificationType type) {
+        return type == NotificationType.MESSAGE_DIRECT || type == NotificationType.MESSAGE_GROUP;
+    }
+
+    private String resolveConversationId(BatchedNotificationEvent event) {
+        List<Map<String, Object>> payloads = event.getRawPayloads() != null ? event.getRawPayloads() : List.of();
+        if (!payloads.isEmpty()) {
+            Object conversationId = payloads.get(payloads.size() - 1).get("conversationId");
+            if (conversationId != null && !conversationId.toString().isBlank()) {
+                return conversationId.toString();
+            }
+        }
+
+        return event.getReferenceId();
     }
 
     @Override

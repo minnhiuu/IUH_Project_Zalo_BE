@@ -46,8 +46,6 @@ public class FcmDeliveryStrategy implements NotificationStrategy {
     public void execute(Notification persisted) {
         String recipientId = persisted.getUserId();
 
-        // For chat messages: only push FCM when user is OFFLINE.
-        // When online, messages are already delivered via WebSocket in real-time.
         if (isChatMessageType(persisted.getType())) {
             try {
                 boolean isOnline = socketServiceClient.isUserOnline(recipientId);
@@ -67,7 +65,6 @@ public class FcmDeliveryStrategy implements NotificationStrategy {
             return;
         }
 
-        String collapseKey = persisted.getType().name() + "_" + recipientId;
         Map<String, NotificationStrategyHelper.RenderedContent> contentCache = new HashMap<>();
 
         for (UserDevice device : devices) {
@@ -116,7 +113,6 @@ public class FcmDeliveryStrategy implements NotificationStrategy {
 
         String lastActorId = strategyHelper.getStr(persisted, "actorId");
         String lastActorName = strategyHelper.getStr(persisted, "actorName");
-        String lastActorAvatar = strategyHelper.getStr(persisted, "actorAvatar");
         String requestId = strategyHelper.getStr(persisted, "requestId");
         int actorCount = persisted.getActorIds() != null ? persisted.getActorIds().size() : 0;
         int othersCount = Math.max(0, actorCount - 1);

@@ -100,6 +100,12 @@ public class SystemNotificationDeliveryServiceImpl implements SystemNotification
         if (event.getActorId() != null) {
             payload.put("actorId", event.getActorId());
         }
+        if (event.getActorName() != null) {
+            payload.put("actorName", event.getActorName());
+        }
+        if (event.getActorAvatar() != null) {
+            payload.put("actorAvatar", event.getActorAvatar());
+        }
 
         Notification notification = Notification.builder()
                 .userId(event.getRecipientId())

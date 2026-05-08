@@ -15,7 +15,9 @@ import com.bondhub.notificationservices.service.user.preference.UserPreferenceSe
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
+import lombok.experimental.NonFinal;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
@@ -31,9 +33,12 @@ public class InAppDeliveryStrategy implements NotificationStrategy {
 
     SocketEventPublisher socketEventPublisher;
     NotificationStrategyHelper strategyHelper;
-    NotificationMapper notificationMapper;
     UserDeviceRepository userDeviceRepository;
     UserPreferenceService userPreferenceService;
+
+    @Value("${bondhub.frontend-url}")
+    @NonFinal
+    String frontendUrl;
 
     @Override
     public void execute(Notification persisted) {
@@ -65,9 +70,16 @@ public class InAppDeliveryStrategy implements NotificationStrategy {
             // 3. Map to Response DTO with translations
             var defaultRender = translations.getOrDefault(globalLocale, translations.values().iterator().next());
             
-            boolean isSilent = persisted.getType() == NotificationType.MESSAGE_DIRECT ||
-                              persisted.getType() == NotificationType.MESSAGE_GROUP ||
-                              persisted.getType() == NotificationType.CALL;
+            boolean isSilent = persisted.getType() == NotificationType.CALL;
+
+            // Resolve absolute avatar URL in payload for frontend
+            Map<String, Object> enrichedPayload = new HashMap<>(persisted.getPayload());
+            String actorAvatar = (String) enrichedPayload.get("actorAvatar");
+            if (actorAvatar != null && !actorAvatar.isEmpty() && !actorAvatar.startsWith("http")) {
+                String baseUrl = frontendUrl;
+                if (!baseUrl.endsWith("/")) baseUrl += "/";
+                enrichedPayload.put("actorAvatar", baseUrl + actorAvatar.replaceFirst("^/", ""));
+            }
 
             NotificationResponse response = NotificationResponse.builder()
                     .id(persisted.getId())
@@ -80,8 +92,8 @@ public class InAppDeliveryStrategy implements NotificationStrategy {
                     .actorCount(persisted.getActorIds() != null ? persisted.getActorIds().size() : 0)
                     .read(persisted.isRead())
                     .lastModifiedAt(persisted.getLastModifiedAt())
-                    .payload(persisted.getPayload())
-                    .silent(isSilent) // Add this field
+                    .payload(enrichedPayload)
+                    .silent(isSilent)
                     .build();
 
             // 4. Create Socket Event

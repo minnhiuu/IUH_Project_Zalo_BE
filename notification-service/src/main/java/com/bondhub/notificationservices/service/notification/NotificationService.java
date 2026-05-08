@@ -20,6 +20,8 @@ public interface NotificationService {
 
     void markAsRead(String id);
 
+    void markChatConversationAsRead(String conversationId);
+
     void markAllAsRead();
 
     void deactivateByReferenceIdAndType(String userId, String referenceId, NotificationType type);

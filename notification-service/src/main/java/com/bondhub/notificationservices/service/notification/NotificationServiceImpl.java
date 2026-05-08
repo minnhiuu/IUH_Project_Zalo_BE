@@ -206,9 +206,24 @@ public class NotificationServiceImpl implements NotificationService {
     }
 
     @Override
+    public void markChatConversationAsRead(String conversationId) {
+        String userId = securityUtil.getCurrentUserId();
+        Query query = new Query(Criteria.where("userId").is(userId)
+                .and("referenceId").is(conversationId)
+                .and("type").in(NotificationType.MESSAGE_DIRECT, NotificationType.MESSAGE_GROUP)
+                .and("isRead").is(false));
+
+        Update update = new Update()
+                .set("isRead", true)
+                .set("readAt", LocalDateTime.now());
+
+        mongoTemplate.updateMulti(query, update, Notification.class);
+    }
+
+    @Override
     public void markAllAsRead() {
         String userId = securityUtil.getCurrentUserId();
-        Query query = new Query((Criteria) Criteria.where("userId").is(userId)
+        Query query = new Query(Criteria.where("userId").is(userId)
                 .and("isRead").is(false));
 
         Update update = new Update()

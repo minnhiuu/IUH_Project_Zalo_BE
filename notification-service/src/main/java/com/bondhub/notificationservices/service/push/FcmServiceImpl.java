@@ -47,6 +47,7 @@ public class FcmServiceImpl implements FcmService {
 
         Map<String, String> dataPayload = new HashMap<>();
         dataPayload.put("type", type);
+        dataPayload.put("notificationId", notificationId != null ? notificationId : "");
         dataPayload.put("title", title != null ? title : "");
         dataPayload.put("body", body != null ? body : "");
         dataPayload.put("url", clickUrl);
@@ -78,13 +79,33 @@ public class FcmServiceImpl implements FcmService {
             groupingId = UUID.randomUUID().toString();
         }
 
-        Message.Builder messageBuilder = Message.builder()
-                .setToken(device.getFcmToken())
-                .setNotification(Notification.builder()
-                        .setTitle(title)
-                        .setBody(body)
-                        .build())
-                .putAllData(dataPayload);
+        // Resolve Avatar URL
+        String actorAvatar = (String) metadata.get("actorAvatar");
+        String baseUrl = frontendUrl.endsWith("/") ? frontendUrl : frontendUrl + "/";
+        String imageUrl = (actorAvatar != null && !actorAvatar.isEmpty()) 
+            ? (actorAvatar.startsWith("http") ? actorAvatar : baseUrl + actorAvatar.replaceFirst("^/", ""))
+            : baseUrl + "images/logo.jpg";
+
+        // Android: data-only message → Expo background task fires and calls scheduleNotificationAsync
+        // Web/iOS: notification block → system shows it directly
+        Message.Builder messageBuilder;
+        if (device.getPlatform() == Platform.ANDROID) {
+            messageBuilder = Message.builder()
+                    .setToken(device.getFcmToken())
+                    .putAllData(dataPayload)
+                    .setAndroidConfig(AndroidConfig.builder()
+                            .setPriority(AndroidConfig.Priority.HIGH)
+                            .setCollapseKey(groupingId)
+                            .build());
+        } else {
+            messageBuilder = Message.builder()
+                    .setToken(device.getFcmToken())
+                    .setNotification(Notification.builder()
+                            .setTitle(title)
+                            .setBody(body)
+                            .build())
+                    .putAllData(dataPayload);
+        }
 
         if (device.getPlatform() == Platform.WEB) {
             messageBuilder.setWebpushConfig(WebpushConfig.builder()
@@ -93,20 +114,15 @@ public class FcmServiceImpl implements FcmService {
                     .setNotification(WebpushNotification.builder()
                             .setTitle(title)
                             .setBody(body)
-                            .setIcon("http://localhost:5173/images/logo.jpg") // <--- Logo từ Frontend của bạn
+                            .setIcon(imageUrl)
                             .setTag(groupingId)
                             .build())
                     .build());
         }
 
-        if (device.getPlatform() == Platform.ANDROID) {
-            messageBuilder.setAndroidConfig(AndroidConfig.builder()
-                    .setPriority(AndroidConfig.Priority.HIGH)
-                    .setCollapseKey(groupingId)
-                    .build());
-        }
-
         if (device.getPlatform() == Platform.IOS) {
+
+
             messageBuilder.setApnsConfig(ApnsConfig.builder()
                     .putHeader("apns-collapse-id", groupingId)
                     .setAps(Aps.builder()
@@ -114,8 +130,12 @@ public class FcmServiceImpl implements FcmService {
                             .setMutableContent(true)
                             .setSound("default")
                             .build())
+                    .setFcmOptions(ApnsFcmOptions.builder()
+                            .setImage(imageUrl)
+                            .build())
                     .build());
         }
+
 
         try {
             FirebaseMessaging.getInstance().send(messageBuilder.build());
