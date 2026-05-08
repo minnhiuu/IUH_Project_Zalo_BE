@@ -1,0 +1,40 @@
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+metadata:
+  name: bondhub-cluster-final
+  region: ap-southeast-2
+
+vpc:
+  id: "vpc-0893ebef8e9e45436"
+  subnets:
+    public:
+      ap-southeast-2a: { id: "subnet-00229b47154d47230" }
+      ap-southeast-2b: { id: "subnet-012c3212ed4802857" }
+    private:
+      ap-southeast-2a: { id: "subnet-05d9381df3f4cb107" }
+      ap-southeast-2b: { id: "subnet-04141c8752f11d867" }
+
+managedNodeGroups:
+  - name: ng-0-middleware
+    instanceType: m7i-flex.large
+    desiredCapacity: 1
+    privateNetworking: true
+    labels: { node-type: middleware }
+
+  - name: ng-1-infra
+    instanceType: c7i-flex.large
+    desiredCapacity: 1
+    privateNetworking: true
+    labels: { node-type: infra }
+
+  - name: ng-2-core-social
+    instanceType: m7i-flex.large
+    desiredCapacity: 1
+    privateNetworking: true
+    labels: { node-type: core-social }
+
+  - name: ng-3-interaction-ai
+    instanceType: m7i-flex.large
+    desiredCapacity: 1
+    privateNetworking: true
+    labels: { node-type: interaction-ai }
