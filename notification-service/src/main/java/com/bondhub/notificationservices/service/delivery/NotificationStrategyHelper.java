@@ -21,6 +21,8 @@ import java.util.Map;
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public class NotificationStrategyHelper {
 
+    private static final int FCM_CHAT_VISIBLE_LINES = 4;
+
     NotificationTemplateService templateService;
     UserPreferenceService userPreferenceService;
 
@@ -48,7 +50,7 @@ public class NotificationStrategyHelper {
             notification.getType() == NotificationType.MESSAGE_GROUP) {
             
             title = renderChatTitle(notification);
-            body = renderChatBody(notification);
+            body = renderChatBody(notification, channel);
             
         } else if (notification.getType() == NotificationType.SYSTEM) {
             // For SYSTEM messages:
@@ -112,15 +114,21 @@ public class NotificationStrategyHelper {
         return null;
     }
 
-    private String renderChatBody(Notification notification) {
+    private String renderChatBody(Notification notification, NotificationChannel channel) {
         // 1. Try to use aggregated snippets if available
         Object snippetsObj = notification.getPayload().get("snippets");
         if (snippetsObj instanceof java.util.List<?> snippets && !snippets.isEmpty()) {
-            return String.join("\n", snippets.stream()
+            var lines = snippets.stream()
                     .map(Object::toString)
                     .map(line -> line.replaceAll("\\s+", " ").trim())
                     .filter(line -> !line.isEmpty())
-                    .toList());
+                    .toList();
+
+            if (channel == NotificationChannel.FCM && lines.size() > FCM_CHAT_VISIBLE_LINES) {
+                lines = lines.subList(lines.size() - FCM_CHAT_VISIBLE_LINES, lines.size());
+            }
+
+            return String.join("\n", lines);
         }
 
         // 2. Fallback to single message rendering

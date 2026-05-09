@@ -4,7 +4,6 @@ import com.bondhub.common.enums.NotificationType;
 import com.bondhub.notificationservices.dto.dnd.DndSummaryItem;
 import com.bondhub.notificationservices.enums.DndMissedStatus;
 import com.bondhub.notificationservices.enums.NotificationChannel;
-import com.bondhub.notificationservices.enums.Platform;
 import com.bondhub.notificationservices.model.DndMissedNotification;
 import com.bondhub.notificationservices.model.Notification;
 import com.bondhub.notificationservices.model.UserDevice;
@@ -77,8 +76,18 @@ public class DndSummaryServiceImpl implements DndSummaryService {
         Map<String, NotificationStrategyHelper.RenderedContent> renderedCache = new HashMap<>();
         int totalCount = missed.size();
 
+        int sentCount = 0;
+        int skippedDisabledCount = 0;
+
         for (UserDevice device : devices) {
-            if (!device.isAllowNotifications()) continue;
+            if (!device.isAllowNotifications()) {
+                skippedDisabledCount++;
+                log.info("[DND Summary] Skip device because notifications disabled: user={}, device={}, platform={}",
+                        userId,
+                        device.getDeviceId(),
+                        device.getPlatform());
+                continue;
+            }
 
             String locale = device.getLocale() != null ? device.getLocale() : "vi";
 
@@ -104,8 +113,21 @@ public class DndSummaryServiceImpl implements DndSummaryService {
             metadata.put("totalCount", totalCount);
             metadata.put("actorAvatar", frontendUrl + (frontendUrl.endsWith("/") ? "" : "/") + "images/logo.jpg");
 
+            log.info("[DND Summary] Sending summary push: user={}, device={}, platform={}, totalCount={}",
+                    userId,
+                    device.getDeviceId(),
+                    device.getPlatform(),
+                    totalCount);
+
             fcmService.sendPush(null, device, rendered.title(), rendered.body(), NotificationType.DND_SUMMARY.name(), metadata);
+            sentCount++;
         }
+
+        log.info("[DND Summary] Push summary result: user={}, devices={}, sent={}, skippedDisabled={}",
+                userId,
+                devices.size(),
+                sentCount,
+                skippedDisabledCount);
 
         // 4. Update status
         markAsSummarized(missed);

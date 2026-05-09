@@ -28,6 +28,7 @@ import java.util.*;
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public class NotificationPersistenceServiceImpl implements NotificationPersistenceService {
 
+    private static final int MAX_CHAT_SNIPPET_LINES = 10;
     private static final int MAX_CHAT_SNIPPET_WORDS = 80;
 
     NotificationRepository notificationRepository;
@@ -168,16 +169,15 @@ public class NotificationPersistenceServiceImpl implements NotificationPersisten
             String actorName = normalizeSnippet(event.getLastActorName());
             String content = normalizeSnippet((String) basePayload.get("content"));
             if (content != null) {
-                String newSnippet = (event.getType() == NotificationType.MESSAGE_GROUP && actorName != null) 
-                    ? actorName + ": " + content 
-                    : content;
-                
-                // Add if not duplicate of the last one
-                if (snippets.isEmpty() || !snippets.get(snippets.size() - 1).equals(newSnippet)) {
+                String newSnippet = (event.getType() == NotificationType.MESSAGE_GROUP && actorName != null)
+                        ? actorName + ": " + content
+                        : content;
+
+                if (snippets.isEmpty() || !Objects.equals(snippets.get(snippets.size() - 1), newSnippet)) {
                     snippets.add(newSnippet);
                 }
-                
-                payloadMap.put("snippets", limitByWordCount(snippets, MAX_CHAT_SNIPPET_WORDS));
+
+                payloadMap.put("snippets", limitLatestSnippets(snippets, MAX_CHAT_SNIPPET_LINES, MAX_CHAT_SNIPPET_WORDS));
             }
         }
 
@@ -224,12 +224,15 @@ public class NotificationPersistenceServiceImpl implements NotificationPersisten
         return messageSource.getMessage("notification.another_person", null, locale);
     }
 
-    private List<String> limitByWordCount(List<String> snippets, int maxWords) {
+    private List<String> limitLatestSnippets(List<String> snippets, int maxLines, int maxWords) {
         LinkedList<String> result = new LinkedList<>();
         int totalWords = 0;
+        int lineCount = 0;
 
         ListIterator<String> iterator = snippets.listIterator(snippets.size());
         while (iterator.hasPrevious()) {
+            if (lineCount >= maxLines) break;
+
             String snippet = normalizeSnippet(iterator.previous());
             if (snippet == null) continue;
             int wordCount = countWords(snippet);
@@ -245,6 +248,7 @@ public class NotificationPersistenceServiceImpl implements NotificationPersisten
 
             result.addFirst(snippet);
             totalWords += wordCount;
+            lineCount++;
         }
 
         return result;

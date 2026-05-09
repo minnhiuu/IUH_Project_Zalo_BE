@@ -3,7 +3,6 @@ package com.bondhub.notificationservices.service.delivery;
 import com.bondhub.common.enums.NotificationType;
 import com.bondhub.common.event.notification.SystemNotificationEvent;
 import com.bondhub.notificationservices.enums.NotificationChannel;
-import com.bondhub.notificationservices.enums.Platform;
 import com.bondhub.notificationservices.model.Notification;
 import com.bondhub.notificationservices.model.UserDevice;
 import com.bondhub.notificationservices.model.UserNotificationState;
@@ -12,6 +11,7 @@ import com.bondhub.notificationservices.repository.UserDeviceRepository;
 import com.bondhub.notificationservices.service.template.NotificationTemplateService;
 import com.bondhub.notificationservices.service.user.preference.UserPreferenceService;
 import com.bondhub.notificationservices.dto.response.template.NotificationTemplateResponse;
+import com.bondhub.notificationservices.service.dnd.DndMissedNotificationService;
 import com.bondhub.notificationservices.service.push.FcmService;
 import com.bondhub.notificationservices.service.delivery.strategy.InAppDeliveryStrategy;
 import com.bondhub.notificationservices.service.delivery.strategy.EmailDeliveryStrategy;
@@ -40,6 +40,7 @@ public class SystemNotificationDeliveryServiceImpl implements SystemNotification
     UserDeviceRepository userDeviceRepository;
     NotificationTemplateService templateService;
     UserPreferenceService userPreferenceService;
+    DndMissedNotificationService dndMissedNotificationService;
     NotificationStrategyHelper strategyHelper;
     FcmService fcmService;
     MongoTemplate mongoTemplate;
@@ -67,6 +68,19 @@ public class SystemNotificationDeliveryServiceImpl implements SystemNotification
             return;
         }
 
+        try {
+            inAppDeliveryStrategy.execute(persisted);
+        } catch (Exception e) {
+            log.error("[SystemDelivery] InApp Delivery failed: recipient={}", event.getRecipientId(), e);
+        }
+
+        if (userPreferenceService.shouldSilenceByDnd(event.getRecipientId())) {
+            log.info("[SystemDelivery] FCM silenced by DND: recipient={}, type={}",
+                    event.getRecipientId(), event.getType());
+            dndMissedNotificationService.record(persisted);
+            return;
+        }
+
         boolean pushSuccess = false;
         try {
             sendFcm(persisted, event);
@@ -81,13 +95,6 @@ public class SystemNotificationDeliveryServiceImpl implements SystemNotification
             } catch (Exception e) {
                 log.error("[SystemDelivery] Fallback Email failed: {}", e.getMessage());
             }
-        }
-
-        // Send realtime socket event
-        try {
-            inAppDeliveryStrategy.execute(persisted);
-        } catch (Exception e) {
-            log.error("[SystemDelivery] InApp Delivery failed: recipient={}", event.getRecipientId(), e);
         }
     }
 

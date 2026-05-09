@@ -42,7 +42,7 @@ public class DataInitializer {
     @EventListener(ApplicationReadyEvent.class)
     public void init() {
         seedTemplates();
-        seedNotifications();
+//        seedNotifications();
     }
 
     public void seedTemplates() {

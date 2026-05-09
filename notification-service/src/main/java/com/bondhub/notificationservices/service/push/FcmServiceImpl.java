@@ -41,9 +41,10 @@ public class FcmServiceImpl implements FcmService {
         backoff = @Backoff(delay = 2000, multiplier = 2)
     )
     public void sendPush(String notificationId, UserDevice device, String title, String body, String type, Map<String, Object> metadata) {
+        Map<String, Object> safeMetadata = metadata != null ? metadata : Map.of();
         String url = frontendUrl;
         if (!url.endsWith("/")) url += "/";
-        String clickUrl = url + "?noti_open=true";
+        String clickUrl = buildClickUrl(url, notificationId, type, safeMetadata);
 
         Map<String, String> dataPayload = new HashMap<>();
         dataPayload.put("type", type);
@@ -52,11 +53,9 @@ public class FcmServiceImpl implements FcmService {
         dataPayload.put("body", body != null ? body : "");
         dataPayload.put("url", clickUrl);
 
-        if (metadata != null) {
-            for (Map.Entry<String, Object> entry : metadata.entrySet()) {
-                if (!dataPayload.containsKey(entry.getKey()) && entry.getValue() != null) {
-                    dataPayload.put(entry.getKey(), entry.getValue().toString());
-                }
+        for (Map.Entry<String, Object> entry : safeMetadata.entrySet()) {
+            if (!dataPayload.containsKey(entry.getKey()) && entry.getValue() != null) {
+                dataPayload.put(entry.getKey(), entry.getValue().toString());
             }
         }
 
@@ -70,7 +69,7 @@ public class FcmServiceImpl implements FcmService {
         // Determine the logical Grouping ID (Collapse Key / Tag)
         String groupingId = notificationId;
         if (type != null && (type.equals("MESSAGE_DIRECT") || type.equals("MESSAGE_GROUP"))) {
-            String conversationId = (String) metadata.get("conversationId");
+            String conversationId = (String) safeMetadata.get("conversationId");
             if (conversationId != null) {
                 groupingId = "CHAT_" + conversationId;
             }
@@ -80,7 +79,7 @@ public class FcmServiceImpl implements FcmService {
         }
 
         // Resolve Avatar URL
-        String actorAvatar = (String) metadata.get("actorAvatar");
+        String actorAvatar = (String) safeMetadata.get("actorAvatar");
         String baseUrl = frontendUrl.endsWith("/") ? frontendUrl : frontendUrl + "/";
         String imageUrl = (actorAvatar != null && !actorAvatar.isEmpty()) 
             ? (actorAvatar.startsWith("http") ? actorAvatar : baseUrl + actorAvatar.replaceFirst("^/", ""))
@@ -165,6 +164,24 @@ public class FcmServiceImpl implements FcmService {
             log.error("[FCM] Unexpected error for device {}: {}", device.getDeviceId(), e.getMessage());
             throw new RuntimeException("Unexpected FCM error", e);
         }
+    }
+
+    private String buildClickUrl(String baseUrl, String notificationId, String type, Map<String, Object> metadata) {
+        if (type != null && (type.equals("MESSAGE_DIRECT") || type.equals("MESSAGE_GROUP"))) {
+            Object conversationId = metadata != null ? metadata.get("conversationId") : null;
+            if (conversationId == null && metadata != null) {
+                conversationId = metadata.get("referenceId");
+            }
+            if (conversationId != null && !conversationId.toString().isBlank()) {
+                return baseUrl + "chat/c/" + conversationId;
+            }
+        }
+
+        StringBuilder fallback = new StringBuilder(baseUrl).append("?noti_open=true");
+        if (notificationId != null && !notificationId.isBlank()) {
+            fallback.append("&highlight=").append(notificationId);
+        }
+        return fallback.toString();
     }
 
     @Recover
