@@ -4,7 +4,6 @@ import com.bondhub.common.enums.NotificationType;
 import com.bondhub.common.utils.S3UtilV2;
 import com.bondhub.notificationservices.client.SocketServiceClient;
 import com.bondhub.notificationservices.enums.NotificationChannel;
-import com.bondhub.notificationservices.enums.Platform;
 import com.bondhub.notificationservices.model.Notification;
 import com.bondhub.notificationservices.model.UserDevice;
 import com.bondhub.notificationservices.repository.UserDeviceRepository;
@@ -13,8 +12,8 @@ import com.bondhub.notificationservices.service.push.FcmService;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
-import lombok.extern.slf4j.Slf4j;
 import lombok.experimental.NonFinal;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -25,6 +24,7 @@ import java.time.ZonedDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @Component
 @Slf4j
@@ -46,6 +46,11 @@ public class FcmDeliveryStrategy implements NotificationStrategy {
     public void execute(Notification persisted) {
         String recipientId = persisted.getUserId();
 
+        if (persisted.getType() == NotificationType.NEW_DEVICE_LOGIN) {
+            executeForRootDevice(persisted, recipientId);
+            return;
+        }
+
         if (isChatMessageType(persisted.getType())) {
             try {
                 boolean isOnline = socketServiceClient.isUserOnline(recipientId);
@@ -54,7 +59,6 @@ public class FcmDeliveryStrategy implements NotificationStrategy {
                     return;
                 }
             } catch (Exception e) {
-                // If presence check fails, proceed with FCM (fail-safe: better to send than miss)
                 log.warn("FCM presence check failed for user {}, proceeding with push: {}", recipientId, e.getMessage());
             }
         }
@@ -68,41 +72,68 @@ public class FcmDeliveryStrategy implements NotificationStrategy {
         Map<String, NotificationStrategyHelper.RenderedContent> contentCache = new HashMap<>();
 
         for (UserDevice device : devices) {
-            // Use device-level locale, fallback to "vi"
-            String deviceLocale = device.getLocale() != null ? device.getLocale() : "vi";
-
-            // Check device-level notification preference
-            if (!isAllowedOnDevice(device, persisted.getType())) {
-                log.debug("FCM skip: filtered by device preference: recipient={}, device={}",
-                        recipientId, device.getDeviceId());
-                continue;
-            }
-
-            // DND is already checked at DeliveryService level,
-            // but we still check per-device here for granular control
-            if (isDeviceInDnd(device)) {
-                log.info("FCM skip: silenced by DND: recipient={}, device={}, type={}",
-                        recipientId,
-                        device.getDeviceId(),
-                        persisted.getType()
-                );
-                continue;
-            }
-
-            // Render content for this device's locale (using cache to avoid redundant rendering)
-            var rendered = contentCache.computeIfAbsent(deviceLocale, loc -> 
-                strategyHelper.render(persisted, NotificationChannel.FCM, loc));
-
-            if ("".equals(rendered.title()) && "".equals(rendered.body())) {
-                log.warn("FCM skip: both title and body are empty for device={}, type={}", device.getId(), persisted.getType());
-                continue;
-            }
-
-            // Prepare metadata
-            Map<String, Object> metadata = prepareMetadata(persisted);
-
-            fcmService.sendPush(persisted.getId(), device, rendered.title(), rendered.body(), persisted.getType().name(), metadata);
+            sendToEligibleDevice(persisted, recipientId, device, contentCache);
         }
+    }
+
+    private void executeForRootDevice(Notification persisted, String recipientId) {
+        String rootDeviceId = strategyHelper.getStr(persisted, "rootDeviceId");
+        if (rootDeviceId == null || rootDeviceId.isBlank()) {
+            log.debug("[FCM] NEW_DEVICE_LOGIN skip: rootDeviceId absent in payload for recipientId={}", recipientId);
+            return;
+        }
+
+        Optional<UserDevice> deviceOpt = userDeviceRepository.findByUserIdAndDeviceId(recipientId, rootDeviceId);
+        if (deviceOpt.isEmpty()) {
+            log.debug("[FCM] NEW_DEVICE_LOGIN skip: no FCM registration found for recipientId={}, rootDeviceId={}",
+                    recipientId, rootDeviceId);
+            return;
+        }
+
+        Map<String, NotificationStrategyHelper.RenderedContent> contentCache = new HashMap<>();
+        sendToEligibleDevice(persisted, recipientId, deviceOpt.get(), contentCache);
+    }
+
+    private void sendToEligibleDevice(
+            Notification persisted,
+            String recipientId,
+            UserDevice device,
+            Map<String, NotificationStrategyHelper.RenderedContent> contentCache
+    ) {
+        String deviceLocale = device.getLocale() != null ? device.getLocale() : "vi";
+
+        if (!isAllowedOnDevice(device, persisted.getType())) {
+            log.debug("FCM skip: filtered by device preference: recipient={}, device={}",
+                    recipientId, device.getDeviceId());
+            return;
+        }
+
+        if (isDeviceInDnd(device)) {
+            log.info("FCM skip: silenced by DND: recipient={}, device={}, type={}",
+                    recipientId, device.getDeviceId(), persisted.getType());
+            return;
+        }
+
+        var rendered = contentCache.computeIfAbsent(
+                deviceLocale,
+                loc -> strategyHelper.render(persisted, NotificationChannel.FCM, loc)
+        );
+
+        if ("".equals(rendered.title()) && "".equals(rendered.body())) {
+            log.warn("FCM skip: both title and body are empty for device={}, type={}",
+                    device.getId(), persisted.getType());
+            return;
+        }
+
+        Map<String, Object> metadata = prepareMetadata(persisted);
+        fcmService.sendPush(
+                persisted.getId(),
+                device,
+                rendered.title(),
+                rendered.body(),
+                persisted.getType().name(),
+                metadata
+        );
     }
 
     private Map<String, Object> prepareMetadata(Notification persisted) {
@@ -128,15 +159,13 @@ public class FcmDeliveryStrategy implements NotificationStrategy {
         metadata.put("actorCount", String.valueOf(actorCount));
         metadata.put("othersCount", String.valueOf(othersCount));
         metadata.put("requestId", requestId != null ? requestId : "");
-        
-        if ("FRIEND_REQUEST".equals(persisted.getType().name())) {
+
+        if (persisted.getType() == NotificationType.FRIEND_REQUEST) {
             metadata.put("categoryIdentifier", "friend_request");
         }
 
         return metadata;
     }
-
-
 
     private boolean isChatMessageType(NotificationType type) {
         return type == NotificationType.MESSAGE_DIRECT ||

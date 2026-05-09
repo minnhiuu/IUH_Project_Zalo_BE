@@ -52,7 +52,7 @@ public class TokenStoreServiceImpl implements TokenStoreService {
     }
 
     @Override
-    public void createRefreshSession(
+    public List<RefreshTokenSession> createRefreshSession(
             String sessionId,
             String accountId,
             String phoneNumber,
@@ -66,16 +66,17 @@ public class TokenStoreServiceImpl implements TokenStoreService {
         List<RefreshTokenSession> oldSessions = refreshSessionRepository
                 .findByAccountIdAndDeviceType(accountId, deviceType);
 
+        List<RefreshTokenSession> kickedSessions = new java.util.ArrayList<>();
         for (RefreshTokenSession oldSession : oldSessions) {
             if (!deviceId.equals(oldSession.getDeviceId())) {
                 log.info("Kicking session from different device: sessionId={}, oldDeviceId={}, newDeviceId={}",
                         oldSession.getSessionId(), oldSession.getDeviceId(), deviceId);
-                refreshSessionRepository.delete(oldSession);
             } else {
                 log.info("Same device re-login detected: updating session sessionId={}, deviceId={}",
                         oldSession.getSessionId(), deviceId);
-                refreshSessionRepository.delete(oldSession);
             }
+            kickedSessions.add(oldSession);
+            refreshSessionRepository.delete(oldSession);
         }
 
         long now = System.currentTimeMillis();
@@ -99,6 +100,8 @@ public class TokenStoreServiceImpl implements TokenStoreService {
         refreshSessionRepository.save(session);
         log.info("Refresh session created: sessionId={}, accountId={}, deviceType={}, deviceId={}",
                 sessionId, accountId, deviceType, deviceId);
+
+        return kickedSessions;
     }
 
     @Override

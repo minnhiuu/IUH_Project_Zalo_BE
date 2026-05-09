@@ -196,6 +196,20 @@ public class DataInitializer {
                 "Incoming call",
                 "<b>{{actorName}}</b> is calling you");
 
+        // --- SECURITY TEMPLATES ---
+        seedIfAbsent(NotificationType.NEW_DEVICE_LOGIN, NotificationChannel.IN_APP, "vi",
+                "Cảnh báo đăng nhập mới",
+                "Tài khoản của bạn vừa được đăng nhập từ một thiết bị mới ({{deviceName}}) với IP: {{ipAddress}}. Nếu không phải bạn, vui lòng bảo mật tài khoản ngay lập tức.");
+        seedIfAbsent(NotificationType.NEW_DEVICE_LOGIN, NotificationChannel.IN_APP, "en",
+                "New Login Detected",
+                "Your account was just logged into from a new device ({{deviceName}}) with IP: {{ipAddress}}. If this was not you, please secure your account.");
+        seedIfAbsent(NotificationType.NEW_DEVICE_LOGIN, NotificationChannel.FCM, "vi",
+                "Cảnh báo đăng nhập mới",
+                "Tài khoản của bạn vừa được đăng nhập từ một thiết bị mới ({{deviceName}}) với IP: {{ipAddress}}. Nếu không phải bạn, vui lòng bảo mật tài khoản ngay lập tức.");
+        seedIfAbsent(NotificationType.NEW_DEVICE_LOGIN, NotificationChannel.FCM, "en",
+                "New Login Detected",
+                "Your account was just logged into from a new device ({{deviceName}}) with IP: {{ipAddress}}. If this was not you, please secure your account.");
+
         // --- MODERATION TEMPLATES ---
         seedIfAbsent(NotificationType.CONTENT_REMOVED, NotificationChannel.IN_APP, "vi",
                 "Nội dung đã bị xóa",

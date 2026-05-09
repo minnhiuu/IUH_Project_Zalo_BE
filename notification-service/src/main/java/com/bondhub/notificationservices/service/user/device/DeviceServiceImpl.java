@@ -57,6 +57,7 @@ public class DeviceServiceImpl implements DeviceService {
                         .deviceId(deviceId)
                         .locale(locale)
                         .build();
+
                 userDeviceRepository.save(newDevice);
                 log.info("[FCM] New device saved for user: {}", userId);
             } else {

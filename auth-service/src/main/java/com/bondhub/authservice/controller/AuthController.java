@@ -54,17 +54,6 @@ public class AuthController {
     }
 
     /**
-     * OLD SINGLE-STEP REGISTRATION (deprecated, use two-step flow instead)
-     */
-    @Deprecated
-    @PostMapping("/register/old")
-    public ResponseEntity<ApiResponse<TokenResponse>> registerOld(@Valid @RequestBody RegisterRequest request) {
-        log.info("POST /auth/register/old - Registration for email: {}", request.email());
-        TokenResponse tokenResponse = authenticationService.register(request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(tokenResponse));
-    }
-
-    /**
      * TWO-STEP REGISTRATION - Step 1: Initiate registration
      * Validates email, generates OTP, sends email
      */
@@ -252,15 +241,20 @@ public class AuthController {
     @PostMapping("/logout-device")
     public ResponseEntity<ApiResponse<Void>> logoutDevice(
             @Valid @RequestBody LogoutDeviceRequest request,
-            @CookieValue(value = CookieUtil.REFRESH_TOKEN_COOKIE_NAME, required = false) String cookieRefreshToken) {
+            @CookieValue(value = CookieUtil.REFRESH_TOKEN_COOKIE_NAME, required = false) String cookieRefreshToken,
+            HttpServletRequest httpRequest) {
 
         log.info("POST /auth/logout-device - Logout specific device request");
 
-        String refreshToken = (request != null && request.refreshToken() != null)
-                ? request.refreshToken()
-                : cookieRefreshToken;
+        String token = cookieRefreshToken;
+        if (token == null || token.isBlank()) {
+            String authHeader = httpRequest.getHeader("Authorization");
+            if (authHeader != null && authHeader.startsWith("Bearer ")) {
+                token = authHeader.substring(7);
+            }
+        }
 
-        authenticationService.logoutDevice(request.sessionId(), refreshToken);
+        authenticationService.logoutDevice(request.sessionId(), token);
 
         return ResponseEntity.ok(ApiResponse.success(null));
     }

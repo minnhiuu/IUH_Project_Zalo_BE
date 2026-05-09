@@ -28,6 +28,14 @@ public enum BatchWindowConfig {
     MESSAGE_GROUP   (NotificationType.MESSAGE_GROUP,   0,   false),
     CALL            (NotificationType.CALL,            0,   false),
     SYSTEM          (NotificationType.SYSTEM,          0,   false),
+
+    // --- KIỂM DUYỆT NỘI DUNG ---
+    CONTENT_REMOVED (NotificationType.CONTENT_REMOVED, 0,   false),
+    CONTENT_HIDDEN  (NotificationType.CONTENT_HIDDEN,  0,   false),
+    USER_WARNED     (NotificationType.USER_WARNED,     0,   false),
+
+    // --- BẢO MẬT (SECURITY) ---
+    NEW_DEVICE_LOGIN(NotificationType.NEW_DEVICE_LOGIN,0,   false),
     DLQ_ALERT       (NotificationType.DLQ_ALERT,       30,  true),
     DND_SUMMARY     (NotificationType.DND_SUMMARY,     0,   false);
 

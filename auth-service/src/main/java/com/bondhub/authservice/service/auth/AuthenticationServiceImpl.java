@@ -17,9 +17,11 @@ import com.bondhub.authservice.service.device.DeviceService;
 import com.bondhub.authservice.service.otp.OtpService;
 import com.bondhub.authservice.service.token.TokenStoreService;
 import com.bondhub.authservice.util.TokenProvider;
+import com.bondhub.common.dto.client.socketservice.SocketEvent;
 import com.bondhub.common.constant.MailTemplate;
 import com.bondhub.common.dto.client.userservice.user.request.UserCreateRequest;
 import com.bondhub.common.enums.Role;
+import com.bondhub.common.enums.SocketEventType;
 import com.bondhub.common.event.notification.EmailNotificationEvent;
 import com.bondhub.common.event.user.UserIndexEvent;
 import com.bondhub.common.exception.AppException;
@@ -31,9 +33,12 @@ import com.bondhub.common.utils.SecurityUtil;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
+import lombok.experimental.NonFinal;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.MessageSource;
 import org.springframework.context.i18n.LocaleContextHolder;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -41,6 +46,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.HashSet;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -63,6 +69,11 @@ public class AuthenticationServiceImpl implements AuthenticationService {
     TokenProvider tokenProvider;
     OutboxEventPublisher outboxEventPublisher;
     DeviceService deviceService;
+    KafkaTemplate<String, Object> kafkaTemplate;
+
+    @NonFinal
+    @Value("${kafka.topics.socket-events:socket-events}")
+    String socketEventsTopic;
 
     @Override
     public TokenResponse login(LoginRequest request, String userAgent, String ipAddress) {
@@ -101,37 +112,6 @@ public class AuthenticationServiceImpl implements AuthenticationService {
 
         return tokenProvider.generateFullTokenResponse(
                 account, request.deviceId(), request.deviceType(), userAgent, ipAddress);
-    }
-
-    @Override
-    public TokenResponse register(RegisterRequest request) {
-        log.info("Registration attempt for email: {}", request.email());
-
-        if (accountRepository.existsByEmail(request.email())) {
-            throw new AppException(ErrorCode.ACC_EMAIL_ALREADY_USED);
-        }
-
-        if (request.phoneNumber() != null && !request.phoneNumber().isBlank()) {
-            if (accountRepository.existsByPhoneNumber(request.phoneNumber())) {
-                throw new AppException(ErrorCode.ACC_PHONE_NUMBER_ALREADY_USED);
-            }
-        }
-
-        Account account = Account.builder()
-                .email(request.email())
-                .password(passwordEncoder.encode(request.password()))
-                .phoneNumber(request.phoneNumber())
-                .role(Role.USER)
-                .enabled(true)
-                .build();
-
-        account = accountRepository.save(account);
-
-        String sessionId = UUID.randomUUID().toString();
-        String accessToken = jwtUtil.generateAccessToken(account.getId(), null, account.getEmail(), account.getRole(),
-                sessionId);
-
-        return TokenResponse.of(accessToken, null, 0);
     }
 
     @Override
@@ -174,14 +154,16 @@ public class AuthenticationServiceImpl implements AuthenticationService {
 
     @Override
     public void logout(String refreshToken) {
+        String userId = null;
         try {
             if (securityUtil.isAuthenticated()) {
                 String jti = securityUtil.getCurrentJwtId();
-                String userId = securityUtil.getCurrentAccountId();
+                userId = securityUtil.getCurrentUserId();
+                String accountId = securityUtil.getCurrentAccountId();
                 String email = securityUtil.getCurrentEmail();
                 long ttl = securityUtil.getRemainingTtlSeconds();
 
-                tokenStoreService.blacklistAccessToken(jti, userId, email, ttl, "Logout");
+                tokenStoreService.blacklistAccessToken(jti, accountId, email, ttl, "Logout");
             }
         } catch (Exception e) {
             log.warn("Could not blacklist access token during logout: {}", e.getMessage());
@@ -191,10 +173,27 @@ public class AuthenticationServiceImpl implements AuthenticationService {
             String sessionId = jwtUtil.extractSessionId(refreshToken);
             if (sessionId != null) {
                 tokenStoreService.revokeRefreshSession(sessionId);
+                if (userId != null) {
+                    publishForceLogoutEvent(userId, sessionId, "Logout");
+                }
             }
         }
 
         log.info("Logout processed");
+    }
+
+    private void publishForceLogoutEvent(String userId, String sessionId, String reason) {
+        try {
+            Map<String, String> payload = Map.of(
+                    "type", "FORCE_LOGOUT",
+                    "sessionId", sessionId,
+                    "reason", reason);
+            kafkaTemplate.send(socketEventsTopic, new SocketEvent(
+                    SocketEventType.FORCE_LOGOUT, userId, "/queue/session", payload));
+            log.info("[Auth] Published FORCE_LOGOUT event: userId={}, sessionId={}", userId, sessionId);
+        } catch (Exception e) {
+            log.warn("[Auth] Failed to publish FORCE_LOGOUT event for userId={}: {}", userId, e.getMessage());
+        }
     }
 
     @Override
@@ -259,7 +258,7 @@ public class AuthenticationServiceImpl implements AuthenticationService {
 
         pendingRegistrationRepository.save(pendingReg);
 
-        EmailNotificationEvent emailEvent = 
+        EmailNotificationEvent emailEvent =
                 EmailNotificationEvent.builder()
                 .recipientEmail(request.email())
                 .subject("Registration Verification")
@@ -275,9 +274,9 @@ public class AuthenticationServiceImpl implements AuthenticationService {
                 .build();
 
         outboxEventPublisher.saveAndPublish(
-                request.email(), 
-                "ACCOUNT", 
-                EventType.EMAIL_NOTIFICATION, 
+                request.email(),
+                "ACCOUNT",
+                EventType.EMAIL_NOTIFICATION,
                 emailEvent
         );
 
@@ -359,7 +358,7 @@ public class AuthenticationServiceImpl implements AuthenticationService {
 
         String otp = otpService.generateAndStoreOtp(request.email(), OtpPurpose.PASSWORD_RESET);
 
-        EmailNotificationEvent emailEvent = 
+        EmailNotificationEvent emailEvent =
                 EmailNotificationEvent.builder()
                 .recipientEmail(request.email())
                 .subject("Password Reset Request")
@@ -375,9 +374,9 @@ public class AuthenticationServiceImpl implements AuthenticationService {
                 .build();
 
         outboxEventPublisher.saveAndPublish(
-                request.email(), 
-                "ACCOUNT", 
-                EventType.EMAIL_NOTIFICATION, 
+                request.email(),
+                "ACCOUNT",
+                EventType.EMAIL_NOTIFICATION,
                 emailEvent
         );
 
@@ -427,6 +426,10 @@ public class AuthenticationServiceImpl implements AuthenticationService {
             throw new AppException(ErrorCode.JWT_INVALID_TOKEN);
         }
 
+        // --- NEW: enforce root device ---
+        enforceRootDeviceAccess(currentSessionId, userId, "logout all other devices");
+        // --------------------------------
+
         log.info("Logging out all other devices for user: {}, currentSessionId: {}", userId, currentSessionId);
 
         // Revoke all other refresh sessions in Redis (marks revoked=true, keeps the
@@ -437,6 +440,13 @@ public class AuthenticationServiceImpl implements AuthenticationService {
 
         // For each revoked session: blacklist its paired access token + update MongoDB
         // device record
+        String presenceUserId = null;
+        try {
+            presenceUserId = securityUtil.getCurrentUserId();
+        } catch (Exception e) {
+            log.warn("[Auth] Could not resolve userId for FORCE_LOGOUT broadcast: {}", e.getMessage());
+        }
+
         for (String sessionId : revokedSessionIds) {
             try {
                 tokenStoreService.revokeAndBlacklistSession(sessionId, userId, accessTokenTtlMs);
@@ -446,6 +456,10 @@ public class AuthenticationServiceImpl implements AuthenticationService {
                         .build();
                 deviceService.updateDeviceBySessionId(sessionId, updateRequest);
                 log.debug("Force-logged out session and blacklisted access token: {}", sessionId);
+
+                if (presenceUserId != null) {
+                    publishForceLogoutEvent(presenceUserId, sessionId, "LogoutOthers");
+                }
             } catch (Exception e) {
                 log.warn("Failed to fully process logout for session: {}", sessionId);
             }
@@ -455,17 +469,17 @@ public class AuthenticationServiceImpl implements AuthenticationService {
     }
 
     @Override
-    public void logoutDevice(String targetSessionId, String refreshToken) {
-        if (refreshToken == null || !jwtUtil.validateToken(refreshToken)) {
-            throw new AppException(ErrorCode.JWT_INVALID_TOKEN);
-        }
+    public void logoutDevice(String targetSessionId, String currentSessionToken) {
+        String currentSessionId = currentSessionToken != null ? jwtUtil.extractSessionId(currentSessionToken) : null;
 
-        String userId = jwtUtil.extractAccountId(refreshToken);
-        if (userId == null) {
-            throw new AppException(ErrorCode.JWT_INVALID_TOKEN);
-        }
+        // Use the security context (populated by gateway via access token) for caller identity
+        String userId = securityUtil.getCurrentAccountId();
 
         log.info("Request to logout device session {} by user {}", targetSessionId, userId);
+
+        // --- NEW: enforce root device ---
+        String rootDeviceId = enforceRootDeviceAccess(currentSessionId, userId, "logout session " + targetSessionId);
+        // --------------------------------
 
         // Verify ownership and existence via TokenStoreService
         RefreshTokenSession session = tokenStoreService
@@ -477,6 +491,13 @@ public class AuthenticationServiceImpl implements AuthenticationService {
                     session.getAccountId());
             throw new AppException(ErrorCode.AUTH_UNAUTHORIZED);
         }
+
+        // --- NEW: exclude the root ---
+        if (rootDeviceId != null && rootDeviceId.equals(session.getDeviceId())) {
+            log.warn("Attempted to explicitly logout root device {}", rootDeviceId);
+            throw new AppException(ErrorCode.AUTH_UNAUTHORIZED);
+        }
+        // -----------------------------
 
         // Revoke the refresh session AND blacklist the paired access token immediately
         long accessTokenTtlMs = jwtUtil.getAccessTokenExpirationSeconds() * 1000;
@@ -491,6 +512,18 @@ public class AuthenticationServiceImpl implements AuthenticationService {
             log.info("✅ Device logged out and access token blacklisted: {}", targetSessionId);
         } catch (Exception e) {
             log.warn("⚠️ Could not update device details for session: {}", targetSessionId);
+        }
+
+        // Notify the target device to disconnect via WebSocket
+        try {
+            String presenceUserId = securityUtil.getCurrentUserId();
+            if (presenceUserId != null) {
+                publishForceLogoutEvent(presenceUserId, targetSessionId, "LogoutDevice");
+            } else {
+                log.warn("[Auth] Could not resolve userId for FORCE_LOGOUT on logoutDevice");
+            }
+        } catch (Exception e) {
+            log.warn("[Auth] Could not publish FORCE_LOGOUT for logoutDevice: {}", e.getMessage());
         }
     }
 
@@ -524,5 +557,22 @@ public class AuthenticationServiceImpl implements AuthenticationService {
 
     private Set<String> copyInitialInterests(Set<String> initialInterests) {
         return initialInterests == null ? new HashSet<>() : new HashSet<>(initialInterests);
+    }
+
+    private String enforceRootDeviceAccess(String currentSessionId, String userId, String actionDescription) {
+        String rootDeviceId = deviceService.getRootMobileDeviceId(userId).orElse(null);
+
+        if (currentSessionId != null && rootDeviceId != null) {
+            String currentDeviceId = tokenStoreService.findRefreshSession(currentSessionId)
+                    .map(RefreshTokenSession::getDeviceId)
+                    .orElse(null);
+
+            if (!rootDeviceId.equals(currentDeviceId)) {
+                log.warn("Non-root device {} attempted to {}", currentDeviceId, actionDescription);
+                throw new AppException(ErrorCode.AUTH_UNAUTHORIZED);
+            }
+        }
+
+        return rootDeviceId;
     }
 }
