@@ -162,20 +162,39 @@ public class NotificationServiceImpl implements NotificationService {
     @Override
     public UserNotificationStateResponse getNotificationState() {
         String userId = securityUtil.getCurrentUserId();
-        UserNotificationState state = userStateRepository.findById(userId)
-                .orElse(UserNotificationState.builder()
-                        .userId(userId)
-                        .unreadCount(0)
-                        .build());
-
-        long uniqueCount = state.getUnreadActorIds() != null ? state.getUnreadActorIds().size() : 0;
+        
+        // Count unread system notifications (exclude chat messages)
+        long unreadCount = mongoTemplate.count(
+                new Query(Criteria.where("userId").is(userId)
+                        .and("type").nin(NotificationType.MESSAGE_DIRECT, NotificationType.MESSAGE_GROUP)
+                        .and("isRead").is(false)
+                        .and("active").is(true)),
+                Notification.class
+        );
+        
+        // Count distinct unread chat conversations
+        long chatUnreadConversationCount = countUnreadChatConversations(userId);
+        
+        // Total badge = system notifications + chat conversations
+        long notificationBadgeCount = unreadCount + chatUnreadConversationCount;
 
         return UserNotificationStateResponse.builder()
-                .unreadCount(state.getUnreadCount())
-                .uniqueActorCount(uniqueCount)
-                .unreadActorIds(state.getUnreadActorIds())
-                .lastCheckedAt(state.getLastCheckedAt())
+                .unreadCount(unreadCount)
+                .notificationBadgeCount(notificationBadgeCount)
                 .build();
+    }
+
+    private long countUnreadChatConversations(String userId) {
+        Query query = new Query(Criteria.where("userId").is(userId)
+                .and("type").in(NotificationType.MESSAGE_DIRECT, NotificationType.MESSAGE_GROUP)
+                .and("isRead").is(false)
+                .and("active").is(true));
+
+        // referenceId is stored as OBJECT_ID in MongoDB, use Object.class to fetch it correctly
+        return mongoTemplate.findDistinct(query, "referenceId", Notification.class, Object.class)
+                .stream()
+                .filter(referenceId -> referenceId != null)
+                .count();
     }
 
     @Override
@@ -184,9 +203,9 @@ public class NotificationServiceImpl implements NotificationService {
         mongoTemplate.upsert(
                 new Query(Criteria.where("_id").is(userId)),
                 new Update()
-                        .set("lastCheckedAt", LocalDateTime.now())
-                        .set("unreadCount", 0L)
-                        .set("unreadActorIds", new ArrayList<>()), // Xóa danh sách người gửi khi đã check
+                        .set("lastCheckedAt", LocalDateTime.now()),
+                        // Only update lastCheckedAt - don't reset counts
+                        // Counts are decremented only when notifications are actually marked as read
                 UserNotificationState.class
         );
     }
@@ -208,8 +227,19 @@ public class NotificationServiceImpl implements NotificationService {
     @Override
     public void markChatConversationAsRead(String conversationId) {
         String userId = securityUtil.getCurrentUserId();
+        
+        // referenceId is stored as OBJECT_ID in MongoDB, need to convert if valid ObjectId format
+        Object referenceIdQuery = conversationId;
+        try {
+            if (conversationId != null && conversationId.matches("^[0-9a-fA-F]{24}$")) {
+                referenceIdQuery = new ObjectId(conversationId);
+            }
+        } catch (Exception e) {
+            log.warn("[Notification] Failed to parse conversationId as ObjectId: {}", conversationId, e);
+        }
+        
         Query query = new Query(Criteria.where("userId").is(userId)
-                .and("referenceId").is(conversationId)
+                .and("referenceId").is(referenceIdQuery)
                 .and("type").in(NotificationType.MESSAGE_DIRECT, NotificationType.MESSAGE_GROUP)
                 .and("isRead").is(false));
 
@@ -217,7 +247,9 @@ public class NotificationServiceImpl implements NotificationService {
                 .set("isRead", true)
                 .set("readAt", LocalDateTime.now());
 
-        mongoTemplate.updateMulti(query, update, Notification.class);
+        var result = mongoTemplate.updateMulti(query, update, Notification.class);
+        log.info("[Notification] Marked {} chat notifications as read for conversationId={}, userId={}", 
+                result.getModifiedCount(), conversationId, userId);
     }
 
     @Override

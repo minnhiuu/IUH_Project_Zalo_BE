@@ -167,6 +167,7 @@ public class FcmServiceImpl implements FcmService {
     }
 
     private String buildClickUrl(String baseUrl, String notificationId, String type, Map<String, Object> metadata) {
+        // Handle chat messages -> navigate to conversation
         if (type != null && (type.equals("MESSAGE_DIRECT") || type.equals("MESSAGE_GROUP"))) {
             Object conversationId = metadata != null ? metadata.get("conversationId") : null;
             if (conversationId == null && metadata != null) {
@@ -177,9 +178,19 @@ public class FcmServiceImpl implements FcmService {
             }
         }
 
-        StringBuilder fallback = new StringBuilder(baseUrl).append("?noti_open=true");
+        // Handle friend requests and system notifications -> navigate to notifications page
+        if (type != null && (type.equals("FRIEND_REQUEST") || type.equals("FRIEND_ACCEPT"))) {
+            StringBuilder url = new StringBuilder(baseUrl).append("notifications");
+            if (notificationId != null && !notificationId.isBlank()) {
+                url.append("?highlight=").append(notificationId);
+            }
+            return url.toString();
+        }
+
+        // Default fallback: navigate to notifications page with highlight
+        StringBuilder fallback = new StringBuilder(baseUrl).append("notifications");
         if (notificationId != null && !notificationId.isBlank()) {
-            fallback.append("&highlight=").append(notificationId);
+            fallback.append("?highlight=").append(notificationId);
         }
         return fallback.toString();
     }
