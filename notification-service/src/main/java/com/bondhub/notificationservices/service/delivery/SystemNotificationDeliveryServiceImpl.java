@@ -2,6 +2,7 @@ package com.bondhub.notificationservices.service.delivery;
 
 import com.bondhub.common.enums.NotificationType;
 import com.bondhub.common.event.notification.SystemNotificationEvent;
+import com.bondhub.notificationservices.client.SocketServiceClient;
 import com.bondhub.notificationservices.enums.NotificationChannel;
 import com.bondhub.notificationservices.model.Notification;
 import com.bondhub.notificationservices.model.UserDevice;
@@ -46,6 +47,7 @@ public class SystemNotificationDeliveryServiceImpl implements SystemNotification
     MongoTemplate mongoTemplate;
     InAppDeliveryStrategy inAppDeliveryStrategy;
     EmailDeliveryStrategy emailDeliveryStrategy;
+    SocketServiceClient socketServiceClient;
 
     @NonFinal
     @Value("${bondhub.frontend-url}")
@@ -81,6 +83,10 @@ public class SystemNotificationDeliveryServiceImpl implements SystemNotification
             return;
         }
 
+        if (isRecipientOnline(event.getRecipientId(), event.getType())) {
+            return;
+        }
+
         boolean pushSuccess = false;
         try {
             sendFcm(persisted, event);
@@ -96,6 +102,20 @@ public class SystemNotificationDeliveryServiceImpl implements SystemNotification
                 log.error("[SystemDelivery] Fallback Email failed: {}", e.getMessage());
             }
         }
+    }
+
+    private boolean isRecipientOnline(String recipientId, NotificationType type) {
+        try {
+            boolean isOnline = socketServiceClient.isUserOnline(recipientId);
+            if (isOnline) {
+                log.debug("[SystemDelivery] FCM skip: user {} is online, type={}", recipientId, type);
+                return true;
+            }
+        } catch (Exception e) {
+            log.warn("[SystemDelivery] Presence check failed for user {}, proceeding with push: {}",
+                    recipientId, e.getMessage());
+        }
+        return false;
     }
 
     private Notification persist(SystemNotificationEvent event) {

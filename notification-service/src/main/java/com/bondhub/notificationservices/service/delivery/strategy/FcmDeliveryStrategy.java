@@ -51,16 +51,14 @@ public class FcmDeliveryStrategy implements NotificationStrategy {
             return;
         }
 
-        if (isChatMessageType(persisted.getType())) {
-            try {
-                boolean isOnline = socketServiceClient.isUserOnline(recipientId);
-                if (isOnline) {
-                    log.debug("FCM skip: user {} is online, type={}", recipientId, persisted.getType());
-                    return;
-                }
-            } catch (Exception e) {
-                log.warn("FCM presence check failed for user {}, proceeding with push: {}", recipientId, e.getMessage());
+        try {
+            boolean isOnline = socketServiceClient.isUserOnline(recipientId);
+            if (isOnline) {
+                log.debug("FCM skip: user {} is online, type={}", recipientId, persisted.getType());
+                return;
             }
+        } catch (Exception e) {
+            log.warn("FCM presence check failed for user {}, proceeding with push: {}", recipientId, e.getMessage());
         }
 
         List<UserDevice> devices = userDeviceRepository.findByUserId(recipientId);
@@ -165,12 +163,6 @@ public class FcmDeliveryStrategy implements NotificationStrategy {
         }
 
         return metadata;
-    }
-
-    private boolean isChatMessageType(NotificationType type) {
-        return type == NotificationType.MESSAGE_DIRECT ||
-               type == NotificationType.MESSAGE_GROUP ||
-               type == NotificationType.CALL;
     }
 
     private boolean isAllowedOnDevice(UserDevice device, NotificationType type) {
