@@ -39,27 +39,30 @@ public class RecentSearchServiceImpl implements RecentSearchService {
             return;
         }
 
-        if (request.type() == SearchType.KEYWORD) {
-            recentSearchRepository.findByUserIdAndNameIgnoreCaseAndType(userId, request.name(), SearchType.KEYWORD)
-                    .ifPresent(recentSearchRepository::delete);
-        } else {
-            recentSearchRepository.findByUserIdAndTargetIdAndType(userId, request.id(), request.type())
-                    .ifPresent(recentSearchRepository::delete);
-            
-            removeRedundantQueries(userId, request.name());
-        }
+        // Use intern() to get a canonical string for synchronization on the same userId
+        synchronized (userId.intern()) {
+            if (request.type() == SearchType.KEYWORD) {
+                recentSearchRepository.findByUserIdAndNameIgnoreCaseAndType(userId, request.name(), SearchType.KEYWORD)
+                        .ifPresent(recentSearchRepository::delete);
+            } else {
+                recentSearchRepository.findByUserIdAndTargetIdAndType(userId, request.id(), request.type())
+                        .ifPresent(recentSearchRepository::delete);
 
-        RecentSearch newItem = recentSearchMapper.toModel(request);
-        newItem.setUserId(userId);
-        newItem.setTimestamp(System.currentTimeMillis());
-        recentSearchRepository.save(newItem);
+                removeRedundantQueries(userId, request.name());
+            }
 
-        long count = recentSearchRepository.countByUserIdAndType(userId, request.type());
-        if (count > MAX_ITEMS) {
-            List<RecentSearch> history = recentSearchRepository.findAllByUserIdAndTypeOrderByTimestampAsc(userId, request.type());
-            long toDelete = count - MAX_ITEMS;
-            for (int i = 0; i < toDelete && i < history.size(); i++) {
-                recentSearchRepository.delete(history.get(i));
+            RecentSearch newItem = recentSearchMapper.toModel(request);
+            newItem.setUserId(userId);
+            newItem.setTimestamp(System.currentTimeMillis());
+            recentSearchRepository.save(newItem);
+
+            long count = recentSearchRepository.countByUserIdAndType(userId, request.type());
+            if (count > MAX_ITEMS) {
+                List<RecentSearch> history = recentSearchRepository.findAllByUserIdAndTypeOrderByTimestampAsc(userId, request.type());
+                long toDelete = count - MAX_ITEMS;
+                for (int i = 0; i < toDelete && i < history.size(); i++) {
+                    recentSearchRepository.delete(history.get(i));
+                }
             }
         }
     }
