@@ -7,7 +7,7 @@ import com.bondhub.notificationservices.enums.NotificationChannel;
 import com.bondhub.notificationservices.model.Notification;
 import com.bondhub.notificationservices.model.UserDevice;
 import com.bondhub.notificationservices.repository.UserDeviceRepository;
-import com.bondhub.notificationservices.service.delivery.NotificationStrategyHelper;
+import com.bondhub.notificationservices.service.delivery.NotificationContentBuilder;
 import com.bondhub.notificationservices.service.push.FcmService;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
@@ -33,7 +33,7 @@ import java.util.Optional;
 public class FcmDeliveryStrategy implements NotificationStrategy {
 
     UserDeviceRepository userDeviceRepository;
-    NotificationStrategyHelper strategyHelper;
+    NotificationContentBuilder contentBuilder;
     SocketServiceClient socketServiceClient;
     S3UtilV2 s3UtilV2;
     FcmService fcmService;
@@ -67,7 +67,7 @@ public class FcmDeliveryStrategy implements NotificationStrategy {
             return;
         }
 
-        Map<String, NotificationStrategyHelper.RenderedContent> contentCache = new HashMap<>();
+        Map<String, NotificationContentBuilder.RenderedContent> contentCache = new HashMap<>();
 
         for (UserDevice device : devices) {
             sendToEligibleDevice(persisted, recipientId, device, contentCache);
@@ -75,7 +75,7 @@ public class FcmDeliveryStrategy implements NotificationStrategy {
     }
 
     private void executeForRootDevice(Notification persisted, String recipientId) {
-        String rootDeviceId = strategyHelper.getStr(persisted, "rootDeviceId");
+        String rootDeviceId = contentBuilder.getStr(persisted, "rootDeviceId");
         if (rootDeviceId == null || rootDeviceId.isBlank()) {
             log.debug("[FCM] NEW_DEVICE_LOGIN skip: rootDeviceId absent in payload for recipientId={}", recipientId);
             return;
@@ -88,7 +88,7 @@ public class FcmDeliveryStrategy implements NotificationStrategy {
             return;
         }
 
-        Map<String, NotificationStrategyHelper.RenderedContent> contentCache = new HashMap<>();
+        Map<String, NotificationContentBuilder.RenderedContent> contentCache = new HashMap<>();
         sendToEligibleDevice(persisted, recipientId, deviceOpt.get(), contentCache);
     }
 
@@ -96,7 +96,7 @@ public class FcmDeliveryStrategy implements NotificationStrategy {
             Notification persisted,
             String recipientId,
             UserDevice device,
-            Map<String, NotificationStrategyHelper.RenderedContent> contentCache
+            Map<String, NotificationContentBuilder.RenderedContent> contentCache
     ) {
         String deviceLocale = device.getLocale() != null ? device.getLocale() : "vi";
 
@@ -114,7 +114,7 @@ public class FcmDeliveryStrategy implements NotificationStrategy {
 
         var rendered = contentCache.computeIfAbsent(
                 deviceLocale,
-                loc -> strategyHelper.render(persisted, NotificationChannel.FCM, loc)
+                loc -> contentBuilder.render(persisted, NotificationChannel.FCM, loc)
         );
 
         if ("".equals(rendered.title()) && "".equals(rendered.body())) {
@@ -140,13 +140,13 @@ public class FcmDeliveryStrategy implements NotificationStrategy {
             metadata.putAll(persisted.getPayload());
         }
 
-        String lastActorId = strategyHelper.getStr(persisted, "actorId");
-        String lastActorName = strategyHelper.getStr(persisted, "actorName");
-        String requestId = strategyHelper.getStr(persisted, "requestId");
+        String lastActorId = contentBuilder.getStr(persisted, "actorId");
+        String lastActorName = contentBuilder.getStr(persisted, "actorName");
+        String requestId = contentBuilder.getStr(persisted, "requestId");
         int actorCount = persisted.getActorIds() != null ? persisted.getActorIds().size() : 0;
         int othersCount = Math.max(0, actorCount - 1);
 
-        String iconUrl = strategyHelper.resolveAvatar(persisted, s3UtilV2.getS3BaseUrl());
+        String iconUrl = contentBuilder.resolveAvatar(persisted, s3UtilV2.getS3BaseUrl());
         if (iconUrl == null || iconUrl.isEmpty()) {
             iconUrl = frontendUrl + (frontendUrl.endsWith("/") ? "" : "/") + "images/logo.jpg";
         }

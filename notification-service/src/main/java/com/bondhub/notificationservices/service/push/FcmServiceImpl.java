@@ -120,17 +120,12 @@ public class FcmServiceImpl implements FcmService {
         }
 
         if (device.getPlatform() == Platform.IOS) {
-
-
             messageBuilder.setApnsConfig(ApnsConfig.builder()
                     .putHeader("apns-collapse-id", groupingId)
                     .setAps(Aps.builder()
                             .setContentAvailable(true)
                             .setMutableContent(true)
                             .setSound("default")
-                            .build())
-                    .setFcmOptions(ApnsFcmOptions.builder()
-                            .setImage(imageUrl)
                             .build())
                     .build());
         }

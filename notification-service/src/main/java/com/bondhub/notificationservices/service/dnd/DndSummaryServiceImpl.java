@@ -9,7 +9,7 @@ import com.bondhub.notificationservices.model.Notification;
 import com.bondhub.notificationservices.model.UserDevice;
 import com.bondhub.notificationservices.repository.DndMissedNotificationRepository;
 import com.bondhub.notificationservices.repository.UserDeviceRepository;
-import com.bondhub.notificationservices.service.delivery.NotificationStrategyHelper;
+import com.bondhub.notificationservices.service.delivery.NotificationContentBuilder;
 import com.bondhub.notificationservices.service.push.FcmService;
 import com.bondhub.notificationservices.service.template.NotificationTemplateService;
 import com.bondhub.notificationservices.service.user.preference.UserPreferenceService;
@@ -37,7 +37,7 @@ public class DndSummaryServiceImpl implements DndSummaryService {
     DndMissedNotificationRepository missedRepository;
     UserDeviceRepository userDeviceRepository;
     UserPreferenceService userPreferenceService;
-    NotificationStrategyHelper strategyHelper;
+    NotificationContentBuilder contentBuilder;
     NotificationTemplateService templateService;
     FcmService fcmService;
 
@@ -73,7 +73,7 @@ public class DndSummaryServiceImpl implements DndSummaryService {
         }
 
         // 2. Cache rendered content per locale to avoid redundant processing
-        Map<String, NotificationStrategyHelper.RenderedContent> renderedCache = new HashMap<>();
+        Map<String, NotificationContentBuilder.RenderedContent> renderedCache = new HashMap<>();
         int totalCount = missed.size();
 
         int sentCount = 0;
@@ -91,7 +91,7 @@ public class DndSummaryServiceImpl implements DndSummaryService {
 
             String locale = device.getLocale() != null ? device.getLocale() : "vi";
 
-            NotificationStrategyHelper.RenderedContent rendered = renderedCache.computeIfAbsent(locale, loc -> {
+            NotificationContentBuilder.RenderedContent rendered = renderedCache.computeIfAbsent(locale, loc -> {
                 List<DndSummaryItem> summaryItems = buildSummaryItems(grouped, loc);
                 String summaryText = buildSummaryText(summaryItems);
 
@@ -105,7 +105,7 @@ public class DndSummaryServiceImpl implements DndSummaryService {
                         ))
                         .build();
 
-                return strategyHelper.render(mockNoti, NotificationChannel.FCM, loc);
+                return contentBuilder.render(mockNoti, NotificationChannel.FCM, loc);
             });
 
             // 3. Send to this specific device

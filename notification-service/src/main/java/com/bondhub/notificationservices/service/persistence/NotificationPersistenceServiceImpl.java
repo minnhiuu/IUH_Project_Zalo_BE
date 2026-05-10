@@ -167,7 +167,7 @@ public class NotificationPersistenceServiceImpl implements NotificationPersisten
             }
             
             String actorName = normalizeSnippet(event.getLastActorName());
-            String content = normalizeSnippet((String) basePayload.get("content"));
+            String content = normalizeSnippet(resolveLocalizedContent(basePayload, event.getLocale()));
             if (content != null) {
                 String newSnippet = (event.getType() == NotificationType.MESSAGE_GROUP && actorName != null)
                         ? actorName + ": " + content
@@ -252,6 +252,20 @@ public class NotificationPersistenceServiceImpl implements NotificationPersisten
         }
 
         return result;
+    }
+
+    private String resolveLocalizedContent(Map<String, Object> payload, String locale) {
+        if (payload == null || payload.isEmpty()) {
+            return null;
+        }
+
+        Object localized = payload.get("en".equalsIgnoreCase(locale) ? "contentEn" : "contentVi");
+        if (localized != null) {
+            return localized.toString();
+        }
+
+        Object fallback = payload.get("content");
+        return fallback != null ? fallback.toString() : null;
     }
 
     private String normalizeSnippet(String value) {

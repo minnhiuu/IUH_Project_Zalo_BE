@@ -42,7 +42,7 @@ public class SystemNotificationDeliveryServiceImpl implements SystemNotification
     NotificationTemplateService templateService;
     UserPreferenceService userPreferenceService;
     DndMissedNotificationService dndMissedNotificationService;
-    NotificationStrategyHelper strategyHelper;
+    NotificationContentBuilder contentBuilder;
     FcmService fcmService;
     MongoTemplate mongoTemplate;
     InAppDeliveryStrategy inAppDeliveryStrategy;

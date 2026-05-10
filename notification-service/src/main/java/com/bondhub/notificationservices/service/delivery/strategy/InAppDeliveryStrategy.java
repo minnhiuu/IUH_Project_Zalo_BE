@@ -10,7 +10,7 @@ import com.bondhub.notificationservices.model.Notification;
 import com.bondhub.notificationservices.model.UserDevice;
 import com.bondhub.notificationservices.publisher.SocketEventPublisher;
 import com.bondhub.notificationservices.repository.UserDeviceRepository;
-import com.bondhub.notificationservices.service.delivery.NotificationStrategyHelper;
+import com.bondhub.notificationservices.service.delivery.NotificationContentBuilder;
 import com.bondhub.notificationservices.service.user.preference.UserPreferenceService;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
@@ -32,7 +32,7 @@ import java.util.stream.Collectors;
 public class InAppDeliveryStrategy implements NotificationStrategy {
 
     SocketEventPublisher socketEventPublisher;
-    NotificationStrategyHelper strategyHelper;
+    NotificationContentBuilder contentBuilder;
     UserDeviceRepository userDeviceRepository;
     UserPreferenceService userPreferenceService;
 
@@ -60,7 +60,7 @@ public class InAppDeliveryStrategy implements NotificationStrategy {
             // 2. Render for each locale and build translations map
             Map<String, NotificationResponse.LocalizedContent> translations = new HashMap<>();
             for (String loc : locales) {
-                var rendered = strategyHelper.render(persisted, NotificationChannel.IN_APP, loc);
+                var rendered = contentBuilder.render(persisted, NotificationChannel.IN_APP, loc);
                 translations.put(loc, NotificationResponse.LocalizedContent.builder()
                         .title(rendered.title())
                         .body(rendered.body())

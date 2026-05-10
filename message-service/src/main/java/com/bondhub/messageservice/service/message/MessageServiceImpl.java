@@ -369,8 +369,21 @@ public class MessageServiceImpl implements MessageService {
                 .build();
         messageRepository.save(message);
 
-        // 4. Xây dựng last message preview
-        String previewContent = buildPreviewContent(message);
+        String previewContent = null;
+        Map<String, Object> lastMessageMetadata = new HashMap<>();
+        
+        // Extract attachment metadata for notification rendering (chỉ khi có attachment)
+        if (message.getAttachments() != null && !message.getAttachments().isEmpty()) {
+            Map<String, Object> attachmentMetadata = extractAttachmentMetadata(message.getAttachments());
+            lastMessageMetadata.putAll(attachmentMetadata);
+        }
+        
+        if (message.getType() == MessageType.CHAT && message.getContent() != null && !message.getContent().isBlank()) {
+            previewContent = message.getContent();
+        }
+        
+        String notificationContentVi = buildNotificationContent(message, "vi");
+        String notificationContentEn = buildNotificationContent(message, "en");
         LastMessageInfo lastInfo = LastMessageInfo.builder()
                 .messageId(message.getId())
                 .senderId(currentUserId)
@@ -378,6 +391,7 @@ public class MessageServiceImpl implements MessageService {
                 .timestamp(message.getCreatedAt())
                 .type(message.getType())
                 .status(message.getStatus())
+                .metadata(lastMessageMetadata.isEmpty() ? null : lastMessageMetadata)
                 .build();
 
         // 5. Cập nhật lastMessage + tăng unreadCount cho tất cả member trừ sender
@@ -446,6 +460,23 @@ public class MessageServiceImpl implements MessageService {
                             dynamicGroupName = conversationHelper.getDynamicGroupName(finalRoom, member.getUserId(), groupUserCache);
                         }
 
+                        // Extract attachment metadata for i18n rebuilding
+                        Map<String, Object> attachmentMetadata = extractAttachmentMetadata(message.getAttachments());
+
+                        Map<String, Object> payloadMap = new HashMap<>();
+                        payloadMap.put("conversationId", finalRoom.getId());
+                        payloadMap.put("messageId", message.getId());
+                        payloadMap.put("content", notificationContentVi);
+                        payloadMap.put("contentVi", notificationContentVi);
+                        payloadMap.put("contentEn", notificationContentEn);
+                        payloadMap.put("senderId", currentUserId);
+                        payloadMap.put("senderName", sender != null ? sender.getFullName() : "Người dùng");
+                        payloadMap.put("isGroup", finalRoom.isGroup());
+                        payloadMap.put("groupName", dynamicGroupName != null ? dynamicGroupName : "");
+                        payloadMap.put("conversationAvatar", finalRoom.isGroup() ? (finalRoom.getAvatar() != null ? baseUrl + finalRoom.getAvatar() : "") : (sender != null && sender.getAvatar() != null ? baseUrl + sender.getAvatar() : ""));
+                        payloadMap.put("messageType", message.getType().name());
+                        payloadMap.putAll(attachmentMetadata);
+
                         RawNotificationEvent rawEvent = RawNotificationEvent.builder()
                                 .recipientId(member.getUserId())
                                 .actorId(currentUserId)
@@ -453,16 +484,7 @@ public class MessageServiceImpl implements MessageService {
                                 .actorAvatar(sender != null && sender.getAvatar() != null ? baseUrl + sender.getAvatar() : null)
                                 .type(notiType)
                                 .referenceId(message.getId())
-                                .payload(Map.of(
-                                        "conversationId", finalRoom.getId(),
-                                        "messageId", message.getId(),
-                                        "content", message.getContent() != null ? message.getContent() : "Đã gửi một tin nhắn",
-                                        "senderId", currentUserId,
-                                        "senderName", sender != null ? sender.getFullName() : "Người dùng",
-                                        "isGroup", finalRoom.isGroup(),
-                                        "groupName", dynamicGroupName != null ? dynamicGroupName : "",
-                                        "conversationAvatar", finalRoom.isGroup() ? (finalRoom.getAvatar() != null ? baseUrl + finalRoom.getAvatar() : "") : (sender != null && sender.getAvatar() != null ? baseUrl + sender.getAvatar() : "")
-                                ))
+                                .payload(payloadMap)
                                 .occurredAt(message.getCreatedAt())
                                 .build();
 
@@ -1021,6 +1043,11 @@ public class MessageServiceImpl implements MessageService {
     }
 
     private String buildPreviewContent(Message message) {
+        String attachmentPreview = buildAttachmentPreview(message, "vi");
+        if (attachmentPreview != null) {
+            return attachmentPreview;
+        }
+
         return switch (message.getType() == null ? MessageType.CHAT : message.getType()) {
             case IMAGE -> "[Hình ảnh]";
             case VIDEO -> "[Video]";
@@ -1028,6 +1055,127 @@ public class MessageServiceImpl implements MessageService {
             case LINK -> "[Liên kết]";
             default -> message.getContent();
         };
+    }
+
+    private String buildNotificationContent(Message message, String locale) {
+        String attachmentPreview = buildAttachmentPreview(message, locale);
+        if (attachmentPreview != null) {
+            return attachmentPreview;
+        }
+
+        String content = message.getContent();
+        if (content != null && !content.isBlank()) {
+            return content;
+        }
+
+        return isEnglish(locale) ? "Sent a message" : "\u0110\u00e3 g\u1eedi m\u1ed9t tin nh\u1eafn";
+    }
+
+    private String buildAttachmentPreview(Message message, String locale) {
+        List<AttachmentInfo> attachments = message.getAttachments();
+        if (attachments == null || attachments.isEmpty()) {
+            return null;
+        }
+
+        int imageCount = 0;
+        int videoCount = 0;
+        for (AttachmentInfo attachment : attachments) {
+            String contentType = attachment.getContentType();
+            if (contentType != null && contentType.startsWith("image/")) {
+                imageCount++;
+            } else if (contentType != null && contentType.startsWith("video/")) {
+                videoCount++;
+            }
+        }
+
+        int mediaCount = imageCount + videoCount;
+        if (mediaCount == attachments.size() && mediaCount > 0) {
+            return buildMediaPreview(imageCount, videoCount, locale);
+        }
+
+        AttachmentInfo firstFile = attachments.stream()
+                .filter(a -> {
+                    String contentType = a.getContentType();
+                    return contentType == null || (!contentType.startsWith("image/") && !contentType.startsWith("video/"));
+                })
+                .findFirst()
+                .orElse(attachments.get(0));
+
+        return "[File] " + resolveAttachmentFileName(firstFile);
+    }
+
+    private String buildMediaPreview(int imageCount, int videoCount, String locale) {
+        boolean english = isEnglish(locale);
+
+        if (imageCount > 0 && videoCount > 0) {
+            String imageLabel = imageCount > 1
+                    ? (english ? "Photos" : "Nhiều ảnh")
+                    : (english ? "Photo" : "Ảnh");
+            String videoLabel = videoCount > 1
+                    ? (english ? "Videos" : "Nhiều video")
+                    : (english ? "Video" : "Video");
+            return "[" + imageLabel + (english ? " and " : " và ") + videoLabel + "]";
+        }
+
+        if (imageCount > 0) {
+            return imageCount > 1
+                    ? (english ? "[Photos]" : "[Nhiều ảnh]")
+                    : (english ? "[Photo]" : "[Ảnh]");
+        }
+
+        if (videoCount > 0) {
+            return videoCount > 1
+                    ? (english ? "[Videos]" : "[Nhiều video]")
+                    : (english ? "[Video]" : "[Video]");
+        }
+
+        return "[Other]";
+    }
+
+    private String resolveAttachmentFileName(AttachmentInfo attachment) {
+        if (attachment == null) {
+            return "file";
+        }
+        if (attachment.getOriginalFileName() != null && !attachment.getOriginalFileName().isBlank()) {
+            return attachment.getOriginalFileName();
+        }
+        if (attachment.getFileName() != null && !attachment.getFileName().isBlank()) {
+            return attachment.getFileName();
+        }
+        return "file";
+    }
+
+    private boolean isEnglish(String locale) {
+        return "en".equalsIgnoreCase(locale);
+    }
+
+    private Map<String, Object> extractAttachmentMetadata(List<AttachmentInfo> attachments) {
+        Map<String, Object> metadata = new HashMap<>();
+        if (attachments == null || attachments.isEmpty()) {
+            metadata.put("imageCount", 0);
+            metadata.put("videoCount", 0);
+            log.debug("[Attachment Debug] Attachments is null or empty");
+            return metadata;
+        }
+
+        int imageCount = 0;
+        int videoCount = 0;
+        for (AttachmentInfo attachment : attachments) {
+            String contentType = attachment.getContentType();
+            log.debug("[Attachment Debug] Processing attachment: fileName={}, contentType={}", 
+                    attachment.getFileName(), contentType);
+            if (contentType != null && contentType.startsWith("image/")) {
+                imageCount++;
+            } else if (contentType != null && contentType.startsWith("video/")) {
+                videoCount++;
+            }
+        }
+
+        log.debug("[Attachment Debug] Final counts: imageCount={}, videoCount={}, total attachments={}", 
+                imageCount, videoCount, attachments.size());
+        metadata.put("imageCount", imageCount);
+        metadata.put("videoCount", videoCount);
+        return metadata;
     }
 
 }

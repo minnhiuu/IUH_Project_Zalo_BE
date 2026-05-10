@@ -61,6 +61,13 @@ public class DataInitializer {
                 "New message",
                 "<b>{{actorName}}</b> sent you a message");
 
+        seedIfAbsent(NotificationType.MESSAGE_GROUP, NotificationChannel.IN_APP, "vi",
+                "Tin nhắn nhóm",
+                "<b>{{groupName}}</b>: {{actorName}} {{contentVi}}");
+        seedIfAbsent(NotificationType.MESSAGE_GROUP, NotificationChannel.IN_APP, "en",
+                "Group message",
+                "<b>{{groupName}}</b>: {{actorName}} {{contentEn}}");
+
         seedIfAbsent(NotificationType.POST_LIKE, NotificationChannel.IN_APP, "vi",
                 "Lượt thích bài viết",
                 "<b>{{actorName}}</b>{{#showSecondActor}} và <b>{{secondActorName}}</b>{{/showSecondActor}}{{#othersCount}} và <b>{{othersCount}} người khác</b>{{/othersCount}} đã thích bài viết của bạn");
@@ -117,6 +124,13 @@ public class DataInitializer {
         seedIfAbsent(NotificationType.MESSAGE_DIRECT, NotificationChannel.FCM, "en",
                 "New message",
                 "{{actorName}} sent you a message.");
+
+        seedIfAbsent(NotificationType.MESSAGE_GROUP, NotificationChannel.FCM, "vi",
+                "Tin nhắn nhóm",
+                "{{groupName}}: {{actorName}} {{contentVi}}");
+        seedIfAbsent(NotificationType.MESSAGE_GROUP, NotificationChannel.FCM, "en",
+                "Group message",
+                "{{groupName}}: {{actorName}} {{contentEn}}");
 
         seedIfAbsent(NotificationType.FRIEND_ACCEPT, NotificationChannel.FCM, "vi",
                 "Chấp nhận kết bạn",

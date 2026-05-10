@@ -17,10 +17,10 @@ import org.springframework.retry.annotation.EnableRetry;
 @EnableRetry
 @ComponentScan(basePackages = { "com.bondhub.notificationservices", "com.bondhub.common"})
 @EnableMongoRepositories(basePackages = { "com.bondhub.notificationservices.repository", "com.bondhub.common.repository" })
-public class NotificationServicesApplication {
+public class NotificationServiceApplication {
 
     public static void main(String[] args) {
-        SpringApplication.run(NotificationServicesApplication.class, args);
+        SpringApplication.run(NotificationServiceApplication.class, args);
     }
 
 }
