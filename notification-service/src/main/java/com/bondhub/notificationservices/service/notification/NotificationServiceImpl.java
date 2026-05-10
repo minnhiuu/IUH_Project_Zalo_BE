@@ -32,10 +32,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.HashMap;
+import java.util.*;
 
 @Service
 @RequiredArgsConstructor
@@ -162,26 +159,37 @@ public class NotificationServiceImpl implements NotificationService {
     @Override
     public UserNotificationStateResponse getNotificationState() {
         String userId = securityUtil.getCurrentUserId();
+        UserNotificationState state = userStateRepository.findById(userId)
+                .orElse(UserNotificationState.builder().userId(userId).build());
         
-        // Count unread system notifications (exclude chat messages)
-        long unreadCount = mongoTemplate.count(
-                new Query(Criteria.where("userId").is(userId)
-                        .and("type").nin(NotificationType.MESSAGE_DIRECT, NotificationType.MESSAGE_GROUP)
-                        .and("isRead").is(false)
-                        .and("active").is(true)),
-                Notification.class
-        );
+        // Count new notification-list items since the user last opened the notification panel.
+        long notificationUnreadCount = countNewNotifications(userId, state.getLastCheckedAt());
         
-        // Count distinct unread chat conversations
+        // Count distinct unread chat conversations. Opening the notification panel must not clear this.
         long chatUnreadConversationCount = countUnreadChatConversations(userId);
         
-        // Total badge = system notifications + chat conversations
-        long notificationBadgeCount = unreadCount + chatUnreadConversationCount;
+        // Total badge = list/sidebar notifications + one count per unread chat conversation
+        long notificationBadgeCount = notificationUnreadCount + chatUnreadConversationCount;
 
         return UserNotificationStateResponse.builder()
-                .unreadCount(unreadCount)
+                .unreadCount(notificationUnreadCount)
+                .notificationUnreadCount(notificationUnreadCount)
+                .chatUnreadConversationCount(chatUnreadConversationCount)
                 .notificationBadgeCount(notificationBadgeCount)
                 .build();
+    }
+
+    private long countNewNotifications(String userId, LocalDateTime lastCheckedAt) {
+        Criteria criteria = Criteria.where("userId").is(userId)
+                .and("type").nin(NotificationType.MESSAGE_DIRECT, NotificationType.MESSAGE_GROUP)
+                .and("isRead").is(false)
+                .and("active").is(true);
+
+        if (lastCheckedAt != null) {
+            criteria = criteria.and("lastModifiedAt").gt(lastCheckedAt);
+        }
+
+        return mongoTemplate.count(new Query(criteria), Notification.class);
     }
 
     private long countUnreadChatConversations(String userId) {
@@ -203,9 +211,9 @@ public class NotificationServiceImpl implements NotificationService {
         mongoTemplate.upsert(
                 new Query(Criteria.where("_id").is(userId)),
                 new Update()
-                        .set("lastCheckedAt", LocalDateTime.now()),
-                        // Only update lastCheckedAt - don't reset counts
-                        // Counts are decremented only when notifications are actually marked as read
+                        .set("lastCheckedAt", LocalDateTime.now())
+                        .set("unreadCount", 0L)
+                        .set("unreadActorIds", Set.of()),
                 UserNotificationState.class
         );
     }

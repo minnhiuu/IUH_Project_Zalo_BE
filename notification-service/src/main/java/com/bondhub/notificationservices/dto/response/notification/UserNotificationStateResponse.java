@@ -7,5 +7,7 @@ import lombok.Value;
 @Builder
 public class UserNotificationStateResponse {
     long unreadCount;
+    long notificationUnreadCount;
+    long chatUnreadConversationCount;
     long notificationBadgeCount;
 }
