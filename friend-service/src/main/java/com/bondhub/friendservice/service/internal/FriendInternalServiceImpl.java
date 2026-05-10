@@ -6,6 +6,8 @@ import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.friendservice.model.BlockList;
 import com.bondhub.friendservice.model.FriendShip;
 import com.bondhub.friendservice.model.enums.FriendStatus;
+import com.bondhub.friendservice.graph.dto.UserSearchGraphMetrics;
+import com.bondhub.friendservice.graph.service.GraphFriendService;
 import com.bondhub.friendservice.repository.BlockListRepository;
 import com.bondhub.friendservice.repository.FriendShipRepository;
 import lombok.AccessLevel;
@@ -32,6 +34,7 @@ public class FriendInternalServiceImpl implements FriendInternalService {
     SecurityUtil securityUtil;
     FriendShipRepository friendShipRepository;
     BlockListRepository blockListRepository;
+    GraphFriendService graphFriendService;
 
     @Override
     public List<UserSearchContextResponse> getUserSearchContext(UserSearchContextRequest request) {
@@ -49,13 +52,15 @@ public class FriendInternalServiceImpl implements FriendInternalService {
         Map<String, FriendShip> friendshipMap = fetchFriendships(currentUserId, targetIds);
         Set<String> blockedByMe = fetchBlockedByMe(currentUserId);
         Set<String> blockedMe = fetchBlockedMe(currentUserId);
+        Map<String, UserSearchGraphMetrics> graphMetrics = graphFriendService.getUserSearchGraphMetrics(currentUserId, targetIds);
 
         return targetIds.stream()
                 .map(targetId -> toUserSearchContextResponse(
                         targetId,
                         friendshipMap.get(targetId),
                         blockedByMe.contains(targetId),
-                        blockedMe.contains(targetId)))
+                        blockedMe.contains(targetId),
+                        graphMetrics.getOrDefault(targetId, UserSearchGraphMetrics.empty(targetId))))
                 .toList();
     }
 
@@ -113,9 +118,13 @@ public class FriendInternalServiceImpl implements FriendInternalService {
             String targetId,
             FriendShip friendship,
             boolean blockedByMe,
-            boolean blockedMe) {
+            boolean blockedMe,
+            UserSearchGraphMetrics graphMetrics) {
 
         FriendStatus status = friendship != null ? friendship.getFriendStatus() : null;
+        UserSearchGraphMetrics safeGraphMetrics = graphMetrics != null
+                ? graphMetrics
+                : UserSearchGraphMetrics.empty(targetId);
 
         return UserSearchContextResponse.builder()
                 .userId(targetId)
@@ -123,6 +132,10 @@ public class FriendInternalServiceImpl implements FriendInternalService {
                 .requestedBy(status == FriendStatus.PENDING ? friendship.getRequested() : null)
                 .blockedByMe(blockedByMe)
                 .blockedMe(blockedMe)
+                .mutualFriendsCount(safeGraphMetrics.mutualFriendsCount())
+                .sharedGroupsCount(safeGraphMetrics.sharedGroupsCount())
+                .inContact(safeGraphMetrics.inContact())
+                .contactScore(safeGraphMetrics.contactScore())
                 .build();
     }
 

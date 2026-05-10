@@ -8,6 +8,10 @@ public record UserSearchContextResponse(
         String friendshipStatus,
         String requestedBy,
         Boolean blockedByMe,
-        Boolean blockedMe
+        Boolean blockedMe,
+        Integer mutualFriendsCount,
+        Integer sharedGroupsCount,
+        Boolean inContact,
+        Double contactScore
 ) {
 }
