@@ -173,21 +173,11 @@ public class FcmServiceImpl implements FcmService {
             }
         }
 
-        // Handle friend requests and system notifications -> navigate to notifications page
-        if (type != null && (type.equals("FRIEND_REQUEST") || type.equals("FRIEND_ACCEPT"))) {
-            StringBuilder url = new StringBuilder(baseUrl).append("notifications");
-            if (notificationId != null && !notificationId.isBlank()) {
-                url.append("?highlight=").append(notificationId);
-            }
-            return url.toString();
-        }
-
-        // Default fallback: navigate to notifications page with highlight
-        StringBuilder fallback = new StringBuilder(baseUrl).append("notifications");
+        StringBuilder url = new StringBuilder(baseUrl).append("?noti_open=true");
         if (notificationId != null && !notificationId.isBlank()) {
-            fallback.append("?highlight=").append(notificationId);
+            url.append("&highlight=").append(notificationId);
         }
-        return fallback.toString();
+        return url.toString();
     }
 
     @Recover
