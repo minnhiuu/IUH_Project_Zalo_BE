@@ -10,9 +10,11 @@ import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.common.dto.PageResponse;
 import com.bondhub.common.dto.client.messageservice.ConversationMemberLookupResponse;
 import com.bondhub.common.dto.client.messageservice.ConversationSearchResponse;
+import com.bondhub.common.dto.client.userservice.user.response.UserSummaryResponse;
 import com.bondhub.common.enums.MessageStatus;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
+import com.bondhub.common.utils.PhoneUtil;
 import com.bondhub.common.utils.S3UtilV2;
 import com.bondhub.searchservice.client.ConversationMemberClient;
 import com.bondhub.searchservice.config.ElasticsearchProperties;
@@ -20,6 +22,7 @@ import com.bondhub.searchservice.dto.request.MessageSearchRequest;
 import com.bondhub.searchservice.dto.response.MessageSearchResponse;
 import com.bondhub.searchservice.enums.MessageSearchSection;
 import com.bondhub.searchservice.model.elasticsearch.MessageIndex;
+import com.bondhub.searchservice.service.index.user.UserSearchService;
 import feign.FeignException;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
@@ -76,6 +79,7 @@ public class MessageSearchServiceImpl implements MessageSearchService {
     ElasticsearchOperations esOperations;
     ElasticsearchProperties esProperties;
     ConversationMemberClient conversationMemberClient;
+    UserSearchService userSearchService;
     S3UtilV2 s3UtilV2;
 
     @Override
@@ -84,6 +88,8 @@ public class MessageSearchServiceImpl implements MessageSearchService {
             String keyword,
             Boolean isGroup,
             Pageable pageable) {
+
+        // 1. Get existing conversations (contacts you've chatted with)
         ApiResponse<PageResponse<List<ConversationSearchResponse>>> response =
                 conversationMemberClient.searchConversations(
                         userId,
@@ -92,9 +98,53 @@ public class MessageSearchServiceImpl implements MessageSearchService {
                         pageable.getPageNumber(),
                         pageable.getPageSize());
 
-        return response != null && response.data() != null
-                ? response.data()
-                : PageResponse.empty(pageable);
+        PageResponse<List<ConversationSearchResponse>> conversationPage =
+                response != null && response.data() != null
+                        ? response.data()
+                        : PageResponse.empty(pageable);
+
+        // 2. If it's not a group-only search and keyword exists, also search global users
+        if (!Boolean.TRUE.equals(isGroup) && hasText(keyword)) {
+            String searchTerm = PhoneUtil.normalizeVnPhone(keyword).orElse(keyword);
+            PageResponse<List<UserSummaryResponse>> userPage = userSearchService.searchUsers(searchTerm, pageable);
+
+            if (userPage != null && userPage.data() != null && !userPage.data().isEmpty()) {
+                List<ConversationSearchResponse> mergedResults = new ArrayList<>(conversationPage.data());
+
+                // Avoid duplicates: don't add users who already have a conversation in the results
+                List<String> existingRecipientIds = mergedResults.stream()
+                        .map(ConversationSearchResponse::recipientId)
+                        .filter(Objects::nonNull)
+                        .toList();
+
+                for (UserSummaryResponse user : userPage.data()) {
+                    if (!existingRecipientIds.contains(user.id())) {
+                        mergedResults.add(ConversationSearchResponse.builder()
+                                .conversationId(null) // No conversation yet
+                                .recipientId(user.id())
+                                .name(user.fullName())
+                                .avatar(user.avatar())
+                                .group(false)
+                                .memberCount(0)
+                                .displayHighlights(user.fullName())
+                                .phoneNumber(user.phoneNumber())
+                                .build());
+                    }
+                }
+
+                // Update the total items and data
+                long totalItems = Math.max(conversationPage.totalItems(), mergedResults.size());
+                return PageResponse.<List<ConversationSearchResponse>>builder()
+                        .data(mergedResults)
+                        .page(conversationPage.page())
+                        .limit(conversationPage.limit())
+                        .totalItems(totalItems)
+                        .totalPages(conversationPage.totalPages())
+                        .build();
+            }
+        }
+
+        return conversationPage;
     }
 
     @Override

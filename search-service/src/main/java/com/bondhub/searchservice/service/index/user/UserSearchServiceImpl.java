@@ -2,6 +2,7 @@ package com.bondhub.searchservice.service.index.user;
 
 import co.elastic.clients.elasticsearch._types.query_dsl.Query;
 import co.elastic.clients.elasticsearch._types.query_dsl.TextQueryType;
+import com.bondhub.common.utils.PhoneUtil;
 import com.bondhub.common.dto.PageResponse;
 import com.bondhub.common.dto.client.userservice.user.response.UserSummaryResponse;
 import com.bondhub.common.enums.Role;
@@ -110,13 +111,13 @@ public class UserSearchServiceImpl implements UserSearchService {
         }
 
         private UserSummaryResponse toUserSummaryResponse(UserIndex userIndex, String searchTerm) {
-                boolean isPhoneMatch = searchTerm.equals(userIndex.getPhoneNumber());
+                boolean isPhoneSearch = PhoneUtil.isValidVnPhone(searchTerm);
                 String baseUrl = s3UtilV2.getS3BaseUrl();
                 return UserSummaryResponse.builder()
                                 .id(userIndex.getId())
                                 .fullName(userIndex.getFullName())
                                 .avatar(userIndex.getAvatar() != null ? baseUrl + userIndex.getAvatar() : null)
-                                .phoneNumber(isPhoneMatch ? userIndex.getPhoneNumber() : null)
+                                .phoneNumber(isPhoneSearch ? userIndex.getPhoneNumber() : null)
                                 .build();
         }
 
