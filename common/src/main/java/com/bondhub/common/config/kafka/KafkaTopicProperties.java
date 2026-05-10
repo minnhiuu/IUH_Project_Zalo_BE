@@ -68,6 +68,7 @@ public class KafkaTopicProperties {
         private String raw = "noti.raw";
         private String cleanup = "noti.cleanup";
         private String system = "noti.system";
+        private String email = "email-notifications";
     }
 
     @Getter

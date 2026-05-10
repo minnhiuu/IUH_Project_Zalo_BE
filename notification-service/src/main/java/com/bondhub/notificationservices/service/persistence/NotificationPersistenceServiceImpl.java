@@ -1,5 +1,6 @@
 package com.bondhub.notificationservices.service.persistence;
 
+import com.bondhub.common.enums.NotificationType;
 import com.bondhub.notificationservices.enums.BatchWindowConfig;
 import com.bondhub.notificationservices.event.BatchedNotificationEvent;
 import com.bondhub.notificationservices.model.Notification;
@@ -27,12 +28,22 @@ import java.util.*;
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public class NotificationPersistenceServiceImpl implements NotificationPersistenceService {
 
+    private static final int MAX_CHAT_SNIPPET_LINES = 10;
+    private static final int MAX_CHAT_SNIPPET_WORDS = 80;
+
     NotificationRepository notificationRepository;
     MongoTemplate mongoTemplate;
     MessageSource messageSource;
 
     @Override
     public Notification persist(BatchedNotificationEvent event) {
+        if (isChatMessageType(event.getType())) {
+            String conversationId = resolveConversationId(event);
+            return conversationId != null
+                    ? persistPerEntity(event, conversationId)
+                    : persistAggregate(event);
+        }
+
         BatchWindowConfig cfg = BatchWindowConfig.of(event.getType());
 
         if (!cfg.isIncludeReferenceInKey()) {
@@ -45,6 +56,10 @@ public class NotificationPersistenceServiceImpl implements NotificationPersisten
     }
 
     private Notification persistPerEntity(BatchedNotificationEvent event) {
+        return persistPerEntity(event, event.getReferenceId());
+    }
+
+    private Notification persistPerEntity(BatchedNotificationEvent event, String referenceId) {
         List<String> rawActorIds = event.getActorIds() != null ? event.getActorIds() : List.of();
         List<ObjectId> actorObjectIds = rawActorIds.stream()
                 .filter(ObjectId::isValid)
@@ -53,23 +68,26 @@ public class NotificationPersistenceServiceImpl implements NotificationPersisten
 
         Query query = new Query(Criteria.where("userId").is(event.getRecipientId())
                 .and("type").is(event.getType())
-                .and("referenceId").is(event.getReferenceId()));
+                .and("referenceId").is(referenceId));
 
         Update update = new Update()
                 .push("actorIds").atPosition(Update.Position.LAST).each(actorObjectIds.toArray())
                 .set("isRead", false)
                 .set("lastModifiedAt", event.getLastOccurredAt());
 
-        Notification persisted = mongoTemplate.findAndModify(
+        Notification old = mongoTemplate.findAndModify(
                 query,
                 update,
-                FindAndModifyOptions.options().returnNew(true).upsert(true),
+                FindAndModifyOptions.options().returnNew(false).upsert(true),
                 Notification.class
         );
 
+        boolean shouldIncrement = (old == null || old.isRead());
+        Notification persisted = mongoTemplate.findOne(query, Notification.class);
+
         if (persisted == null) return null;
 
-        return finalizeAndSave(persisted, event);
+        return finalizeAndSave(persisted, event, shouldIncrement);
     }
 
     private Notification persistAggregate(BatchedNotificationEvent event) {
@@ -88,19 +106,22 @@ public class NotificationPersistenceServiceImpl implements NotificationPersisten
                 .set("isRead", false)
                 .set("lastModifiedAt", event.getLastOccurredAt());
 
-        Notification persisted = mongoTemplate.findAndModify(
+        Notification old = mongoTemplate.findAndModify(
                 query,
                 update,
-                FindAndModifyOptions.options().returnNew(true).upsert(true),
+                FindAndModifyOptions.options().returnNew(false).upsert(true),
                 Notification.class
         );
 
+        boolean shouldIncrement = (old == null || old.isRead());
+        Notification persisted = mongoTemplate.findOne(query, Notification.class);
+
         if (persisted == null) return null;
 
-        return finalizeAndSave(persisted, event);
+        return finalizeAndSave(persisted, event, shouldIncrement);
     }
 
-    private Notification finalizeAndSave(Notification persisted, BatchedNotificationEvent event) {
+    private Notification finalizeAndSave(Notification persisted, BatchedNotificationEvent event, boolean shouldIncrement) {
         Set<String> unique = new LinkedHashSet<>(persisted.getActorIds());
         List<String> finalActors = new ArrayList<>(unique);
         persisted.setActorIds(finalActors);
@@ -134,11 +155,68 @@ public class NotificationPersistenceServiceImpl implements NotificationPersisten
             }
         }
 
+        // Aggregation logic for Chat messages
+        if (isChatMessageType(event.getType())) {
+            // If it's a "new" notification (previous was read or null), start a fresh snippets list
+            List<String> snippets;
+            if (shouldIncrement) {
+                snippets = new ArrayList<>();
+            } else {
+                snippets = (List<String>) persisted.getPayload().get("snippets");
+                if (snippets == null) snippets = new ArrayList<>();
+            }
+            
+            String actorName = normalizeSnippet(event.getLastActorName());
+            String content = normalizeSnippet(resolveLocalizedContent(basePayload, event.getLocale()));
+            if (content != null) {
+                String newSnippet = (event.getType() == NotificationType.MESSAGE_GROUP && actorName != null)
+                        ? actorName + ": " + content
+                        : content;
+
+                if (snippets.isEmpty() || !Objects.equals(snippets.get(snippets.size() - 1), newSnippet)) {
+                    snippets.add(newSnippet);
+                }
+
+                payloadMap.put("snippets", limitLatestSnippets(snippets, MAX_CHAT_SNIPPET_LINES, MAX_CHAT_SNIPPET_WORDS));
+            }
+        }
+
         persisted.setPayload(payloadMap);
         Notification saved = notificationRepository.save(persisted);
 
-        incrementUnreadCount(event.getRecipientId());
+        if (shouldIncrement) {
+            if (!isChatMessageType(event.getType())) {
+                updateUnreadState(event.getRecipientId(), event.getLastActorId(), event.getType(), event.getReferenceId());
+                incrementRawUnreadCount(event.getRecipientId());
+            }
+        }
         return saved;
+    }
+
+    @Override
+    public Notification buildTransient(BatchedNotificationEvent event) {
+        List<Map<String, Object>> payloads = event.getRawPayloads() != null ? event.getRawPayloads() : List.of();
+        Map<String, Object> basePayload = !payloads.isEmpty() ? payloads.get(payloads.size() - 1) : Map.of();
+        Map<String, Object> payloadMap = new HashMap<>(basePayload);
+
+        String convAvatar = (String) basePayload.get("conversationAvatar");
+        payloadMap.put("actorName", event.getLastActorName());
+        payloadMap.put("actorAvatar", (convAvatar != null && !convAvatar.isEmpty()) ? convAvatar : event.getLastActorAvatar());
+        payloadMap.put("actorCount", 1);
+        payloadMap.put("othersCount", 0);
+        payloadMap.put("totalEventCount", 1);
+        payloadMap.put("showSecondActor", false);
+
+        return Notification.builder()
+                .id(UUID.randomUUID().toString())
+                .userId(event.getRecipientId())
+                .type(event.getType())
+                .referenceId(event.getReferenceId())
+                .actorIds(List.of(event.getLastActorId()))
+                .payload(payloadMap)
+                .isRead(false)
+                .lastModifiedAt(event.getLastOccurredAt())
+                .build();
     }
 
     private String getTranslatedFallback(String localeStr) {
@@ -146,9 +224,104 @@ public class NotificationPersistenceServiceImpl implements NotificationPersisten
         return messageSource.getMessage("notification.another_person", null, locale);
     }
 
-    private void incrementUnreadCount(String userId) {
+    private List<String> limitLatestSnippets(List<String> snippets, int maxLines, int maxWords) {
+        LinkedList<String> result = new LinkedList<>();
+        int totalWords = 0;
+        int lineCount = 0;
+
+        ListIterator<String> iterator = snippets.listIterator(snippets.size());
+        while (iterator.hasPrevious()) {
+            if (lineCount >= maxLines) break;
+
+            String snippet = normalizeSnippet(iterator.previous());
+            if (snippet == null) continue;
+            int wordCount = countWords(snippet);
+
+            if (wordCount > maxWords) {
+                snippet = truncateWords(snippet, maxWords);
+                wordCount = countWords(snippet);
+            }
+
+            if (!result.isEmpty() && totalWords + wordCount > maxWords) {
+                break;
+            }
+
+            result.addFirst(snippet);
+            totalWords += wordCount;
+            lineCount++;
+        }
+
+        return result;
+    }
+
+    private String resolveLocalizedContent(Map<String, Object> payload, String locale) {
+        if (payload == null || payload.isEmpty()) {
+            return null;
+        }
+
+        Object localized = payload.get("en".equalsIgnoreCase(locale) ? "contentEn" : "contentVi");
+        if (localized != null) {
+            return localized.toString();
+        }
+
+        Object fallback = payload.get("content");
+        return fallback != null ? fallback.toString() : null;
+    }
+
+    private String normalizeSnippet(String value) {
+        if (value == null) return null;
+        String normalized = value.replaceAll("\\s+", " ").trim();
+        return normalized.isEmpty() ? null : normalized;
+    }
+
+    private int countWords(String value) {
+        if (value == null || value.isBlank()) return 0;
+        return value.trim().split("\\s+").length;
+    }
+
+    private String truncateWords(String value, int maxWords) {
+        if (value == null || value.isBlank()) return "";
+        String[] words = value.trim().split("\\s+");
+        if (words.length <= maxWords) return value;
+
+        return String.join(" ", Arrays.copyOf(words, maxWords)) + "...";
+    }
+
+    private boolean isChatMessageType(NotificationType type) {
+        return type == NotificationType.MESSAGE_DIRECT || type == NotificationType.MESSAGE_GROUP;
+    }
+
+    private String resolveConversationId(BatchedNotificationEvent event) {
+        List<Map<String, Object>> payloads = event.getRawPayloads() != null ? event.getRawPayloads() : List.of();
+        if (!payloads.isEmpty()) {
+            Object conversationId = payloads.get(payloads.size() - 1).get("conversationId");
+            if (conversationId != null && !conversationId.toString().isBlank()) {
+                return conversationId.toString();
+            }
+        }
+
+        return event.getReferenceId();
+    }
+
+    @Override
+    public void updateUnreadState(String userId, String actorId, com.bondhub.common.enums.NotificationType type, String referenceId) {
+        if (actorId == null || type == null) return;
+        
+        String compositeKey = actorId + "_" + type.name();
+        if (referenceId != null) {
+            compositeKey += "_" + referenceId;
+        }
+
+        Query query = new Query(Criteria.where("_id").is(userId));
+        Update update = new Update()
+                .addToSet("unreadActorIds", compositeKey);
+        
+        mongoTemplate.upsert(query, update, UserNotificationState.class);
+    }
+
+    private void incrementRawUnreadCount(String userId) {
         mongoTemplate.upsert(
-                new Query(Criteria.where("userId").is(userId)),
+                new Query(Criteria.where("_id").is(userId)),
                 new Update().inc("unreadCount", 1L),
                 UserNotificationState.class
         );

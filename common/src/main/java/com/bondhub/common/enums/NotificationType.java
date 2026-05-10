@@ -7,6 +7,7 @@ public enum NotificationType {
     FRIEND_ACCEPT,
 
     MESSAGE_DIRECT,
+    MESSAGE_GROUP,
     CALL,
 
     POST_LIKE,
@@ -29,5 +30,11 @@ public enum NotificationType {
     // --- MODERATION ---
     CONTENT_REMOVED,
     CONTENT_HIDDEN,
-    USER_WARNED
+    USER_WARNED,
+
+    DND_SUMMARY,
+    DND_SUMMARY_MESSAGE,
+    DND_SUMMARY_FRIEND,
+    DND_SUMMARY_POST,
+    DND_SUMMARY_OTHER
 }

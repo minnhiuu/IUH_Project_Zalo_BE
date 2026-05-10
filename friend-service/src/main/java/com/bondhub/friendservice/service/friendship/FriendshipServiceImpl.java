@@ -210,7 +210,7 @@ public class FriendshipServiceImpl implements FriendshipService {
         publishFriendshipEvent(friendShip.getRequested(), friendShip.getReceived(), friendShip.getId(), FriendshipAction.CANCELLED);
 
         CleanupNotificationEvent cleanupEvent = CleanupNotificationEvent.builder()
-                .recipientId(currentUserId)
+                .recipientId(friendShip.getReceived())
                 .referenceId(friendShip.getId())
                 .type(NotificationType.FRIEND_REQUEST)
                 .build();

@@ -14,9 +14,14 @@ public record NotificationResponse(
         String referenceId,
         String title,
         String body,
+        Map<String, LocalizedContent> translations, // Thêm Map này cho đa ngôn ngữ
         List<String> actorIds,
         int actorCount,
         boolean read,
         LocalDateTime lastModifiedAt,
-        Map<String, Object> payload
-) {}
+        Map<String, Object> payload,
+        boolean silent
+) {
+    @Builder
+    public record LocalizedContent(String title, String body) {}
+}

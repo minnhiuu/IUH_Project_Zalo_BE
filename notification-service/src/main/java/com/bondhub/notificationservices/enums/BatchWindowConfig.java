@@ -25,9 +25,9 @@ public enum BatchWindowConfig {
 
     // --- KHÔNG ĐƯỢC BATCH ---
     MESSAGE_DIRECT  (NotificationType.MESSAGE_DIRECT,  0,   false),
+    MESSAGE_GROUP   (NotificationType.MESSAGE_GROUP,   0,   false),
     CALL            (NotificationType.CALL,            0,   false),
     SYSTEM          (NotificationType.SYSTEM,          0,   false),
-    DLQ_ALERT       (NotificationType.DLQ_ALERT,       30,  true),
 
     // --- KIỂM DUYỆT NỘI DUNG ---
     CONTENT_REMOVED (NotificationType.CONTENT_REMOVED, 0,   false),
@@ -35,7 +35,9 @@ public enum BatchWindowConfig {
     USER_WARNED     (NotificationType.USER_WARNED,     0,   false),
 
     // --- BẢO MẬT (SECURITY) ---
-    NEW_DEVICE_LOGIN(NotificationType.NEW_DEVICE_LOGIN,0,   false);
+    NEW_DEVICE_LOGIN(NotificationType.NEW_DEVICE_LOGIN,0,   false),
+    DLQ_ALERT       (NotificationType.DLQ_ALERT,       30,  true),
+    DND_SUMMARY     (NotificationType.DND_SUMMARY,     0,   false);
 
     private final NotificationType type;
     private final int windowSeconds;

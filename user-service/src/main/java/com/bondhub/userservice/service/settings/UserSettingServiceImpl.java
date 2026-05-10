@@ -116,6 +116,18 @@ public class UserSettingServiceImpl implements UserSettingService {
             request = new UserSetting.NotificationSettings();
         }
 
+        // If allowNotifications is false, disable all other notification features
+        if (!request.isAllowNotifications()) {
+            request.setNotifSound(false);
+            request.setNotifVibration(false);
+            request.setNotifMessages(false);
+            request.setNotifGroups(false);
+            request.setNotifFriendRequests(false);
+            if (request.getDoNotDisturb() != null) {
+                request.getDoNotDisturb().setDndEnabled(false);
+            }
+        }
+
         HashMap<String, UserSetting.DeviceNotificationSettings> notificationSettingsByDeviceId = new HashMap<>();
         if (current.getNotificationSettingsByDeviceId() != null) {
             notificationSettingsByDeviceId.putAll(current.getNotificationSettingsByDeviceId());
@@ -132,7 +144,61 @@ public class UserSettingServiceImpl implements UserSettingService {
         request.setNotificationSettingsByDeviceId(notificationSettingsByDeviceId);
 
         userSettingRepository.updateSettingSection(userId, "notificationSettings", request);
+
+        // Publish event for synchronization
+        publishNotificationSettingsUpdatedEvent(userId, deviceId, request);
+
         return getMySettings();
+    }
+
+    private void publishNotificationSettingsUpdatedEvent(String userId, String deviceId, UserSetting.NotificationSettings request) {
+        var event = com.bondhub.common.event.user.NotificationSettingsUpdatedEvent.builder()
+                .userId(userId)
+                .deviceId(deviceId)
+                .globalSettings(com.bondhub.common.event.user.NotificationSettingsUpdatedEvent.GlobalSettings.builder()
+                        .allowNotifications(request.isAllowNotifications())
+                        .notifSound(request.isNotifSound())
+                        .notifVibration(request.isNotifVibration())
+                        .notifMessages(request.isNotifMessages())
+                        .notifGroups(request.isNotifGroups())
+                        .notifFriendRequests(request.isNotifFriendRequests())
+                        .dndSettings(request.getDoNotDisturb() == null ? null :
+                                com.bondhub.common.event.user.NotificationSettingsUpdatedEvent.DndSettings.builder()
+                                        .dndEnabled(request.getDoNotDisturb().isDndEnabled())
+                                        .dndStartTime(request.getDoNotDisturb().getDndStartTime())
+                                        .dndEndTime(request.getDoNotDisturb().getDndEndTime())
+                                        .dndTimezone(request.getDoNotDisturb().getDndTimezone())
+                                        .activeDays(request.getDoNotDisturb().getActiveDays() == null ? null : 
+                                            request.getDoNotDisturb().getActiveDays().stream().map(Enum::name).toList())
+                                        .build())
+                        .build())
+                .deviceSettingsMap(new java.util.HashMap<>())
+                .build();
+
+        if (request.getNotificationSettingsByDeviceId() != null) {
+            request.getNotificationSettingsByDeviceId().forEach((dId, settings) -> {
+                event.getDeviceSettingsMap().put(dId, com.bondhub.common.event.user.NotificationSettingsUpdatedEvent.DeviceSettings.builder()
+                        .allowNotifications(settings.isAllowNotifications())
+                        .notifSound(settings.isNotifSound())
+                        .notifVibration(settings.isNotifVibration())
+                        .notifMessages(settings.isNotifMessages())
+                        .notifGroups(settings.isNotifGroups())
+                        .notifFriendRequests(settings.isNotifFriendRequests())
+                        .dndSettings(settings.getDoNotDisturb() == null ? null :
+                                com.bondhub.common.event.user.NotificationSettingsUpdatedEvent.DndSettings.builder()
+                                        .dndEnabled(settings.getDoNotDisturb().isDndEnabled())
+                                        .dndStartTime(settings.getDoNotDisturb().getDndStartTime())
+                                        .dndEndTime(settings.getDoNotDisturb().getDndEndTime())
+                                        .dndTimezone(settings.getDoNotDisturb().getDndTimezone())
+                                        .activeDays(settings.getDoNotDisturb().getActiveDays() == null ? null :
+                                            settings.getDoNotDisturb().getActiveDays().stream().map(Enum::name).toList())
+                                        .build())
+                        .build());
+            });
+        }
+
+        outboxEventPublisher.saveAndPublish(userId, "UserSetting", EventType.NOTIFICATION_SETTINGS_UPDATED, event);
+        log.info("Published NOTIFICATION_SETTINGS_UPDATED event for user: {}", userId);
     }
 
     @Override

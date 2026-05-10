@@ -6,5 +6,6 @@ public enum SocketEventType {
     PRESENCE,
     NOTIFICATION,
     CALL_SIGNAL,
-    FORCE_LOGOUT
+    FORCE_LOGOUT,
+    NOTIFICATION_CLEANUP,
 }
