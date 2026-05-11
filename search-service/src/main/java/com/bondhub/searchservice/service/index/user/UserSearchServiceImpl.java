@@ -9,13 +9,16 @@ import com.bondhub.common.utils.PhoneUtil;
 import com.bondhub.common.dto.PageResponse;
 import com.bondhub.common.dto.client.userservice.user.response.UserSummaryResponse;
 import com.bondhub.common.enums.Role;
+import com.bondhub.common.utils.LocalizationUtil;
 import com.bondhub.common.utils.S3UtilV2;
 import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.searchservice.client.FriendServiceClient;
 import com.bondhub.searchservice.config.ElasticsearchProperties;
+import com.bondhub.searchservice.dto.response.UserSearchResponse;
 import com.bondhub.searchservice.model.elasticsearch.UserIndex;
 import com.bondhub.searchservice.service.index.user.ranking.UserSearchRankingContext;
 import com.bondhub.searchservice.service.index.user.ranking.UserSearchRankingStrategy;
+import com.bondhub.searchservice.service.index.user.ranking.UserSearchRelationshipLabel;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
@@ -51,9 +54,39 @@ public class UserSearchServiceImpl implements UserSearchService {
         S3UtilV2 s3UtilV2;
         FriendServiceClient friendServiceClient;
         UserSearchRankingStrategy rankingStrategy;
+        LocalizationUtil localizationUtil;
+
+        @Override
+        public PageResponse<List<UserSearchResponse>> searchUsersWithMetadata(String keyword, Pageable pageable) {
+                PageResponse<List<RankedUserSearchHit>> rankedPage = searchRankedUsers(keyword, pageable);
+
+                return PageResponse.<List<UserSearchResponse>>builder()
+                                .data(rankedPage.data().stream()
+                                                .map(hit -> toUserSearchResponse(hit, keyword))
+                                                .toList())
+                                .page(rankedPage.page())
+                                .totalPages(rankedPage.totalPages())
+                                .limit(rankedPage.limit())
+                                .totalItems(rankedPage.totalItems())
+                                .build();
+        }
 
         @Override
         public PageResponse<List<UserSummaryResponse>> searchUsers(String keyword, Pageable pageable) {
+                PageResponse<List<RankedUserSearchHit>> rankedPage = searchRankedUsers(keyword, pageable);
+
+                return PageResponse.<List<UserSummaryResponse>>builder()
+                                .data(rankedPage.data().stream()
+                                                .map(hit -> toUserSummaryResponse(hit.userIndex(), keyword))
+                                                .toList())
+                                .page(rankedPage.page())
+                                .totalPages(rankedPage.totalPages())
+                                .limit(rankedPage.limit())
+                                .totalItems(rankedPage.totalItems())
+                                .build();
+        }
+
+        private PageResponse<List<RankedUserSearchHit>> searchRankedUsers(String keyword, Pageable pageable) {
 
                 if (!StringUtils.hasText(keyword)) {
                         return PageResponse.empty(pageable);
@@ -129,10 +162,8 @@ public class UserSearchServiceImpl implements UserSearchService {
 
                 List<RankedUserSearchHit> pagedHits = paginateRankedHits(rankedHits, pageable);
 
-                return PageResponse.<List<UserSummaryResponse>>builder()
-                                .data(pagedHits.stream()
-                                                .map(hit -> toUserSummaryResponse(hit.userIndex(), searchTerm))
-                                                .toList())
+                return PageResponse.<List<RankedUserSearchHit>>builder()
+                                .data(pagedHits)
                                 .page(pageable.getPageNumber())
                                 .totalPages(calculateTotalPages(rankedHits.size(), pageable.getPageSize()))
                                 .limit(pageable.getPageSize())
@@ -140,15 +171,51 @@ public class UserSearchServiceImpl implements UserSearchService {
                                 .build();
         }
 
+        private UserSearchResponse toUserSearchResponse(RankedUserSearchHit hit, String searchTerm) {
+                UserIndex userIndex = hit.userIndex();
+                UserSearchContextResponse context = hit.context();
+
+                return UserSearchResponse.builder()
+                                .id(userIndex.getId())
+                                .fullName(userIndex.getFullName())
+                                .avatar(resolveAvatar(userIndex))
+                                .phoneNumber(shouldExposePhone(searchTerm) ? userIndex.getPhoneNumber() : null)
+                                .friendshipId(context != null ? context.friendshipId() : null)
+                                .friendshipStatus(context != null ? context.friendshipStatus() : null)
+                                .requestedBy(context != null ? context.requestedBy() : null)
+                                .relationshipLabel(resolveRelationshipLabel(hit.relationshipLabel()))
+                                .mutualFriendsCount(context != null && context.mutualFriendsCount() != null ? context.mutualFriendsCount() : 0)
+                                .sharedGroupsCount(context != null && context.sharedGroupsCount() != null ? context.sharedGroupsCount() : 0)
+                                .inContact(context != null && Boolean.TRUE.equals(context.inContact()))
+                                .build();
+        }
+
         private UserSummaryResponse toUserSummaryResponse(UserIndex userIndex, String searchTerm) {
-                boolean isPhoneSearch = PhoneUtil.isValidVnPhone(searchTerm);
-                String baseUrl = s3UtilV2.getS3BaseUrl();
                 return UserSummaryResponse.builder()
                                 .id(userIndex.getId())
                                 .fullName(userIndex.getFullName())
-                                .avatar(userIndex.getAvatar() != null ? baseUrl + userIndex.getAvatar() : null)
-                                .phoneNumber(isPhoneSearch ? userIndex.getPhoneNumber() : null)
+                                .avatar(resolveAvatar(userIndex))
+                                .phoneNumber(shouldExposePhone(searchTerm) ? userIndex.getPhoneNumber() : null)
                                 .build();
+        }
+
+        private String resolveAvatar(UserIndex userIndex) {
+                String baseUrl = s3UtilV2.getS3BaseUrl();
+                return userIndex.getAvatar() != null ? baseUrl + userIndex.getAvatar() : null;
+        }
+
+        private boolean shouldExposePhone(String searchTerm) {
+                return PhoneUtil.isValidVnPhone(searchTerm);
+        }
+
+        private String resolveRelationshipLabel(UserSearchRelationshipLabel relationshipLabel) {
+                if (relationshipLabel == null) {
+                        return null;
+                }
+
+                return localizationUtil.getMessage(
+                                relationshipLabel.messageKey(),
+                                relationshipLabel.args().toArray());
         }
 
         @Override
@@ -269,9 +336,14 @@ public class UserSearchServiceImpl implements UserSearchService {
 
                 UserSearchRankingContext rankingContext = toRankingContext(searchTerm, userIndex, context);
                 double finalScore = rankingStrategy.calculateFinalScore(hit.getScore(), rankingContext, currentUserId);
+                UserSearchRelationshipLabel relationshipLabel = rankingStrategy.resolveRelationshipLabel(
+                                rankingContext,
+                                currentUserId);
 
                 return Optional.of(new RankedUserSearchHit(
                                 userIndex,
+                                context,
+                                relationshipLabel,
                                 hit.getScore(),
                                 finalScore,
                                 userIndex.getCreatedAt()));
@@ -307,6 +379,8 @@ public class UserSearchServiceImpl implements UserSearchService {
 
         private record RankedUserSearchHit(
                 UserIndex userIndex,
+                UserSearchContextResponse context,
+                UserSearchRelationshipLabel relationshipLabel,
                 double elasticsearchScore,
                 double finalScore,
                 LocalDateTime createdAt) {

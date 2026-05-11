@@ -128,6 +128,7 @@ public class FriendInternalServiceImpl implements FriendInternalService {
 
         return UserSearchContextResponse.builder()
                 .userId(targetId)
+                .friendshipId(friendship != null ? friendship.getId() : null)
                 .friendshipStatus(status != null ? status.name() : FRIENDSHIP_STATUS_NONE)
                 .requestedBy(status == FriendStatus.PENDING ? friendship.getRequested() : null)
                 .blockedByMe(blockedByMe)

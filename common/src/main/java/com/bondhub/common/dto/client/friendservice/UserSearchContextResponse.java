@@ -5,6 +5,7 @@ import lombok.Builder;
 @Builder
 public record UserSearchContextResponse(
         String userId,
+        String friendshipId,
         String friendshipStatus,
         String requestedBy,
         Boolean blockedByMe,
