@@ -12,6 +12,8 @@ import com.bondhub.socialfeedservice.dto.response.post.PostResponse;
 import com.bondhub.socialfeedservice.dto.response.post.SharedPostPreview;
 import com.bondhub.socialfeedservice.dto.response.post.StoryGroupResponse;
 import com.bondhub.socialfeedservice.mapper.PostMapper;
+import com.bondhub.socialfeedservice.client.FriendServiceClient;
+import com.bondhub.socialfeedservice.model.enums.Visibility;
 import com.bondhub.socialfeedservice.model.embedded.PostMedia;
 import com.bondhub.socialfeedservice.model.Hashtag;
 import com.bondhub.socialfeedservice.model.Post;
@@ -65,6 +67,21 @@ public class PostServiceImpl implements PostService {
     final UserSummaryRepository userSummaryRepository;
     final UserInteractionRepository userInteractionRepository;
     final S3UtilV2 s3UtilV2;
+    final FriendServiceClient friendServiceClient;
+
+    private List<String> getFriendIdsAndMe(String currentUserId) {
+        List<String> ids = new ArrayList<>();
+        ids.add(currentUserId);
+        try {
+            var response = friendServiceClient.getFriendIdsInternal(currentUserId);
+            if (response != null && response.data() != null) {
+                ids.addAll(response.data());
+            }
+        } catch (Exception e) {
+            log.error("Failed to fetch friends for user {}", currentUserId, e);
+        }
+        return ids;
+    }
 
     @Override
     @Transactional
@@ -107,8 +124,9 @@ public class PostServiceImpl implements PostService {
         String currentUserId = securityUtil.getCurrentUserId();
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "uploadedAt"));
 
-        Page<Post> posts = postRepository.findByAuthorIdAndActiveTrueAndIsCurrentTrueOrderByUploadedAtDesc(
+        Page<Post> posts = postRepository.findByAuthorIdAndVisibilityInAndActiveTrueAndIsCurrentTrueOrderByUploadedAtDesc(
                 currentUserId,
+                List.of(Visibility.ALL, Visibility.FRIEND, Visibility.ONLY_ME),
                 pageable);
 
         String s3BaseUrl = getS3BaseUrl();
@@ -126,8 +144,21 @@ public class PostServiceImpl implements PostService {
         String currentUserId = securityUtil.getCurrentUserId();
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "uploadedAt"));
 
-        Page<Post> posts = postRepository.findByAuthorIdAndActiveTrueAndIsCurrentTrueOrderByUploadedAtDesc(
+        List<Visibility> allowedVisibilities = new ArrayList<>();
+        allowedVisibilities.add(Visibility.ALL);
+        if (currentUserId.equals(userId)) {
+            allowedVisibilities.add(Visibility.FRIEND);
+            allowedVisibilities.add(Visibility.ONLY_ME);
+        } else {
+            List<String> friends = getFriendIdsAndMe(currentUserId);
+            if (friends.contains(userId)) {
+                allowedVisibilities.add(Visibility.FRIEND);
+            }
+        }
+
+        Page<Post> posts = postRepository.findByAuthorIdAndVisibilityInAndActiveTrueAndIsCurrentTrueOrderByUploadedAtDesc(
                 userId,
+                allowedVisibilities,
                 pageable);
 
         String s3BaseUrl = getS3BaseUrl();
@@ -151,15 +182,21 @@ public class PostServiceImpl implements PostService {
                 .map(UserInteraction::getPostId)
                 .toList();
 
+        List<String> friendIdsAndMe = getFriendIdsAndMe(currentUserId);
+
         Page<Post> posts;
         if (viewedPostIds.isEmpty()) {
-            posts = postRepository.findByPostTypeInAndActiveTrueAndIsCurrentTrueOrderByUploadedAtDesc(
+            posts = postRepository.findVisibleFeedPosts(
                     List.of(PostType.FEED, PostType.SHARE),
+                    friendIdsAndMe,
+                    currentUserId,
                     pageable);
         } else {
-            posts = postRepository.findByPostTypeInAndActiveTrueAndIsCurrentTrueAndIdNotInOrderByUploadedAtDesc(
+            posts = postRepository.findVisibleFeedPostsExcluding(
                     List.of(PostType.FEED, PostType.SHARE),
                     viewedPostIds,
+                    friendIdsAndMe,
+                    currentUserId,
                     pageable);
         }
 
@@ -180,13 +217,16 @@ public class PostServiceImpl implements PostService {
     public List<StoryGroupResponse> getStoryPosts(int page, int size) {
         // Fetch a large recent window; grouping happens in-memory.
         Pageable pageable = PageRequest.of(page, size * 10, Sort.by(Sort.Direction.DESC, "uploadedAt"));
+        String currentUserId = securityUtil.getCurrentUserId();
+        List<String> friendIdsAndMe = getFriendIdsAndMe(currentUserId);
 
-        Page<Post> posts = postRepository.findByPostTypeAndActiveTrueAndIsCurrentTrueOrderByUploadedAtDesc(
+        Page<Post> posts = postRepository.findVisiblePostsByType(
                 PostType.STORY,
+                friendIdsAndMe,
+                currentUserId,
                 pageable);
 
         String s3BaseUrl = getS3BaseUrl();
-        String currentUserId = securityUtil.getCurrentUserId();
         Map<String, UserSummary> authorMap = buildAuthorMap(posts.getContent());
 
         // Group stories by authorId, preserving insertion order (most-recent story
@@ -221,13 +261,16 @@ public class PostServiceImpl implements PostService {
     @Override
     public PageResponse<List<PostResponse>> getReelPosts(int page, int size) {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "uploadedAt"));
+        String currentUserId = securityUtil.getCurrentUserId();
+        List<String> friendIdsAndMe = getFriendIdsAndMe(currentUserId);
 
-        Page<Post> posts = postRepository.findByPostTypeAndActiveTrueAndIsCurrentTrueOrderByUploadedAtDesc(
+        Page<Post> posts = postRepository.findVisiblePostsByType(
                 PostType.REEL,
+                friendIdsAndMe,
+                currentUserId,
                 pageable);
 
         String s3BaseUrl = getS3BaseUrl();
-        String currentUserId = securityUtil.getCurrentUserId();
         Map<String, UserSummary> authorMap = buildAuthorMap(posts.getContent());
         return PageResponse.fromPage(posts, post -> postMapper.toPostResponse(post, s3BaseUrl,
                 getCurrentUserReaction(currentUserId, post.getId()), authorMap.get(post.getAuthorId())));

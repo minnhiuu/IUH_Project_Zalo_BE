@@ -143,8 +143,9 @@ public class RawNotificationListener {
 
     private BatchedNotificationEvent wrapAsReady(RawNotificationEvent event, String locale) {
 
+        @SuppressWarnings("unchecked")
         Map<String, Object> payload = new HashMap<>(
-                event.getPayload() != null ? event.getPayload() : Collections.emptyMap()
+                event.getPayload() != null ? (Map<String, Object>) event.getPayload() : Collections.emptyMap()
         );
         payload.put("actorId", event.getActorId());
         payload.put("referenceId", event.getReferenceId());

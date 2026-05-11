@@ -2,6 +2,7 @@ package com.bondhub.socialfeedservice.service.reaction;
 
 import com.bondhub.common.enums.NotificationType;
 import com.bondhub.common.event.notification.RawNotificationEvent;
+import com.bondhub.common.event.notification.payload.PostReactionPayload;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
 import com.bondhub.common.publisher.RawNotificationEventPublisher;
@@ -287,9 +288,10 @@ public class ReactionServiceImpl implements ReactionService {
                 String actorAvatar = actorSummary != null ? actorSummary.getAvatar() : null;
 
                 try {
-                        Map<String, Object> payload = new HashMap<>();
-                        payload.put("postId", post.getId());
-                        payload.put("reactionType", reactionType.name());
+                        PostReactionPayload payload = PostReactionPayload.builder()
+                                .postId(post.getId())
+                                .reactionType(reactionType.name())
+                                .build();
 
                         RawNotificationEvent notificationEvent = RawNotificationEvent.builder()
                                         .recipientId(post.getAuthorId())
@@ -310,4 +312,49 @@ public class ReactionServiceImpl implements ReactionService {
                                         actorId, targetId, e);
                 }
         }
+
+    @Override
+    public void simulateBatchLikes(String postId, int count) {
+        Post post = postRepository.findByIdAndActiveTrueAndIsCurrentTrue(postId)
+                .orElseThrow(() -> new AppException(ErrorCode.POST_NOT_FOUND));
+
+        org.springframework.data.domain.Page<UserSummary> usersPage = userSummaryRepository.findAll(org.springframework.data.domain.PageRequest.of(0, count));
+        List<UserSummary> users = usersPage.getContent();
+
+        for (int i = 0; i < count; i++) {
+            String actorId;
+            String actorName;
+            String actorAvatar;
+
+            if (i < users.size()) {
+                UserSummary user = users.get(i);
+                actorId = user.getId();
+                actorName = user.getFullName() != null && !user.getFullName().isBlank() ? user.getFullName() : "Batch User " + i;
+                actorAvatar = user.getAvatar();
+            } else {
+                actorId = "dummy-batch-actor-" + i;
+                actorName = "Batch User " + i;
+                actorAvatar = null;
+            }
+
+            PostReactionPayload payload = PostReactionPayload.builder()
+                    .postId(post.getId())
+                    .reactionType(ReactionType.LIKE.name())
+                    .build();
+
+            RawNotificationEvent notificationEvent = RawNotificationEvent.builder()
+                    .recipientId(post.getAuthorId())
+                    .actorId(actorId)
+                    .actorName(actorName)
+                    .actorAvatar(actorAvatar)
+                    .type(NotificationType.POST_LIKE)
+                    .referenceId(post.getId())
+                    .payload(payload)
+                    .occurredAt(LocalDateTime.now())
+                    .build();
+
+            rawNotificationEventPublisher.publish(notificationEvent);
+        }
+        log.info("[ReactionNotification] Published {} simulated batch POST_LIKE events for postId={}", count, postId);
+    }
 }
