@@ -18,6 +18,8 @@ import java.util.List;
 @RequiredArgsConstructor
 public class UserSearchController {
 
+    private static final int MAX_USER_SEARCH_PAGE_SIZE = 50;
+
     private final UserSearchService userSearchService;
 
     @GetMapping("/users")
@@ -26,7 +28,7 @@ public class UserSearchController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
 
-        Pageable pageable = PageRequest.of(page, size);
+        Pageable pageable = PageRequest.of(Math.max(page, 0), clampPageSize(size));
         return ResponseEntity.ok(ApiResponse.success(userSearchService.searchUsersWithMetadata(keyword, pageable)));
     }
 
@@ -34,5 +36,9 @@ public class UserSearchController {
     public ResponseEntity<ApiResponse<List<UserSummaryResponse>>> findUsersByPhones(
             @RequestBody List<String> phones) {
         return ResponseEntity.ok(ApiResponse.success(userSearchService.findUsersByPhones(phones)));
+    }
+
+    private int clampPageSize(int size) {
+        return Math.min(Math.max(size, 1), MAX_USER_SEARCH_PAGE_SIZE);
     }
 }

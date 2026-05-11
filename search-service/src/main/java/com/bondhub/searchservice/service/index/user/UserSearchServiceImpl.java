@@ -46,6 +46,7 @@ import java.util.stream.Collectors;
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public class UserSearchServiceImpl implements UserSearchService {
         private static final int MIN_RERANK_CANDIDATE_SIZE = 100;
+        private static final int MAX_RERANK_CANDIDATE_SIZE = 300;
         private static final int RERANK_WINDOW_MULTIPLIER = 5;
 
         ElasticsearchOperations esOps;
@@ -92,6 +93,7 @@ public class UserSearchServiceImpl implements UserSearchService {
                         return PageResponse.empty(pageable);
                 }
 
+                long startedAt = System.nanoTime();
                 String searchTerm = keyword.trim();
                 String phoneSearchTerm = normalizePhoneSearchTerm(searchTerm);
                 boolean phoneLikeSearch = isPhoneLike(searchTerm);
@@ -168,17 +170,35 @@ public class UserSearchServiceImpl implements UserSearchService {
                                 .withPageable(finalPageable)
                                 .build();
 
+                long esStartedAt = System.nanoTime();
                 SearchHits<UserIndex> hits = esOps.search(
                                 nativeQuery,
                                 UserIndex.class,
                                 IndexCoordinates.of(esProperties.getUserAlias()));
+                long esLatencyMs = elapsedMs(esStartedAt);
 
+                ContextFetchResult contextFetchResult = fetchUserSearchContext(hits.getSearchHits());
                 List<RankedUserSearchHit> rankedHits = rerankHits(
                                 hits.getSearchHits(),
                                 searchTerm,
-                                currentUserId);
+                                currentUserId,
+                                contextFetchResult.contextByUserId());
 
                 List<RankedUserSearchHit> pagedHits = paginateRankedHits(rankedHits, pageable);
+
+                log.info(
+                                "User search completed keywordLength={}, phoneSearch={}, candidateSize={}, esTotalHits={}, esReturnedHits={}, esLatencyMs={}, contextFetchSize={}, contextFetchLatencyMs={}, returned={}, fallback={}, tookMs={}",
+                                searchTerm.length(),
+                                phoneLikeSearch,
+                                candidateSize,
+                                hits.getTotalHits(),
+                                hits.getSearchHits().size(),
+                                esLatencyMs,
+                                contextFetchResult.contextFetchSize(),
+                                contextFetchResult.latencyMs(),
+                                pagedHits.size(),
+                                contextFetchResult.fallback(),
+                                elapsedMs(startedAt));
 
                 return PageResponse.<List<RankedUserSearchHit>>builder()
                                 .data(pagedHits)
@@ -287,19 +307,19 @@ public class UserSearchServiceImpl implements UserSearchService {
 
         private int calculateCandidateSize(Pageable pageable) {
                 int requestedEnd = (pageable.getPageNumber() + 1) * pageable.getPageSize();
-                return Math.max(requestedEnd * RERANK_WINDOW_MULTIPLIER, MIN_RERANK_CANDIDATE_SIZE);
+                int candidateSize = Math.max(requestedEnd * RERANK_WINDOW_MULTIPLIER, MIN_RERANK_CANDIDATE_SIZE);
+                return Math.min(candidateSize, MAX_RERANK_CANDIDATE_SIZE);
         }
 
         private List<RankedUserSearchHit> rerankHits(
                         List<SearchHit<UserIndex>> searchHits,
                         String searchTerm,
-                        String currentUserId) {
+                        String currentUserId,
+                        Map<String, UserSearchContextResponse> contextByUserId) {
 
                 if (searchHits == null || searchHits.isEmpty()) {
                         return Collections.emptyList();
                 }
-
-                Map<String, UserSearchContextResponse> contextByUserId = fetchUserSearchContext(searchHits);
 
                 return searchHits.stream()
                                 .map(hit -> toRankedHit(hit, searchTerm, currentUserId, contextByUserId))
@@ -312,7 +332,8 @@ public class UserSearchServiceImpl implements UserSearchService {
                                 .toList();
         }
 
-        private Map<String, UserSearchContextResponse> fetchUserSearchContext(List<SearchHit<UserIndex>> searchHits) {
+        private ContextFetchResult fetchUserSearchContext(List<SearchHit<UserIndex>> searchHits) {
+                long startedAt = System.nanoTime();
                 List<String> userIds = searchHits.stream()
                                 .map(SearchHit::getContent)
                                 .map(UserIndex::getId)
@@ -321,7 +342,7 @@ public class UserSearchServiceImpl implements UserSearchService {
                                 .toList();
 
                 if (userIds.isEmpty()) {
-                        return Collections.emptyMap();
+                        return new ContextFetchResult(Collections.emptyMap(), 0, elapsedMs(startedAt), false);
                 }
 
                 try {
@@ -331,20 +352,26 @@ public class UserSearchServiceImpl implements UserSearchService {
                                                         .build());
 
                         if (response == null || response.data() == null) {
-                                return Collections.emptyMap();
+                                return new ContextFetchResult(Collections.emptyMap(), userIds.size(), elapsedMs(startedAt), false);
                         }
 
-                        return response.data().stream()
+                        Map<String, UserSearchContextResponse> contextByUserId = response.data().stream()
                                         .filter(context -> StringUtils.hasText(context.userId()))
                                         .collect(Collectors.toMap(
                                                         UserSearchContextResponse::userId,
                                                         Function.identity(),
                                                         (existing, replacement) -> existing));
+                        return new ContextFetchResult(contextByUserId, userIds.size(), elapsedMs(startedAt), false);
                 } catch (Exception e) {
-                        log.warn("Failed to fetch user search relationship context, falling back to Elasticsearch ranking: {}",
-                                        e.getMessage());
-                        return Collections.emptyMap();
+                        long latencyMs = elapsedMs(startedAt);
+                        log.warn("User search friend context fallback targetCount={}, latencyMs={}, reason={}",
+                                        userIds.size(), latencyMs, e.getMessage());
+                        return new ContextFetchResult(Collections.emptyMap(), userIds.size(), latencyMs, true);
                 }
+        }
+
+        private long elapsedMs(long startedAt) {
+                return (System.nanoTime() - startedAt) / 1_000_000;
         }
 
         private Optional<RankedUserSearchHit> toRankedHit(
@@ -410,5 +437,12 @@ public class UserSearchServiceImpl implements UserSearchService {
                 double elasticsearchScore,
                 double finalScore,
                 LocalDateTime createdAt) {
+        }
+
+        private record ContextFetchResult(
+                Map<String, UserSearchContextResponse> contextByUserId,
+                int contextFetchSize,
+                long latencyMs,
+                boolean fallback) {
         }
 }
