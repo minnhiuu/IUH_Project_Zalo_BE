@@ -176,9 +176,11 @@ public class GroupConversationServiceImpl implements GroupConversationService {
         Set<String> blockedIds = getBlockedUserIds(conversation);
         ConversationMember actor = helper.getMemberOrThrow(conversation, currentUserId);
         MemberRole actorRole = helper.resolveRole(actor);
+        boolean isManager = actorRole != MemberRole.MEMBER;
+
         Set<String> blockedInRequest = requestedIds.stream().filter(blockedIds::contains).collect(Collectors.toSet());
         if (!blockedInRequest.isEmpty()) {
-            if (actorRole == MemberRole.OWNER || actorRole == MemberRole.ADMIN) {
+            if (isManager) {
                 // Owner re-adding blocked users → auto-unblock them
                 conversation.getBlockedUserIds().removeAll(blockedInRequest);
             } else {
@@ -244,29 +246,41 @@ public class GroupConversationServiceImpl implements GroupConversationService {
                 ? currentUser.getFriendIds() : Collections.emptySet();
         Set<String> nonFriendIds = requestedIds.stream().filter(id -> !friendIds.contains(id)).collect(Collectors.toCollection(LinkedHashSet::new));
         if (!nonFriendIds.isEmpty()) {
-            var actorInfoForNonFriend = helper.fetchActorInfo(currentUserId);
-            List<String> nonFriendTargetIds = new ArrayList<>(nonFriendIds);
-            List<ChatUser> nonFriendUsers = chatUserRepository.findAllById(nonFriendIds);
-            Map<String, String> nonFriendNameMap = nonFriendUsers.stream()
-                    .collect(Collectors.toMap(ChatUser::getId, ChatUser::getFullName));
-            Map<String, String> nonFriendAvatarMap = nonFriendUsers.stream()
-                    .filter(u -> u.getAvatar() != null)
-                    .collect(Collectors.toMap(ChatUser::getId, ChatUser::getAvatar));
-            List<String> nonFriendNames = nonFriendTargetIds.stream()
-                    .map(id -> nonFriendNameMap.getOrDefault(id, "Người dùng")).toList();
-            List<String> nonFriendAvatars = nonFriendTargetIds.stream()
-                    .map(id -> nonFriendAvatarMap.getOrDefault(id, "")).toList();
+            String token = conversation.getJoinLinkToken();
+            if (token == null && isManager) {
+                token = UUID.randomUUID().toString().replace("-", "");
+                conversation.setJoinLinkToken(token);
+                if (conversation.getSettings() == null) conversation.setSettings(GroupSettings.builder().joinByLinkEnabled(true).build());
+                else conversation.getSettings().setJoinByLinkEnabled(true);
+            }
 
-            systemMessageService.sendSystemMessage(conversationId, currentUserId,
-                    actorInfoForNonFriend.name(), actorInfoForNonFriend.avatar(),
-                    SystemActionType.ADD_MEMBERS_FAILED,
-                    Map.of("targetIds", nonFriendTargetIds,
-                            "payload", Map.of("targetNames", nonFriendNames, "targetAvatars", nonFriendAvatars,
-                                    "failedCount", nonFriendIds.size())),
-                    Set.of(currentUserId));
+            if (token != null) {
+                if (conversation.getInvitedUserIds() == null) conversation.setInvitedUserIds(new HashSet<>());
+                conversation.getInvitedUserIds().addAll(nonFriendIds);
+            } else {
+                var actorInfo = helper.fetchActorInfo(currentUserId);
+                List<ChatUser> strangers = chatUserRepository.findAllById(nonFriendIds);
+
+                Map<String, Object> payload = new HashMap<>();
+                payload.put("targetNames", strangers.stream().map(ChatUser::getFullName).toList());
+                payload.put("targetAvatars", strangers.stream().map(u -> u.getAvatar() != null ? u.getAvatar() : "").toList());
+                if (nonFriendIds.size() > 1) {
+                    payload.put("failedCount", nonFriendIds.size());
+                }
+
+                systemMessageService.sendSystemMessage(conversationId, currentUserId, actorInfo.name(), actorInfo.avatar(),
+                        SystemActionType.ADD_MEMBERS_FAILED,
+                        Map.of("targetIds", new ArrayList<>(nonFriendIds),
+                                "payload", payload),
+                        Set.of(currentUserId));
+            }
             requestedIds.removeAll(nonFriendIds);
         }
-        if (requestedIds.isEmpty()) return helper.buildConversationResponseForCurrentUser(conversation, currentUserId);
+
+        if (requestedIds.isEmpty()) {
+            Conversation saved = conversationRepository.save(conversation);
+            return helper.broadcastAndRespond(saved, currentUserId);
+        }
 
         List<ChatUser> users = chatUserRepository.findAllById(requestedIds);
         if (users.size() != requestedIds.size()) throw new AppException(ErrorCode.USER_NOT_FOUND);
@@ -576,6 +590,8 @@ public class GroupConversationServiceImpl implements GroupConversationService {
                     Conversation.class
             );
             saved.setJoinLinkToken(null);
+            systemMessageService.sendSystemMessage(conversationId, currentUserId, actorInfo.name(), actorInfo.avatar(),
+                    SystemActionType.DISABLE_JOIN_LINK, Map.of());
         }
 
         return helper.broadcastAndRespond(saved, currentUserId);

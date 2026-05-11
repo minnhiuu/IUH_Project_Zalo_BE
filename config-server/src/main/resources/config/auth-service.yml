@@ -16,7 +16,7 @@ spring:
       uuid-representation: standard
     redis:
       host: ${REDIS_HOST}
-      port: ${REDIS_PORT}
+      port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD}
       timeout: 5000ms
       lettuce:
@@ -85,14 +85,6 @@ jwt:
   refresh:
     expiration-web: 604800000 # 7 days
     expiration-mobile: 31536000000 # 1 year
-
-# Brevo Email Configuration
-brevo:
-  api-key: ${BREVO_API_KEY}
-  sender:
-    name: ${BREVO_SENDER_NAME}
-  template:
-    otp-verification-id: ${BREVO_OTP_TEMPLATE_ID}
 
 # OTP Configuration
 otp:

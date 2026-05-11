@@ -14,10 +14,17 @@ public interface UserDeviceRepository extends MongoRepository<UserDevice, String
     Optional<UserDevice> findByUserIdAndFcmToken(String userId, String fcmToken);
 
     List<UserDevice> findByUserId(String userId);
+    
+    List<UserDevice> findAllByUserId(String userId);
+
+    Optional<UserDevice> findByDeviceId(String deviceId);
 
     void deleteByUserIdAndFcmToken(String userId, String fcmToken);
 
     void deleteByFcmTokenAndUserIdNot(String fcmToken, String userId);
 
     void deleteByUserIdAndPlatformIn(String userId, List<Platform> platforms);
+
+    /** Find an FCM device record by the device identifier — used to target the auth-service root device. */
+    Optional<UserDevice> findByUserIdAndDeviceId(String userId, String deviceId);
 }

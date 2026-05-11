@@ -240,11 +240,21 @@ public class AuthController {
 
     @PostMapping("/logout-device")
     public ResponseEntity<ApiResponse<Void>> logoutDevice(
-            @Valid @RequestBody LogoutDeviceRequest request) {
+            @Valid @RequestBody LogoutDeviceRequest request,
+            @CookieValue(value = CookieUtil.REFRESH_TOKEN_COOKIE_NAME, required = false) String cookieRefreshToken,
+            HttpServletRequest httpRequest) {
 
         log.info("POST /auth/logout-device - Logout specific device request");
 
-        authenticationService.logoutDevice(request.sessionId());
+        String token = cookieRefreshToken;
+        if (token == null || token.isBlank()) {
+            String authHeader = httpRequest.getHeader("Authorization");
+            if (authHeader != null && authHeader.startsWith("Bearer ")) {
+                token = authHeader.substring(7);
+            }
+        }
+
+        authenticationService.logoutDevice(request.sessionId(), token);
 
         return ResponseEntity.ok(ApiResponse.success(null));
     }

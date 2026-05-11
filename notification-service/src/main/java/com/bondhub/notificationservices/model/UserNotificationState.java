@@ -7,6 +7,7 @@ import org.springframework.data.mongodb.core.mapping.FieldType;
 import org.springframework.data.mongodb.core.mapping.MongoId;
 
 import java.time.LocalDateTime;
+import java.util.Set;
 
 @Document("notification_user_states")
 @Data
@@ -20,6 +21,8 @@ public class UserNotificationState {
     String userId;
 
     LocalDateTime lastCheckedAt;
+
+    Set<String> unreadActorIds;
 
     long unreadCount;
 }

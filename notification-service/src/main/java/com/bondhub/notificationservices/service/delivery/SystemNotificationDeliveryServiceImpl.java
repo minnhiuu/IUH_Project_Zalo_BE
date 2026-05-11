@@ -2,8 +2,8 @@ package com.bondhub.notificationservices.service.delivery;
 
 import com.bondhub.common.enums.NotificationType;
 import com.bondhub.common.event.notification.SystemNotificationEvent;
+import com.bondhub.notificationservices.client.SocketServiceClient;
 import com.bondhub.notificationservices.enums.NotificationChannel;
-import com.bondhub.notificationservices.enums.Platform;
 import com.bondhub.notificationservices.model.Notification;
 import com.bondhub.notificationservices.model.UserDevice;
 import com.bondhub.notificationservices.model.UserNotificationState;
@@ -12,7 +12,10 @@ import com.bondhub.notificationservices.repository.UserDeviceRepository;
 import com.bondhub.notificationservices.service.template.NotificationTemplateService;
 import com.bondhub.notificationservices.service.user.preference.UserPreferenceService;
 import com.bondhub.notificationservices.dto.response.template.NotificationTemplateResponse;
-import com.google.firebase.messaging.*;
+import com.bondhub.notificationservices.service.dnd.DndMissedNotificationService;
+import com.bondhub.notificationservices.service.push.FcmService;
+import com.bondhub.notificationservices.service.delivery.strategy.InAppDeliveryStrategy;
+import com.bondhub.notificationservices.service.delivery.strategy.EmailDeliveryStrategy;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
@@ -23,7 +26,6 @@ import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
-import org.springframework.retry.support.RetryTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -35,17 +37,17 @@ import java.util.*;
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public class SystemNotificationDeliveryServiceImpl implements SystemNotificationDeliveryService {
 
-    static final RetryTemplate FCM_RETRY = RetryTemplate.builder()
-            .maxAttempts(3)
-            .exponentialBackoff(500, 2, 4000)
-            .retryOn(RuntimeException.class)
-            .build();
-
     NotificationRepository notificationRepository;
     UserDeviceRepository userDeviceRepository;
     NotificationTemplateService templateService;
     UserPreferenceService userPreferenceService;
+    DndMissedNotificationService dndMissedNotificationService;
+    NotificationContentBuilder contentBuilder;
+    FcmService fcmService;
     MongoTemplate mongoTemplate;
+    InAppDeliveryStrategy inAppDeliveryStrategy;
+    EmailDeliveryStrategy emailDeliveryStrategy;
+    SocketServiceClient socketServiceClient;
 
     @NonFinal
     @Value("${bondhub.frontend-url}")
@@ -62,14 +64,58 @@ public class SystemNotificationDeliveryServiceImpl implements SystemNotification
             return;
         }
 
-        var prefs = userPreferenceService.getPreferences(event.getRecipientId());
-        if (!userPreferenceService.allow(prefs, null, event.getType())) {
+        if (!userPreferenceService.allow(event.getRecipientId(), event.getType())) {
             log.info("[SystemDelivery] Filtered by user preference: recipient={}, type={}",
                     event.getRecipientId(), event.getType());
             return;
         }
 
-        sendFcm(persisted, event);
+        try {
+            inAppDeliveryStrategy.execute(persisted);
+        } catch (Exception e) {
+            log.error("[SystemDelivery] InApp Delivery failed: recipient={}", event.getRecipientId(), e);
+        }
+
+        if (userPreferenceService.shouldSilenceByDnd(event.getRecipientId())) {
+            log.info("[SystemDelivery] FCM silenced by DND: recipient={}, type={}",
+                    event.getRecipientId(), event.getType());
+            dndMissedNotificationService.record(persisted);
+            return;
+        }
+
+        if (isRecipientOnline(event.getRecipientId(), event.getType())) {
+            return;
+        }
+
+        boolean pushSuccess = false;
+        try {
+            sendFcm(persisted, event);
+            pushSuccess = true;
+        } catch (Exception e) {
+            log.error("[SystemDelivery] FCM delivery failed after retries: {}. Falling back to Email.", e.getMessage());
+        }
+
+        if (!pushSuccess) {
+            try {
+                emailDeliveryStrategy.execute(persisted);
+            } catch (Exception e) {
+                log.error("[SystemDelivery] Fallback Email failed: {}", e.getMessage());
+            }
+        }
+    }
+
+    private boolean isRecipientOnline(String recipientId, NotificationType type) {
+        try {
+            boolean isOnline = socketServiceClient.isUserOnline(recipientId);
+            if (isOnline) {
+                log.debug("[SystemDelivery] FCM skip: user {} is online, type={}", recipientId, type);
+                return true;
+            }
+        } catch (Exception e) {
+            log.warn("[SystemDelivery] Presence check failed for user {}, proceeding with push: {}",
+                    recipientId, e.getMessage());
+        }
+        return false;
     }
 
     private Notification persist(SystemNotificationEvent event) {
@@ -80,6 +126,12 @@ public class SystemNotificationDeliveryServiceImpl implements SystemNotification
         payload.put("category", event.getCategory().name());
         if (event.getActorId() != null) {
             payload.put("actorId", event.getActorId());
+        }
+        if (event.getActorName() != null) {
+            payload.put("actorName", event.getActorName());
+        }
+        if (event.getActorAvatar() != null) {
+            payload.put("actorAvatar", event.getActorAvatar());
         }
 
         Notification notification = Notification.builder()
@@ -94,8 +146,9 @@ public class SystemNotificationDeliveryServiceImpl implements SystemNotification
         Notification saved = notificationRepository.save(notification);
 
         mongoTemplate.upsert(
-                new Query(Criteria.where("userId").is(event.getRecipientId())),
-                new Update().inc("unreadCount", 1L),
+                new Query(Criteria.where("_id").is(event.getRecipientId())),
+                new Update().inc("unreadCount", 1L)
+                        .addToSet("unreadActorIds", (event.getActorId() != null ? event.getActorId() : "system") + "_" + event.getType().name() + (event.getReferenceId() != null ? "_" + event.getReferenceId() : "")),
                 UserNotificationState.class
         );
 
@@ -113,8 +166,7 @@ public class SystemNotificationDeliveryServiceImpl implements SystemNotification
             return;
         }
 
-        var userPrefs = userPreferenceService.getPreferences(recipientId);
-        String globalLocale = (userPrefs != null) ? userPrefs.getLanguage() : "vi";
+        String globalLocale = userPreferenceService.getLocale(recipientId);
 
         Map<String, Object> renderData = new HashMap<>();
         if (event.getMetadata() != null) {
@@ -126,9 +178,9 @@ public class SystemNotificationDeliveryServiceImpl implements SystemNotification
         Map<String, NotificationTemplateResponse> templateCache = new HashMap<>();
 
         for (UserDevice device : devices) {
-            String deviceLocale = resolveDeviceLocale(device, userPrefs, globalLocale);
+            String deviceLocale = device.getLocale() != null ? device.getLocale() : globalLocale;
 
-            if (!userPreferenceService.allow(userPrefs, device.getDeviceId(), persisted.getType())) {
+            if (!isAllowedOnDevice(device, persisted.getType())) {
                 log.debug("[SystemDelivery] FCM skip: filtered by preference: recipient={}, device={}",
                         recipientId, device.getDeviceId());
                 continue;
@@ -153,99 +205,24 @@ public class SystemNotificationDeliveryServiceImpl implements SystemNotification
                 continue;
             }
 
-            sendToDevice(device, title, body, collapseKey, recipientId, persisted.getType().name(),
-                    event.getMetadata());
+            Map<String, Object> metadata = new HashMap<>();
+            if (event.getMetadata() != null) {
+                metadata.putAll(event.getMetadata());
+            }
+
+            fcmService.sendPush(persisted.getId(), device, title, body, persisted.getType().name(), metadata);
         }
     }
 
-    private void sendToDevice(UserDevice device, String title, String body, String collapseKey,
-                              String recipientId, String type, Map<String, Object> metadata) {
-        String url = frontendUrl;
-        if (!url.endsWith("/")) url += "/";
 
-        Map<String, String> dataPayload = new HashMap<>();
-        dataPayload.put("type", type);
-        dataPayload.put("title", title != null ? title : "");
-        dataPayload.put("body", body != null ? body : "");
-        dataPayload.put("url", url);
 
-        if (metadata != null) {
-            for (Map.Entry<String, Object> entry : metadata.entrySet()) {
-                if (!dataPayload.containsKey(entry.getKey()) && entry.getValue() != null) {
-                    dataPayload.put(entry.getKey(), entry.getValue().toString());
-                }
-            }
-        }
-
-        if (device.getPlatform() == Platform.ANDROID) {
-            dataPayload.put("customTitle", title != null ? title : "");
-            dataPayload.put("customBody", body != null ? body : "");
-            dataPayload.remove("title");
-            dataPayload.remove("body");
-        }
-
-        Message.Builder messageBuilder = Message.builder()
-                .setToken(device.getFcmToken())
-                .putAllData(dataPayload);
-
-        if (device.getPlatform() == Platform.WEB) {
-            messageBuilder.setWebpushConfig(WebpushConfig.builder()
-                    .setFcmOptions(WebpushFcmOptions.withLink(url))
-                    .build());
-        }
-
-        if (device.getPlatform() == Platform.ANDROID) {
-            messageBuilder.setAndroidConfig(AndroidConfig.builder()
-                    .setPriority(AndroidConfig.Priority.HIGH)
-                    .setCollapseKey(collapseKey)
-                    .build());
-        }
-
-        if (device.getPlatform() == Platform.IOS) {
-            messageBuilder.setApnsConfig(ApnsConfig.builder()
-                    .setAps(Aps.builder()
-                            .setThreadId(collapseKey)
-                            .setContentAvailable(true)
-                            .setMutableContent(true)
-                            .setSound("default")
-                            .build())
-                    .build());
-        }
-
-        Message message = messageBuilder.build();
-
-        try {
-            String messageId = FCM_RETRY.execute(ctx -> {
-                try {
-                    return FirebaseMessaging.getInstance().send(message);
-                } catch (FirebaseMessagingException e) {
-                    MessagingErrorCode code = e.getMessagingErrorCode();
-                    if (code == MessagingErrorCode.UNREGISTERED || code == MessagingErrorCode.INVALID_ARGUMENT) {
-                        log.warn("[SystemDelivery] FCM stale token, removing device: recipient={}, device={}, code={}",
-                                recipientId, device.getId(), code);
-                        userDeviceRepository.delete(device);
-                        return null;
-                    }
-                    log.warn("[SystemDelivery] FCM transient error [attempt {}]: recipient={}, device={}, error={}",
-                            ctx.getRetryCount() + 1, recipientId, device.getId(), e.getMessage());
-                    throw new RuntimeException("FCM transient error: " + e.getMessage(), e);
-                }
-            });
-            if (messageId != null) {
-                log.info("[SystemDelivery] FCM sent: recipient={}, device={}, messageId={}",
-                        recipientId, device.getId(), messageId);
-            }
-        } catch (Exception e) {
-            log.error("[SystemDelivery] FCM failed after retries: recipient={}, device={}, error={}",
-                    recipientId, device.getId(), e.getMessage());
-        }
-    }
-
-    private String resolveDeviceLocale(UserDevice device, Object userPrefs, String globalLocale) {
-        String deviceLocale = device.getLocale();
-        if (deviceLocale == null) {
-            deviceLocale = globalLocale;
-        }
-        return deviceLocale != null ? deviceLocale : "vi";
+    private boolean isAllowedOnDevice(UserDevice device, NotificationType type) {
+        if (!device.isAllowNotifications()) return false;
+        return switch (type) {
+            case FRIEND_REQUEST -> device.isNotifFriendRequests();
+            case MESSAGE_DIRECT -> device.isNotifMessages();
+            case MESSAGE_GROUP -> device.isNotifGroups();
+            default -> true;
+        };
     }
 }

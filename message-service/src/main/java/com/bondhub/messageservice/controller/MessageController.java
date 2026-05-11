@@ -114,4 +114,10 @@ public class MessageController {
         return ResponseEntity.ok(ApiResponse.success(
                 messageService.getSeenMembers(conversationId, messageId)));
     }
+
+    @GetMapping("/messages/{messageId}")
+    @Operation(summary = "Get a message by ID")
+    public ResponseEntity<ApiResponse<MessageResponse>> getMessageById(@PathVariable String messageId) {
+        return ResponseEntity.ok(ApiResponse.success(messageService.findById(messageId)));
+    }
 }

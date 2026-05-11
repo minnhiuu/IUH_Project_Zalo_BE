@@ -42,7 +42,7 @@ public class DataInitializer {
     @EventListener(ApplicationReadyEvent.class)
     public void init() {
         seedTemplates();
-        seedNotifications();
+//        seedNotifications();
     }
 
     public void seedTemplates() {
@@ -60,6 +60,13 @@ public class DataInitializer {
         seedIfAbsent(NotificationType.MESSAGE_DIRECT, NotificationChannel.IN_APP, "en",
                 "New message",
                 "<b>{{actorName}}</b> sent you a message");
+
+        seedIfAbsent(NotificationType.MESSAGE_GROUP, NotificationChannel.IN_APP, "vi",
+                "Tin nhắn nhóm",
+                "<b>{{groupName}}</b>: {{actorName}} {{contentVi}}");
+        seedIfAbsent(NotificationType.MESSAGE_GROUP, NotificationChannel.IN_APP, "en",
+                "Group message",
+                "<b>{{groupName}}</b>: {{actorName}} {{contentEn}}");
 
         seedIfAbsent(NotificationType.POST_LIKE, NotificationChannel.IN_APP, "vi",
                 "Lượt thích bài viết",
@@ -117,6 +124,13 @@ public class DataInitializer {
         seedIfAbsent(NotificationType.MESSAGE_DIRECT, NotificationChannel.FCM, "en",
                 "New message",
                 "{{actorName}} sent you a message.");
+
+        seedIfAbsent(NotificationType.MESSAGE_GROUP, NotificationChannel.FCM, "vi",
+                "Tin nhắn nhóm",
+                "{{groupName}}: {{actorName}} {{contentVi}}");
+        seedIfAbsent(NotificationType.MESSAGE_GROUP, NotificationChannel.FCM, "en",
+                "Group message",
+                "{{groupName}}: {{actorName}} {{contentEn}}");
 
         seedIfAbsent(NotificationType.FRIEND_ACCEPT, NotificationChannel.FCM, "vi",
                 "Chấp nhận kết bạn",
@@ -196,6 +210,20 @@ public class DataInitializer {
                 "Incoming call",
                 "<b>{{actorName}}</b> is calling you");
 
+        // --- SECURITY TEMPLATES ---
+        seedIfAbsent(NotificationType.NEW_DEVICE_LOGIN, NotificationChannel.IN_APP, "vi",
+                "Cảnh báo đăng nhập mới",
+                "Tài khoản của bạn vừa được đăng nhập từ một thiết bị mới ({{deviceName}}) với IP: {{ipAddress}}. Nếu không phải bạn, vui lòng bảo mật tài khoản ngay lập tức.");
+        seedIfAbsent(NotificationType.NEW_DEVICE_LOGIN, NotificationChannel.IN_APP, "en",
+                "New Login Detected",
+                "Your account was just logged into from a new device ({{deviceName}}) with IP: {{ipAddress}}. If this was not you, please secure your account.");
+        seedIfAbsent(NotificationType.NEW_DEVICE_LOGIN, NotificationChannel.FCM, "vi",
+                "Cảnh báo đăng nhập mới",
+                "Tài khoản của bạn vừa được đăng nhập từ một thiết bị mới ({{deviceName}}) với IP: {{ipAddress}}. Nếu không phải bạn, vui lòng bảo mật tài khoản ngay lập tức.");
+        seedIfAbsent(NotificationType.NEW_DEVICE_LOGIN, NotificationChannel.FCM, "en",
+                "New Login Detected",
+                "Your account was just logged into from a new device ({{deviceName}}) with IP: {{ipAddress}}. If this was not you, please secure your account.");
+
         // --- MODERATION TEMPLATES ---
         seedIfAbsent(NotificationType.CONTENT_REMOVED, NotificationChannel.IN_APP, "vi",
                 "Nội dung đã bị xóa",
@@ -235,6 +263,55 @@ public class DataInitializer {
         seedIfAbsent(NotificationType.USER_WARNED, NotificationChannel.FCM, "en",
                 "Account Warning",
                 "You have received a warning from an administrator.{{#adminNote}} Note: {{adminNote}}{{/adminNote}}");
+
+        // --- DND SUMMARY ---
+        // Use a force update approach for DND_SUMMARY to ensure latest placeholders are present
+        seedOrUpdate(NotificationType.DND_SUMMARY, NotificationChannel.FCM, "vi",
+                "Tóm tắt chế độ im lặng",
+                "Bạn có {{totalCount}} thông báo mới khi đang ở chế độ im lặng: {{summaryText}}.");
+        seedOrUpdate(NotificationType.DND_SUMMARY, NotificationChannel.FCM, "en",
+                "Quiet Mode Summary",
+                "You have {{totalCount}} new notifications while in quiet mode: {{summaryText}}.");
+
+        seedOrUpdate(NotificationType.DND_SUMMARY, NotificationChannel.IN_APP, "vi",
+                "Tóm tắt chế độ im lặng",
+                "Bạn có <b>{{totalCount}}</b> thông báo mới khi đang ở chế độ im lặng: {{summaryText}}.");
+        seedOrUpdate(NotificationType.DND_SUMMARY, NotificationChannel.IN_APP, "en",
+                "Quiet Mode Summary",
+                "You have <b>{{totalCount}}</b> new notifications while in quiet mode: {{summaryText}}.");
+
+        // --- DND SUMMARY FRAGMENTS ---
+        seedOrUpdate(NotificationType.DND_SUMMARY_MESSAGE, NotificationChannel.FCM, "vi",
+                "", "{{messageCount}} tin nhắn trong {{conversationCount}} cuộc trò chuyện");
+        seedOrUpdate(NotificationType.DND_SUMMARY_MESSAGE, NotificationChannel.FCM, "en",
+                "", "{{messageCount}} messages in {{conversationCount}} conversations");
+
+        seedOrUpdate(NotificationType.DND_SUMMARY_FRIEND, NotificationChannel.FCM, "vi",
+                "", "{{count}} lời mời kết bạn");
+        seedOrUpdate(NotificationType.DND_SUMMARY_FRIEND, NotificationChannel.FCM, "en",
+                "", "{{count}} friend requests");
+
+        seedOrUpdate(NotificationType.DND_SUMMARY_POST, NotificationChannel.FCM, "vi",
+                "", "{{interactionCount}} tương tác trên {{postCount}} bài viết");
+        seedOrUpdate(NotificationType.DND_SUMMARY_POST, NotificationChannel.FCM, "en",
+                "", "{{interactionCount}} interactions on {{postCount}} posts");
+
+        seedOrUpdate(NotificationType.DND_SUMMARY_OTHER, NotificationChannel.FCM, "vi",
+                "", "{{count}} thông báo khác");
+        seedOrUpdate(NotificationType.DND_SUMMARY_OTHER, NotificationChannel.FCM, "en",
+                "", "{{count}} other notifications");
+    }
+
+    private void seedOrUpdate(NotificationType type, NotificationChannel channel, String locale, String title, String body) {
+        templateRepository.findByTypeAndChannelAndLocaleAndActiveTrue(type, channel, locale)
+                .ifPresentOrElse(
+                    existing -> {
+                        existing.setTitleTemplate(title);
+                        existing.setBodyTemplate(body);
+                        templateRepository.save(existing);
+                    },
+                    () -> seedIfAbsent(type, channel, locale, title, body)
+                );
     }
 
     private static final List<String> NAMES = List.of(

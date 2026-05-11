@@ -58,7 +58,8 @@ public class KafkaTopicProperties {
     @Getter
     @Setter
     public static class MessageEvents {
-
+        private String indexRequested = "message.search.index-requested";
+        private String indexDeleted = "message.search.index-deleted";
     }
 
     @Getter
@@ -67,6 +68,7 @@ public class KafkaTopicProperties {
         private String raw = "noti.raw";
         private String cleanup = "noti.cleanup";
         private String system = "noti.system";
+        private String email = "email-notifications";
     }
 
     @Getter

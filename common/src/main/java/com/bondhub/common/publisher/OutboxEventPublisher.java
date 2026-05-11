@@ -6,18 +6,14 @@ import com.bondhub.common.event.socialfeed.PostCommentCountProjectionRequestedEv
 import com.bondhub.common.event.socialfeed.PostEvent;
 import com.bondhub.common.event.socialfeed.ReactionToggleCommandEvent;
 import com.bondhub.common.event.socialfeed.UserInteractionEvent;
-import com.bondhub.common.event.user.UserIndexDeletedEvent;
-import com.bondhub.common.event.user.UserIndexRequestedEvent;
-import com.bondhub.common.event.user.UserProfileUpdatedEvent;
+import com.bondhub.common.event.message.MessageIndexRequestedEvent;
+import com.bondhub.common.event.user.*;
 import com.bondhub.common.model.kafka.EventType;
 import com.bondhub.common.model.kafka.OutboxEvent;
 import com.bondhub.common.repository.OutboxEventRepository;
 import com.bondhub.common.event.friend.FriendshipChangedEvent;
 import com.bondhub.common.event.group.GroupMemberChangedEvent;
-import com.bondhub.common.event.user.UserCreatedEvent;
-import com.bondhub.common.event.user.UserUpdatedEvent;
-import com.bondhub.common.event.user.UserDeletedEvent;
-import com.bondhub.common.event.user.UserPrivacyChangedEvent;
+import com.bondhub.common.event.notification.EmailNotificationEvent;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -48,7 +44,7 @@ public class OutboxEventPublisher {
     public OutboxEvent saveToOutbox(String aggregateId, String aggregateType, EventType eventType, Object eventPayload) {
         try {
             String payloadJson = objectMapper.writeValueAsString(eventPayload);
-            
+
             OutboxEvent outboxEvent = OutboxEvent.builder()
                     .aggregateId(aggregateId)
                     .aggregateType(aggregateType)
@@ -59,7 +55,7 @@ public class OutboxEventPublisher {
                     .build();
 
             outboxEvent = outboxEventRepository.save(outboxEvent);
-            log.info("✅ Event saved to outbox: eventType={}, aggregateId={}, id={}", 
+            log.info("✅ Event saved to outbox: eventType={}, aggregateId={}, id={}",
                     eventType, aggregateId, outboxEvent.getId());
             
             return outboxEvent;
@@ -152,6 +148,9 @@ public class OutboxEventPublisher {
             case USER_INTERACTION_RECORDED -> kafkaTopicProperties.getInteractionEvents().getUserInteraction();
             case POST_VIEW_RECORDED -> kafkaTopicProperties.getSocialFeedEvents().getPostViewRecorded();
             case POST_DISLIKE_RECORDED -> kafkaTopicProperties.getSocialFeedEvents().getPostDislikeRecorded();
+            case MESSAGE_INDEX_REQUESTED -> kafkaTopicProperties.getMessageEvents().getIndexRequested();
+            case EMAIL_NOTIFICATION -> kafkaTopicProperties.getNotificationEvents().getEmail();
+            case NOTIFICATION_SETTINGS_UPDATED -> kafkaTopicProperties.getUserEvents().getUpdated(); // Reuse user updated topic or define new
         };
     }
 
@@ -171,6 +170,9 @@ public class OutboxEventPublisher {
             case REACTION_TOGGLE_COMMAND_REQUESTED -> ReactionToggleCommandEvent.class;
             case POST_COMMENT_COUNT_PROJECTION_REQUESTED -> PostCommentCountProjectionRequestedEvent.class;
             case USER_INTERACTION_RECORDED, POST_VIEW_RECORDED, POST_DISLIKE_RECORDED -> UserInteractionEvent.class;
+            case MESSAGE_INDEX_REQUESTED -> MessageIndexRequestedEvent.class;
+            case EMAIL_NOTIFICATION -> EmailNotificationEvent.class;
+            case NOTIFICATION_SETTINGS_UPDATED -> NotificationSettingsUpdatedEvent.class;
         };
     }
 }

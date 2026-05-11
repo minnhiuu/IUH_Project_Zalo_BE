@@ -1,7 +1,6 @@
 package com.bondhub.notificationservices.listener;
 
 import com.bondhub.notificationservices.batch.BatcherService;
-import com.bondhub.notificationservices.client.UserServiceClient;
 import com.bondhub.notificationservices.event.BatchedNotificationEvent;
 import com.bondhub.notificationservices.publisher.ReadyNotificationPublisher;
 import com.bondhub.notificationservices.service.notification.NotificationService;
@@ -34,7 +33,6 @@ import java.util.Map;
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public class RawNotificationListener {
 
-    UserServiceClient userServiceClient;
     BatcherService batcherService;
     ReadyNotificationPublisher readyPublisher;
     UserPreferenceService userPreferenceService;
@@ -65,8 +63,7 @@ public class RawNotificationListener {
         }
 
         try {
-            var prefs = userPreferenceService.getPreferences(event.getRecipientId());
-            if (prefs == null) {
+            if (!userPreferenceService.recipientExists(event.getRecipientId())) {
                 log.warn("[RawListener] Drop event: recipient {} not found or inactive", event.getRecipientId());
                 ack(acknowledgment);
                 return;
@@ -77,7 +74,9 @@ public class RawNotificationListener {
                 return;
             }
 
-            dispatchToReadyQueue(event, prefs.getLanguage());
+            String locale = userPreferenceService.getLocale(event.getRecipientId());
+
+            dispatchToReadyQueue(event, locale);
             ack(acknowledgment);
 
         } catch (Exception e) {
@@ -154,8 +153,8 @@ public class RawNotificationListener {
         return BatchedNotificationEvent.builder()
                 .recipientId(event.getRecipientId())
                 .type(event.getType())
-                .actorIds(List.of(event.getActorId()))
-                .actorCount(1)
+                .actorIds(event.getActorId() != null ? List.of(event.getActorId()) : Collections.emptyList())
+                .actorCount(event.getActorId() != null ? 1 : 0)
                 .totalEventCount(1)
                 .referenceId(event.getReferenceId())
                 .lastActorId(event.getActorId())

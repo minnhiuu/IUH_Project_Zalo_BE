@@ -5,7 +5,7 @@ import com.bondhub.searchservice.dto.request.RecentSearchRequest;
 import com.bondhub.searchservice.dto.response.RecentHistoryResponse;
 import com.bondhub.searchservice.dto.response.RecentSearchResponse;
 import com.bondhub.searchservice.enums.SearchType;
-import com.bondhub.searchservice.service.RecentSearchService;
+import com.bondhub.searchservice.service.recentsearch.RecentSearchService;
 import jakarta.validation.Valid;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;

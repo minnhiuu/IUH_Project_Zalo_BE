@@ -17,6 +17,8 @@ public class SystemNotificationEvent {
 
     String recipientId;
     String actorId;
+    String actorName;
+    String actorAvatar;
     NotificationType type;
     SystemNotificationCategory category;
     String referenceId;

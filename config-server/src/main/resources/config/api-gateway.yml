@@ -217,16 +217,6 @@ spring:
                     name: searchServiceCircuitBreaker
                     fallbackUri: forward:/fallback/search-service
 
-            - id: user-service-elasticsearch-legacy
-              uri: lb://search-service
-              predicates:
-                - Path=/api/users/elasticsearch/**
-              filters:
-                - RewritePath=/api/users/elasticsearch/(?<segment>.*), /search/elasticsearch/${segment}
-                - name: CircuitBreaker
-                  args:
-                    name: searchServiceCircuitBreaker
-                    fallbackUri: forward:/fallback/search-service
 
             # Socket Service Routes (WebSocket)
             - id: socket-service-ws
@@ -508,8 +498,8 @@ spring:
 
   data:
     redis:
-      host: ${REDIS_HOST}
-      port: ${REDIS_PORT}
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD}
       timeout: 5000ms
 
@@ -589,6 +579,8 @@ resilience4j:
         base-config: default
         failure-rate-threshold: 70
         wait-duration-in-open-state: 30s
+      searchServiceCircuitBreaker:
+        base-config: default
 
   timelimiter:
     configs:
@@ -617,6 +609,7 @@ resilience4j:
       postRecommendationServiceCircuitBreaker:
         timeout-duration: 120s
         cancel-running-future: false
+      searchServiceCircuitBreaker:
         base-config: default
 
   # Retry Configuration
@@ -648,6 +641,8 @@ resilience4j:
         base-config: default
       socialFeedServiceRetry:
         base-config: default
+      searchServiceRetry:
+        base-config: default
 
   # Rate Limiter Configuration
   ratelimiter:
@@ -676,6 +671,9 @@ resilience4j:
       socialFeedServiceRateLimiter:
         base-config: default
         limit-for-period: 120
+      searchServiceRateLimiter:
+        base-config: default
+        limit-for-period: 100
 
   # Bulkhead Configuration
   bulkhead:
@@ -700,6 +698,9 @@ resilience4j:
         base-config: default
         max-concurrent-calls: 20
       socialFeedServiceBulkhead:
+        base-config: default
+        max-concurrent-calls: 20
+      searchServiceBulkhead:
         base-config: default
         max-concurrent-calls: 20
 

@@ -16,6 +16,7 @@ public enum EventType {
 
     USER_INDEX_REQUESTED,
     USER_INDEX_DELETED,
+    NOTIFICATION_SETTINGS_UPDATED,
 
     // Social Feed Events (social-feed-service)
     POST_CREATED,
@@ -32,5 +33,11 @@ public enum EventType {
     FRIENDSHIP_CHANGED,
 
     // Group Events (message-service)
-    GROUP_MEMBER_CHANGED
+    GROUP_MEMBER_CHANGED,
+
+    // Message Search Events (message-service → search-service)
+    MESSAGE_INDEX_REQUESTED,
+
+    // Notification Events
+    EMAIL_NOTIFICATION,
 }

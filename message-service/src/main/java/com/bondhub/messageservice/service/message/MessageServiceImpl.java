@@ -1,6 +1,5 @@
 package com.bondhub.messageservice.service.message;
 
-import com.bondhub.common.utils.S3Util;
 import com.bondhub.common.utils.S3UtilV2;
 import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.common.exception.AppException;
@@ -10,6 +9,7 @@ import com.bondhub.messageservice.dto.response.CursorPageResponse;
 import com.bondhub.messageservice.dto.response.MessageResponse;
 import com.bondhub.messageservice.dto.response.MessageSeenResponse;
 import com.bondhub.messageservice.dto.response.ReplyMetadataResponse;
+import com.bondhub.messageservice.dto.response.*;
 import com.bondhub.messageservice.model.Conversation;
 import com.bondhub.messageservice.model.ConversationMember;
 import com.bondhub.messageservice.model.LastMessageInfo;
@@ -22,11 +22,14 @@ import com.bondhub.messageservice.repository.ConversationRepository;
 import com.bondhub.messageservice.repository.MessageRepository;
 import com.bondhub.messageservice.repository.ChatUserRepository;
 import com.bondhub.messageservice.service.conversation.ConversationService;
-import com.bondhub.common.dto.client.messageservice.AttachmentRequest;
+import com.bondhub.common.enums.NotificationType;
+import com.bondhub.common.event.notification.RawNotificationEvent;
 import com.bondhub.common.dto.client.messageservice.MessageSendRequest;
 import com.bondhub.common.event.ai.AiMessageSaveEvent;
 import com.bondhub.common.dto.client.socketservice.SocketEvent;
 import com.bondhub.common.enums.SocketEventType;
+import com.bondhub.common.publisher.RawNotificationEventPublisher;
+import com.bondhub.messageservice.publisher.MessageIndexEventPublisher;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -35,7 +38,6 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import com.bondhub.common.dto.PageResponse;
-import com.bondhub.messageservice.dto.response.MessageResponse;
 import com.bondhub.messageservice.mapper.MessageMapper;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
@@ -73,8 +75,8 @@ public class MessageServiceImpl implements MessageService {
     private final ConversationService conversationService;
     private final ConversationHelper conversationHelper;
     private final S3UtilV2 s3UtilV2;
-
-
+    private final MessageIndexEventPublisher messageIndexEventPublisher;
+    private final RawNotificationEventPublisher rawNotificationEventPublisher;
 
     @Value("${kafka.topics.socket-events}")
     private String socketEventsTopic;
@@ -160,7 +162,7 @@ public class MessageServiceImpl implements MessageService {
     @Override
     public CursorPageResponse<MessageResponse> findChatMessagesV2(
             String conversationId, String cursor, int limit, String direction, String aroundMessageId) {
-        
+
         String currentUserId = securityUtil.getCurrentUserId();
         Conversation room = conversationRepository.findById(conversationId)
                 .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
@@ -169,7 +171,7 @@ public class MessageServiceImpl implements MessageService {
         if (aroundMessageId != null) {
             Message target = messageRepository.findById(aroundMessageId)
                     .orElseThrow(() -> new AppException(ErrorCode.MESSAGE_NOT_FOUND));
-            
+
             if (!target.getConversationId().equals(conversationId)) {
                 throw new AppException(ErrorCode.MESSAGE_NOT_FOUND);
             }
@@ -190,7 +192,7 @@ public class MessageServiceImpl implements MessageService {
 
     private CursorPageResponse<MessageResponse> standardCursorPagination(
             Conversation room, String cursor, String direction, int limit, String currentUserId) {
-        
+
         Query query = new Query();
         List<Criteria> allCriteria = new ArrayList<>();
         allCriteria.add(Criteria.where("conversationId").is(room.getId()));
@@ -227,11 +229,11 @@ public class MessageServiceImpl implements MessageService {
         allCriteria.add(Criteria.where("conversationId").is(room.getId()));
         allCriteria.add(Criteria.where("createdAt").lt(time));
         allCriteria.addAll(getSecurityCriteria(room, currentUserId));
-        
+
         query.addCriteria(new Criteria().andOperator(allCriteria.toArray(new Criteria[0])));
         query.with(Sort.by(Sort.Direction.DESC, "createdAt"));
         query.limit(limit);
-        
+
         List<Message> messages = mongoTemplate.find(query, Message.class);
         return messages; // Already DESC
     }
@@ -242,11 +244,11 @@ public class MessageServiceImpl implements MessageService {
         allCriteria.add(Criteria.where("conversationId").is(room.getId()));
         allCriteria.add(Criteria.where("createdAt").gt(time));
         allCriteria.addAll(getSecurityCriteria(room, currentUserId));
-        
+
         query.addCriteria(new Criteria().andOperator(allCriteria.toArray(new Criteria[0])));
         query.with(Sort.by(Sort.Direction.ASC, "createdAt"));
         query.limit(limit);
-        
+
         List<Message> messages = mongoTemplate.find(query, Message.class);
         Collections.reverse(messages); // Reverse to make it DESC
         return messages;
@@ -254,7 +256,7 @@ public class MessageServiceImpl implements MessageService {
 
     private List<Criteria> getSecurityCriteria(Conversation room, String currentUserId) {
         List<Criteria> securityCriteria = new ArrayList<>();
-        
+
         ConversationMember currentMember = room.getMembers().stream()
                 .filter(m -> m.getUserId().equals(currentUserId))
                 .findFirst().orElse(null);
@@ -273,16 +275,23 @@ public class MessageServiceImpl implements MessageService {
         securityCriteria.add(Criteria.where("deletedBy").ne(currentUserId));
         securityCriteria.add(Criteria.where("createdAt").gt(effectiveStartTime));
 
+        // Visibility filter: visibleTo is null OR visibleTo contains currentUserId
+        securityCriteria.add(new Criteria().orOperator(
+                Criteria.where("visibleTo").is(null),
+                Criteria.where("visibleTo").size(0),
+                Criteria.where("visibleTo").is(currentUserId)
+        ));
+
         if (!isActive) {
             securityCriteria.add(Criteria.where("type").is(MessageType.SYSTEM));
         }
-        
+
         return securityCriteria;
     }
 
     private CursorPageResponse<MessageResponse> buildCursorResponse(
             List<Message> messages, int limit, boolean isJump) {
-        
+
         String baseUrl = s3UtilV2.getS3BaseUrl();
         List<MessageResponse> dtos = messages.stream()
                 .map(msg -> messageMapper.mapToMessageResponse(msg, baseUrl))
@@ -297,7 +306,7 @@ public class MessageServiceImpl implements MessageService {
                 .data(dtos)
                 .olderCursor(olderCursor)
                 .newerCursor(newerCursor)
-                .hasMoreOlder(messages.size() >= limit) 
+                .hasMoreOlder(messages.size() >= limit)
                 .hasMoreNewer(isJump || messages.size() >= limit)
                 .isJumpResult(isJump)
                 .build();
@@ -360,8 +369,21 @@ public class MessageServiceImpl implements MessageService {
                 .build();
         messageRepository.save(message);
 
-        // 4. Xây dựng last message preview
-        String previewContent = buildPreviewContent(message);
+        String previewContent = null;
+        Map<String, Object> lastMessageMetadata = new HashMap<>();
+        
+        // Extract attachment metadata for notification rendering (chỉ khi có attachment)
+        if (message.getAttachments() != null && !message.getAttachments().isEmpty()) {
+            Map<String, Object> attachmentMetadata = extractAttachmentMetadata(message.getAttachments());
+            lastMessageMetadata.putAll(attachmentMetadata);
+        }
+        
+        if (message.getType() == MessageType.CHAT && message.getContent() != null && !message.getContent().isBlank()) {
+            previewContent = message.getContent();
+        }
+        
+        String notificationContentVi = buildNotificationContent(message, "vi");
+        String notificationContentEn = buildNotificationContent(message, "en");
         LastMessageInfo lastInfo = LastMessageInfo.builder()
                 .messageId(message.getId())
                 .senderId(currentUserId)
@@ -369,15 +391,19 @@ public class MessageServiceImpl implements MessageService {
                 .timestamp(message.getCreatedAt())
                 .type(message.getType())
                 .status(message.getStatus())
+                .metadata(lastMessageMetadata.isEmpty() ? null : lastMessageMetadata)
                 .build();
 
         // 5. Cập nhật lastMessage + tăng unreadCount cho tất cả member trừ sender
         Query query = new Query(Criteria.where("id").is(room.getId()));
         Update update = new Update().set("lastMessage", lastInfo);
-        room.getMembers().stream()
-            .filter(this::isActiveMember)
+        
+        if (message.getType() != MessageType.SYSTEM) {
+            room.getMembers().stream()
+                .filter(this::isActiveMember)
                 .filter(m -> !m.getUserId().equals(currentUserId))
                 .forEach(m -> update.inc("unreadCounts." + m.getUserId(), 1));
+        }
 
         Conversation updatedRoom = mongoTemplate.findAndModify(
                 query, update,
@@ -395,20 +421,75 @@ public class MessageServiceImpl implements MessageService {
         enrichNotifications(notifPrototypes);
         ChatNotification baseNotif = notifPrototypes.get(0);
 
+        NotificationType notiType = finalRoom.isGroup() ? NotificationType.MESSAGE_GROUP : NotificationType.MESSAGE_DIRECT;
+
         finalRoom.getMembers().stream()
             .filter(this::isActiveMember)
+            .filter(member -> {
+                // Respect visibility if restricted
+                if (message.getVisibleTo() != null && !message.getVisibleTo().isEmpty()) {
+                    return message.getVisibleTo().contains(member.getUserId());
+                }
+                return true;
+            })
             .forEach(member -> {
-            boolean isFromMe = member.getUserId().equals(currentUserId);
-            Integer unreadCount = finalRoom.getUnreadCounts().getOrDefault(member.getUserId(), 0);
+                boolean isFromMe = member.getUserId().equals(currentUserId);
+                Integer unreadCount = finalRoom.getUnreadCounts().getOrDefault(member.getUserId(), 0);
 
-            ChatNotification personalNotif = baseNotif.toBuilder()
-                    .isFromMe(isFromMe)
-                    .unreadCount(unreadCount)
-                    .build();
+                ChatNotification personalNotif = baseNotif.toBuilder()
+                        .isFromMe(isFromMe)
+                        .unreadCount(unreadCount)
+                        .build();
 
-            kafkaTemplate.send(socketEventsTopic,
-                    new SocketEvent(SocketEventType.MESSAGE, member.getUserId(),
-                            "/queue/messages", personalNotif));
+                    kafkaTemplate.send(socketEventsTopic,
+                            new SocketEvent(SocketEventType.MESSAGE, member.getUserId(),
+                                    "/queue/messages", personalNotif));
+
+                    // Publish RawNotificationEvent for push notifications (only for others)
+                    if (!isFromMe) {
+                        String dynamicGroupName = finalRoom.getName();
+                        if (finalRoom.isGroup() && (dynamicGroupName == null || dynamicGroupName.isBlank())) {
+                            // Fetch minimal user info for dynamic name generation
+                            Set<String> memberIdsToFetch = finalRoom.getMembers().stream()
+                                    .filter(this::isActiveMember)
+                                    .map(ConversationMember::getUserId)
+                                    .limit(5)
+                                    .collect(Collectors.toSet());
+                            Map<String, ChatUser> groupUserCache = chatUserRepository.findAllById(memberIdsToFetch).stream()
+                                    .collect(Collectors.toMap(ChatUser::getId, u -> u));
+                            dynamicGroupName = conversationHelper.getDynamicGroupName(finalRoom, member.getUserId(), groupUserCache);
+                        }
+
+                        // Extract attachment metadata for i18n rebuilding
+                        Map<String, Object> attachmentMetadata = extractAttachmentMetadata(message.getAttachments());
+
+                        Map<String, Object> payloadMap = new HashMap<>();
+                        payloadMap.put("conversationId", finalRoom.getId());
+                        payloadMap.put("messageId", message.getId());
+                        payloadMap.put("content", notificationContentVi);
+                        payloadMap.put("contentVi", notificationContentVi);
+                        payloadMap.put("contentEn", notificationContentEn);
+                        payloadMap.put("senderId", currentUserId);
+                        payloadMap.put("senderName", sender != null ? sender.getFullName() : "Người dùng");
+                        payloadMap.put("isGroup", finalRoom.isGroup());
+                        payloadMap.put("groupName", dynamicGroupName != null ? dynamicGroupName : "");
+                        payloadMap.put("conversationAvatar", finalRoom.isGroup() ? (finalRoom.getAvatar() != null ? baseUrl + finalRoom.getAvatar() : "") : (sender != null && sender.getAvatar() != null ? baseUrl + sender.getAvatar() : ""));
+                        payloadMap.put("messageType", message.getType().name());
+                        payloadMap.putAll(attachmentMetadata);
+
+                        RawNotificationEvent rawEvent = RawNotificationEvent.builder()
+                                .recipientId(member.getUserId())
+                                .actorId(currentUserId)
+                                .actorName(sender != null ? sender.getFullName() : "Người dùng")
+                                .actorAvatar(sender != null && sender.getAvatar() != null ? baseUrl + sender.getAvatar() : null)
+                                .type(notiType)
+                                .referenceId(message.getId())
+                                .payload(payloadMap)
+                                .occurredAt(message.getCreatedAt())
+                                .build();
+
+                        rawNotificationEventPublisher.publish(rawEvent);
+                    }
                 });
 
         // 7. Ingest vào AI system
@@ -418,6 +499,8 @@ public class MessageServiceImpl implements MessageService {
                 .chatId(room.getId())
                 .content(message.getContent())
                 .build());
+
+        messageIndexEventPublisher.publishIndexRequest(message);
     }
 
     // ─────────────────────────── Thu hồi / Xóa ───────────────────────────
@@ -450,6 +533,8 @@ public class MessageServiceImpl implements MessageService {
 
         updateLastMessageStatus(message, MessageStatus.REVOKED);
         broadcastStatusChange(message.getConversationId(), messageId, MessageStatus.REVOKED);
+
+        messageIndexEventPublisher.publishIndexRequest(message);
     }
 
     @Override
@@ -458,6 +543,8 @@ public class MessageServiceImpl implements MessageService {
         Query query = new Query(Criteria.where("id").is(messageId));
         Update update = new Update().addToSet("deletedBy", currentUserId);
         mongoTemplate.updateFirst(query, update, Message.class);
+
+        messageRepository.findById(messageId).ifPresent(messageIndexEventPublisher::publishIndexRequest);
     }
 
     @Override
@@ -515,6 +602,7 @@ public class MessageServiceImpl implements MessageService {
 
         updateLastMessageStatus(message, MessageStatus.DELETED_BY_ADMIN);
         broadcastStatusChange(conversationId, messageId, MessageStatus.DELETED_BY_ADMIN, currentUserId);
+        messageIndexEventPublisher.publishIndexRequest(message);
     }
 
     @Override
@@ -640,6 +728,23 @@ public class MessageServiceImpl implements MessageService {
                 .collect(Collectors.toList());
     }
 
+    @Override
+    public MessageResponse findById(String messageId) {
+        String currentUserId = securityUtil.getCurrentUserId();
+        Message message = messageRepository.findById(messageId)
+                .orElseThrow(() -> new AppException(ErrorCode.MESSAGE_NOT_FOUND));
+
+        Conversation room = conversationRepository.findById(message.getConversationId())
+                .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
+        assertConversationMember(room, currentUserId);
+
+        String baseUrl = s3UtilV2.getS3BaseUrl();
+        MessageResponse dto = messageMapper.mapToMessageResponse(message, baseUrl);
+        List<MessageResponse> dtos = new ArrayList<>(List.of(dto));
+        enrichMessages(dtos);
+        return dtos.get(0);
+    }
+
     // ─────────────────────────── Private helpers ───────────────────────────
 
     /**
@@ -707,6 +812,11 @@ public class MessageServiceImpl implements MessageService {
         for (int i = 0; i < dtos.size(); i++) {
             MessageResponse d = dtos.get(i);
             MessageResponse enriched = d;
+
+            if (d.type() == MessageType.SYSTEM && d.metadata() != null) {
+                enriched = enriched.withMetadata(enrichSystemMetadata(d.metadata(), baseUrl));
+            }
+
             ChatUser sender = userMap.get(d.senderId());
             if (sender != null) {
                 enriched = enriched.withSenderName(sender.getFullName())
@@ -738,6 +848,13 @@ public class MessageServiceImpl implements MessageService {
         for (int i = 0; i < notifs.size(); i++) {
             ChatNotification n = notifs.get(i);
             ChatNotification enriched = n;
+
+            if (n.type() == MessageType.SYSTEM && n.metadata() != null) {
+                enriched = enriched.toBuilder()
+                        .metadata(enrichSystemMetadata(n.metadata(), baseUrl))
+                        .build();
+            }
+
             ChatUser sender = userMap.get(n.senderId());
             if (sender != null) {
                 enriched = enriched.withSenderName(sender.getFullName())
@@ -753,6 +870,34 @@ public class MessageServiceImpl implements MessageService {
             }
             notifs.set(i, enriched);
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> enrichSystemMetadata(Map<String, Object> metadata, String baseUrl) {
+        if (metadata == null) return null;
+        Map<String, Object> newMetadata = new HashMap<>(metadata);
+
+        if (newMetadata.get("targetAvatar") instanceof String avatar && !avatar.isBlank() && !avatar.startsWith("http")) {
+            newMetadata.put("targetAvatar", baseUrl + avatar);
+        }
+
+        if (newMetadata.get("payload") instanceof Map<?, ?> payload) {
+            Map<String, Object> newPayload = new HashMap<>((Map<String, Object>) payload);
+            if (newPayload.get("targetAvatars") instanceof List<?> avatars) {
+                List<String> enrichedAvatars = avatars.stream()
+                        .map(obj -> {
+                            if (obj instanceof String avatar && !avatar.isBlank() && !avatar.startsWith("http")) {
+                                return baseUrl + avatar;
+                            }
+                            return (String) obj;
+                        })
+                        .toList();
+                newPayload.put("targetAvatars", enrichedAvatars);
+            }
+            newMetadata.put("payload", newPayload);
+        }
+
+        return newMetadata;
     }
 
     private void updateLastMessageStatus(Message msg, MessageStatus newStatus) {
@@ -878,18 +1023,31 @@ public class MessageServiceImpl implements MessageService {
     private List<AttachmentInfo> mapAttachments(MessageSendRequest request) {
         if (request.attachments() == null || request.attachments().isEmpty()) return List.of();
         return request.attachments().stream()
-                .map(a -> AttachmentInfo.builder()
-                        .key(a.key())
-                        .url(a.url())
-                        .fileName(a.fileName())
-                        .originalFileName(a.originalFileName())
-                        .contentType(a.contentType())
-                        .size(a.size())
-                        .build())
+                .map(a -> {
+                    String originalFileName = a.originalFileName();
+                    String extension = null;
+                    if (originalFileName != null && originalFileName.contains(".")) {
+                        extension = originalFileName.substring(originalFileName.lastIndexOf(".") + 1).toLowerCase().trim();
+                    }
+                    return AttachmentInfo.builder()
+                            .key(a.key())
+                            .url(a.url())
+                            .fileName(a.fileName())
+                            .originalFileName(originalFileName)
+                            .extension(extension)
+                            .contentType(a.contentType())
+                            .size(a.size())
+                            .build();
+                })
                 .toList();
     }
 
     private String buildPreviewContent(Message message) {
+        String attachmentPreview = buildAttachmentPreview(message, "vi");
+        if (attachmentPreview != null) {
+            return attachmentPreview;
+        }
+
         return switch (message.getType() == null ? MessageType.CHAT : message.getType()) {
             case IMAGE -> "[Hình ảnh]";
             case VIDEO -> "[Video]";
@@ -897,6 +1055,127 @@ public class MessageServiceImpl implements MessageService {
             case LINK -> "[Liên kết]";
             default -> message.getContent();
         };
+    }
+
+    private String buildNotificationContent(Message message, String locale) {
+        String attachmentPreview = buildAttachmentPreview(message, locale);
+        if (attachmentPreview != null) {
+            return attachmentPreview;
+        }
+
+        String content = message.getContent();
+        if (content != null && !content.isBlank()) {
+            return content;
+        }
+
+        return isEnglish(locale) ? "Sent a message" : "\u0110\u00e3 g\u1eedi m\u1ed9t tin nh\u1eafn";
+    }
+
+    private String buildAttachmentPreview(Message message, String locale) {
+        List<AttachmentInfo> attachments = message.getAttachments();
+        if (attachments == null || attachments.isEmpty()) {
+            return null;
+        }
+
+        int imageCount = 0;
+        int videoCount = 0;
+        for (AttachmentInfo attachment : attachments) {
+            String contentType = attachment.getContentType();
+            if (contentType != null && contentType.startsWith("image/")) {
+                imageCount++;
+            } else if (contentType != null && contentType.startsWith("video/")) {
+                videoCount++;
+            }
+        }
+
+        int mediaCount = imageCount + videoCount;
+        if (mediaCount == attachments.size() && mediaCount > 0) {
+            return buildMediaPreview(imageCount, videoCount, locale);
+        }
+
+        AttachmentInfo firstFile = attachments.stream()
+                .filter(a -> {
+                    String contentType = a.getContentType();
+                    return contentType == null || (!contentType.startsWith("image/") && !contentType.startsWith("video/"));
+                })
+                .findFirst()
+                .orElse(attachments.get(0));
+
+        return "[File] " + resolveAttachmentFileName(firstFile);
+    }
+
+    private String buildMediaPreview(int imageCount, int videoCount, String locale) {
+        boolean english = isEnglish(locale);
+
+        if (imageCount > 0 && videoCount > 0) {
+            String imageLabel = imageCount > 1
+                    ? (english ? "Photos" : "Nhiều ảnh")
+                    : (english ? "Photo" : "Ảnh");
+            String videoLabel = videoCount > 1
+                    ? (english ? "Videos" : "Nhiều video")
+                    : (english ? "Video" : "Video");
+            return "[" + imageLabel + (english ? " and " : " và ") + videoLabel + "]";
+        }
+
+        if (imageCount > 0) {
+            return imageCount > 1
+                    ? (english ? "[Photos]" : "[Nhiều ảnh]")
+                    : (english ? "[Photo]" : "[Ảnh]");
+        }
+
+        if (videoCount > 0) {
+            return videoCount > 1
+                    ? (english ? "[Videos]" : "[Nhiều video]")
+                    : (english ? "[Video]" : "[Video]");
+        }
+
+        return "[Other]";
+    }
+
+    private String resolveAttachmentFileName(AttachmentInfo attachment) {
+        if (attachment == null) {
+            return "file";
+        }
+        if (attachment.getOriginalFileName() != null && !attachment.getOriginalFileName().isBlank()) {
+            return attachment.getOriginalFileName();
+        }
+        if (attachment.getFileName() != null && !attachment.getFileName().isBlank()) {
+            return attachment.getFileName();
+        }
+        return "file";
+    }
+
+    private boolean isEnglish(String locale) {
+        return "en".equalsIgnoreCase(locale);
+    }
+
+    private Map<String, Object> extractAttachmentMetadata(List<AttachmentInfo> attachments) {
+        Map<String, Object> metadata = new HashMap<>();
+        if (attachments == null || attachments.isEmpty()) {
+            metadata.put("imageCount", 0);
+            metadata.put("videoCount", 0);
+            log.debug("[Attachment Debug] Attachments is null or empty");
+            return metadata;
+        }
+
+        int imageCount = 0;
+        int videoCount = 0;
+        for (AttachmentInfo attachment : attachments) {
+            String contentType = attachment.getContentType();
+            log.debug("[Attachment Debug] Processing attachment: fileName={}, contentType={}", 
+                    attachment.getFileName(), contentType);
+            if (contentType != null && contentType.startsWith("image/")) {
+                imageCount++;
+            } else if (contentType != null && contentType.startsWith("video/")) {
+                videoCount++;
+            }
+        }
+
+        log.debug("[Attachment Debug] Final counts: imageCount={}, videoCount={}, total attachments={}", 
+                imageCount, videoCount, attachments.size());
+        metadata.put("imageCount", imageCount);
+        metadata.put("videoCount", videoCount);
+        return metadata;
     }
 
 }
