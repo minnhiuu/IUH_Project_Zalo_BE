@@ -36,12 +36,33 @@ public class UserIndex {
                             suffix = "keyword",
                             type = FieldType.Keyword,
                             normalizer = "lowercase_normalizer"
+                    ),
+                    @InnerField(
+                            suffix = "prefix",
+                            type = FieldType.Text,
+                            analyzer = "name_prefix_analyzer",
+                            searchAnalyzer = "name_search_analyzer"
+                    ),
+                    @InnerField(
+                            suffix = "shingle",
+                            type = FieldType.Text,
+                            analyzer = "name_shingle_analyzer",
+                            searchAnalyzer = "name_search_analyzer"
                     )
             }
     )
     String fullName;
 
-    @Field(type = FieldType.Keyword)
+    @MultiField(
+            mainField = @Field(type = FieldType.Keyword),
+            otherFields = {
+                    @InnerField(
+                            suffix = "normalized",
+                            type = FieldType.Keyword,
+                            normalizer = "lowercase_normalizer"
+                    )
+            }
+    )
     String phoneNumber;
 
     @Field(type = FieldType.Keyword)

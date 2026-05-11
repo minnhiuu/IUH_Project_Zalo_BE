@@ -100,7 +100,7 @@ public class MessageSearchServiceImpl implements MessageSearchService {
 
         PageResponse<List<ConversationSearchResponse>> conversationPage =
                 response != null && response.data() != null
-                        ? response.data()
+                        ? sanitizeConversationPhones(response.data(), keyword, pageable)
                         : PageResponse.empty(pageable);
 
         // 2. If it's not a group-only search and keyword exists, also search global users
@@ -145,6 +145,48 @@ public class MessageSearchServiceImpl implements MessageSearchService {
         }
 
         return conversationPage;
+    }
+
+    private PageResponse<List<ConversationSearchResponse>> sanitizeConversationPhones(
+            PageResponse<List<ConversationSearchResponse>> page,
+            String keyword,
+            Pageable pageable) {
+        if (page == null || page.data() == null || shouldExposePhone(keyword)) {
+            return page;
+        }
+
+        return PageResponse.<List<ConversationSearchResponse>>builder()
+                .data(page.data().stream()
+                        .map(this::withoutPhoneNumber)
+                        .toList())
+                .page(page.page())
+                .limit(page.limit())
+                .totalItems(page.totalItems())
+                .totalPages(page.totalPages())
+                .build();
+    }
+
+    private ConversationSearchResponse withoutPhoneNumber(ConversationSearchResponse response) {
+        if (response == null || response.phoneNumber() == null) {
+            return response;
+        }
+
+        return ConversationSearchResponse.builder()
+                .conversationId(response.conversationId())
+                .recipientId(response.recipientId())
+                .name(response.name())
+                .avatar(response.avatar())
+                .group(response.group())
+                .memberCount(response.memberCount())
+                .participantNames(response.participantNames())
+                .participantAvatars(response.participantAvatars())
+                .displayHighlights(response.displayHighlights())
+                .phoneNumber(null)
+                .build();
+    }
+
+    private boolean shouldExposePhone(String keyword) {
+        return PhoneUtil.isValidVnPhone(keyword);
     }
 
     @Override

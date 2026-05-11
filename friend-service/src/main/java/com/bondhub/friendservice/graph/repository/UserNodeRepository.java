@@ -64,11 +64,12 @@ public interface UserNodeRepository extends Neo4jRepository<UserNode, String> {
            "OPTIONAL MATCH (me)-[:IN_GROUP]->(group:Group)<-[:IN_GROUP]-(target) " +
            "WITH me, target, mutualFriendsCount, count(DISTINCT group) AS sharedGroupsCount " +
            "OPTIONAL MATCH (me)-[contact:IN_CONTACT]->(target) " +
+           "WITH target, mutualFriendsCount, sharedGroupsCount, count(contact) AS contactCount, coalesce(max(contact.score), 0.0) AS contactScore " +
            "RETURN {userId: target.id, " +
            "        mutualFriendsCount: mutualFriendsCount, " +
            "        sharedGroupsCount: sharedGroupsCount, " +
-           "        inContact: count(contact) > 0, " +
-           "        contactScore: coalesce(max(contact.score), 0.0)} AS row")
+           "        inContact: contactCount > 0, " +
+           "        contactScore: contactScore} AS row")
     List<Map<String, Object>> findUserSearchGraphMetrics(@Param("userId") String userId,
                                                           @Param("targetUserIds") List<String> targetUserIds);
 

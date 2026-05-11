@@ -1,5 +1,6 @@
 package com.bondhub.searchservice.service.index.user.ranking;
 
+import com.bondhub.common.utils.PhoneUtil;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -127,6 +128,7 @@ public class UserSearchRankingStrategy {
             return "";
         }
 
-        return value.replaceAll("\\D", "");
+        return PhoneUtil.normalizeVnPhone(value)
+                .orElseGet(() -> value.replaceAll("\\D", ""));
     }
 }

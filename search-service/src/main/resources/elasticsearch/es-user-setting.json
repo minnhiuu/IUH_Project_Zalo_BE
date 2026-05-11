@@ -13,6 +13,12 @@
       "vietnamese_stop": {
         "type": "stop",
         "stopwords": []
+      },
+      "name_shingle": {
+        "type": "shingle",
+        "min_shingle_size": 2,
+        "max_shingle_size": 3,
+        "output_unigrams": true
       }
     },
     "normalizer": {
@@ -36,6 +42,16 @@
         "type": "custom",
         "tokenizer": "standard",
         "filter": ["icu_folding", "lowercase", "asciifolding"]
+      },
+      "name_prefix_analyzer": {
+        "type": "custom",
+        "tokenizer": "standard",
+        "filter": ["icu_folding", "lowercase", "asciifolding", "name_edge_ngram"]
+      },
+      "name_shingle_analyzer": {
+        "type": "custom",
+        "tokenizer": "standard",
+        "filter": ["icu_folding", "lowercase", "asciifolding", "name_shingle"]
       }
     }
   }

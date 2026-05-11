@@ -93,17 +93,35 @@ public class UserSearchServiceImpl implements UserSearchService {
                 }
 
                 String searchTerm = keyword.trim();
-                String phoneSearchTerm = PhoneUtil.normalizeVnPhone(searchTerm).orElse(searchTerm);
+                String phoneSearchTerm = normalizePhoneSearchTerm(searchTerm);
+                boolean phoneLikeSearch = isPhoneLike(searchTerm);
                 String currentUserId = securityUtil.getCurrentUserId();
 
                 Query query = Query.of(q -> q.bool(b -> {
                         b.should(s -> s.term(t -> t.field("phoneNumber")
                                         .value(phoneSearchTerm)
-                                        .boost(20.0f)));
+                                        .boost(phoneLikeSearch ? 80.0f : 20.0f)));
+
+                        b.should(s -> s.term(t -> t.field("phoneNumber.normalized")
+                                        .value(phoneSearchTerm)
+                                        .boost(phoneLikeSearch ? 100.0f : 25.0f)));
+
+                        b.should(s -> s.term(t -> t.field("fullName.keyword")
+                                        .value(searchTerm)
+                                        .caseInsensitive(true)
+                                        .boost(phoneLikeSearch ? 5.0f : 30.0f)));
+
+                        b.should(s -> s.matchPhrasePrefix(m -> m.field("fullName.prefix")
+                                        .query(searchTerm)
+                                        .boost(phoneLikeSearch ? 3.0f : 18.0f)));
+
+                        b.should(s -> s.matchPhrase(m -> m.field("fullName.shingle")
+                                        .query(searchTerm)
+                                        .boost(phoneLikeSearch ? 2.0f : 12.0f)));
 
                         b.should(s -> s.match(m -> m.field("fullName")
                                         .query(searchTerm)
-                                        .boost(5.0f)));
+                                        .boost(phoneLikeSearch ? 2.0f : 8.0f)));
 
                         b.should(s -> s.match(m -> m.field("fullName.fuzzy")
                                         .query(searchTerm)
@@ -111,7 +129,7 @@ public class UserSearchServiceImpl implements UserSearchService {
                                         .prefixLength(0)
                                         .maxExpansions(50)
                                         .fuzzyTranspositions(true)
-                                        .boost(2.0f)));
+                                        .boost(phoneLikeSearch ? 0.4f : 1.0f)));
 
                         b.should(s -> s.multiMatch(mm -> mm.fields("fullName", "fullName.fuzzy")
                                         .query(searchTerm)
@@ -119,7 +137,7 @@ public class UserSearchServiceImpl implements UserSearchService {
                                         .prefixLength(0)
                                         .maxExpansions(50)
                                         .type(TextQueryType.BestFields)
-                                        .boost(1.5f)));
+                                        .boost(phoneLikeSearch ? 0.3f : 0.8f)));
 
                         b.minimumShouldMatch("1");
 
@@ -206,6 +224,15 @@ public class UserSearchServiceImpl implements UserSearchService {
 
         private boolean shouldExposePhone(String searchTerm) {
                 return PhoneUtil.isValidVnPhone(searchTerm);
+        }
+
+        private String normalizePhoneSearchTerm(String searchTerm) {
+                return PhoneUtil.normalizeVnPhone(searchTerm)
+                                .orElseGet(() -> searchTerm.replaceAll("\\D", ""));
+        }
+
+        private boolean isPhoneLike(String searchTerm) {
+                return StringUtils.hasText(searchTerm) && searchTerm.replaceAll("\\D", "").length() >= 3;
         }
 
         private String resolveRelationshipLabel(UserSearchRelationshipLabel relationshipLabel) {
@@ -329,10 +356,9 @@ public class UserSearchServiceImpl implements UserSearchService {
                 UserIndex userIndex = hit.getContent();
                 UserSearchContextResponse context = contextByUserId.get(userIndex.getId());
 
-                // TODO: Apply search visibility filtering when friend-service exposes explicit
-                // search/profile privacy semantics. The current block model is channel-based
-                // (message/call/story), so a BlockList record alone is not enough to hide users
-                // from global search safely.
+                if (context != null && (Boolean.TRUE.equals(context.blockedByMe()) || Boolean.TRUE.equals(context.blockedMe()))) {
+                        return Optional.empty();
+                }
 
                 UserSearchRankingContext rankingContext = toRankingContext(searchTerm, userIndex, context);
                 double finalScore = rankingStrategy.calculateFinalScore(hit.getScore(), rankingContext, currentUserId);

@@ -67,13 +67,21 @@ public class GraphFriendServiceImpl implements GraphFriendService {
 
         List<Map<String, Object>> results = userNodeRepository.findUserSearchGraphMetrics(userId, targetUserIds);
 
-        return results.stream()
+        Map<String, UserSearchGraphMetrics> metricsByUserId = results.stream()
                 .map(this::normalizeRow)
                 .filter(row -> row.get("userId") != null)
                 .map(this::toUserSearchGraphMetrics)
                 .collect(Collectors.toMap(
                         UserSearchGraphMetrics::userId,
                         metrics -> metrics,
+                        (existing, replacement) -> existing));
+
+        return targetUserIds.stream()
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toMap(
+                        targetId -> targetId,
+                        targetId -> metricsByUserId.getOrDefault(targetId, UserSearchGraphMetrics.empty(targetId)),
                         (existing, replacement) -> existing));
     }
 
