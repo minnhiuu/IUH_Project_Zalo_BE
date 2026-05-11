@@ -1,5 +1,9 @@
 package com.bondhub.messageservice.service.message;
 
+import com.bondhub.common.dto.client.messageservice.RecentChatInteractionRequest;
+import com.bondhub.common.dto.client.messageservice.RecentChatInteractionResponse;
+import com.bondhub.common.enums.MessageStatus;
+import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.messageservice.dto.response.MessageSyncResponse;
 import com.bondhub.messageservice.model.ChatUser;
 import com.bondhub.messageservice.model.Conversation;
@@ -16,8 +20,11 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
+import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -32,6 +39,12 @@ public class MessageInternalServiceImpl implements MessageInternalService {
     private final ConversationRepository conversationRepository;
     private final ChatUserRepository chatUserRepository;
     private final ConversationHelper conversationHelper;
+    private final SecurityUtil securityUtil;
+
+    private static final int RECENT_INTERACTION_DAYS = 30;
+    private static final double CHAT_MESSAGE_WEIGHT = 0.25;
+    private static final double CHAT_VOLUME_SCORE_CAP = 4.0;
+    private static final double CHAT_SCORE_CAP = 5.0;
 
     @Override
     public List<MessageSyncResponse> getMessagesBatch(String lastId, int batchSize) {
@@ -50,6 +63,86 @@ public class MessageInternalServiceImpl implements MessageInternalService {
     @Override
     public long getMessageCount() {
         return messageRepository.count();
+    }
+
+    @Override
+    public List<RecentChatInteractionResponse> getRecentChatInteractions(RecentChatInteractionRequest request) {
+        String currentUserId = securityUtil.getCurrentUserId();
+        if (currentUserId == null || request == null || request.targetUserIds() == null || request.targetUserIds().isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        LocalDateTime since = LocalDateTime.now().minusDays(RECENT_INTERACTION_DAYS);
+
+        return request.targetUserIds().stream()
+                .filter(Objects::nonNull)
+                .filter(targetUserId -> !targetUserId.isBlank())
+                .filter(targetUserId -> !targetUserId.equals(currentUserId))
+                .distinct()
+                .map(targetUserId -> buildRecentChatInteraction(currentUserId, targetUserId, since))
+                .filter(response -> response.chatInteractionScore() > 0.0)
+                .toList();
+    }
+
+    private RecentChatInteractionResponse buildRecentChatInteraction(String currentUserId, String targetUserId, LocalDateTime since) {
+        return conversationRepository.findDirectConversation(currentUserId, targetUserId)
+                .map(conversation -> {
+                    long messageCount = messageRepository.countByConversationIdAndCreatedAtGreaterThanEqualAndStatusNot(
+                            conversation.getId(),
+                            since,
+                            MessageStatus.REVOKED);
+                    Instant lastMessageAt = resolveLastMessageAt(conversation);
+                    return RecentChatInteractionResponse.builder()
+                            .userId(targetUserId)
+                            .lastMessageAt(lastMessageAt)
+                            .messageCount30d(Math.toIntExact(Math.min(messageCount, Integer.MAX_VALUE)))
+                            .chatInteractionScore(calculateChatInteractionScore(messageCount, lastMessageAt))
+                            .build();
+                })
+                .orElseGet(() -> RecentChatInteractionResponse.builder()
+                        .userId(targetUserId)
+                        .messageCount30d(0)
+                        .chatInteractionScore(0.0)
+                        .build());
+    }
+
+    private Instant resolveLastMessageAt(Conversation conversation) {
+        if (conversation.getLastMessage() != null && conversation.getLastMessage().getTimestamp() != null) {
+            return conversation.getLastMessage().getTimestamp().toInstant(ZoneOffset.UTC);
+        }
+
+        return messageRepository.findByConversationIdAndStatusNotOrderByCreatedAtDesc(
+                        conversation.getId(),
+                        MessageStatus.REVOKED,
+                        PageRequest.of(0, 1))
+                .stream()
+                .findFirst()
+                .map(Message::getCreatedAt)
+                .map(createdAt -> createdAt.toInstant(ZoneOffset.UTC))
+                .orElse(null);
+    }
+
+    private double calculateChatInteractionScore(long messageCount30d, Instant lastMessageAt) {
+        if (messageCount30d <= 0 || lastMessageAt == null) {
+            return 0.0;
+        }
+
+        double volumeScore = Math.min(messageCount30d * CHAT_MESSAGE_WEIGHT, CHAT_VOLUME_SCORE_CAP);
+        return Math.min(volumeScore + calculateRecencyBoost(lastMessageAt), CHAT_SCORE_CAP);
+    }
+
+    private double calculateRecencyBoost(Instant lastInteractionAt) {
+        long days = java.time.temporal.ChronoUnit.DAYS.between(lastInteractionAt, Instant.now());
+        if (days <= 1) {
+            return 1.0;
+        }
+        if (days <= 7) {
+            return 0.6;
+        }
+        if (days <= RECENT_INTERACTION_DAYS) {
+            return 0.2;
+        }
+        return 0.0;
     }
 
     private MessageSyncResponse mapToSyncResponse(Message message) {
