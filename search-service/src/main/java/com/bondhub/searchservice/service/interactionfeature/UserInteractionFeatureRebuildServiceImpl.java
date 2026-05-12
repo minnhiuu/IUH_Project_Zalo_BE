@@ -13,7 +13,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -40,16 +42,20 @@ public class UserInteractionFeatureRebuildServiceImpl implements UserInteraction
         List<SocialInteractionFeatureSnapshotResponse> socialSnapshots =
                 fetchSocialSnapshots(boundedSinceDays, boundedSourceLimit);
 
-        chatSnapshots.forEach(userInteractionFeatureService::upsertChatSnapshot);
-        socialSnapshots.forEach(userInteractionFeatureService::upsertSocialSnapshot);
+        int chatUpsertedCount = userInteractionFeatureService.upsertChatSnapshots(chatSnapshots);
+        int socialUpsertedCount = userInteractionFeatureService.upsertSocialSnapshots(socialSnapshots);
 
-        int upsertedCount = chatSnapshots.size() + socialSnapshots.size();
+        int processedSnapshotCount = chatSnapshots.size() + socialSnapshots.size();
+        int uniqueFeatureCount = countUniqueFeatures(chatSnapshots, socialSnapshots);
+        int upsertedCount = chatUpsertedCount + socialUpsertedCount;
         long tookMs = elapsedMs(startedAt);
-        log.info("User interaction feature rebuild completed sinceDays={}, sourceLimit={}, chatSnapshots={}, socialSnapshots={}, upserted={}, tookMs={}",
+        log.info("Bounded user interaction feature rebuild completed sinceDays={}, sourceLimit={}, chatSnapshots={}, socialSnapshots={}, processedSnapshots={}, uniqueFeatures={}, upserted={}, tookMs={}",
                 boundedSinceDays,
                 boundedSourceLimit,
                 chatSnapshots.size(),
                 socialSnapshots.size(),
+                processedSnapshotCount,
+                uniqueFeatureCount,
                 upsertedCount,
                 tookMs);
 
@@ -58,9 +64,26 @@ public class UserInteractionFeatureRebuildServiceImpl implements UserInteraction
                 .sourceLimit(boundedSourceLimit)
                 .chatSnapshotCount(chatSnapshots.size())
                 .socialSnapshotCount(socialSnapshots.size())
+                .processedSnapshotCount(processedSnapshotCount)
+                .uniqueFeatureCount(uniqueFeatureCount)
                 .upsertedFeatureCount(upsertedCount)
                 .tookMs(tookMs)
                 .build();
+    }
+
+    private int countUniqueFeatures(
+            List<ChatInteractionFeatureSnapshotResponse> chatSnapshots,
+            List<SocialInteractionFeatureSnapshotResponse> socialSnapshots) {
+        Set<String> keys = new HashSet<>();
+        chatSnapshots.stream()
+                .filter(snapshot -> snapshot.userId() != null && snapshot.targetUserId() != null)
+                .map(snapshot -> snapshot.userId() + ":" + snapshot.targetUserId())
+                .forEach(keys::add);
+        socialSnapshots.stream()
+                .filter(snapshot -> snapshot.userId() != null && snapshot.targetUserId() != null)
+                .map(snapshot -> snapshot.userId() + ":" + snapshot.targetUserId())
+                .forEach(keys::add);
+        return keys.size();
     }
 
     private List<ChatInteractionFeatureSnapshotResponse> fetchChatSnapshots(int sinceDays, int sourceLimit) {

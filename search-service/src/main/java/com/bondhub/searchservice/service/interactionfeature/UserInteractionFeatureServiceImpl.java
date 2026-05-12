@@ -17,6 +17,11 @@ import org.springframework.util.StringUtils;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -106,6 +111,76 @@ public class UserInteractionFeatureServiceImpl implements UserInteractionFeature
         userInteractionFeatureRepository.save(feature);
     }
 
+    @Override
+    @Transactional
+    public int upsertChatSnapshots(List<ChatInteractionFeatureSnapshotResponse> snapshots) {
+        List<ChatInteractionFeatureSnapshotResponse> validSnapshots = snapshots == null
+                ? Collections.emptyList()
+                : snapshots.stream()
+                .filter(snapshot -> snapshot != null && isValidPair(snapshot.userId(), snapshot.targetUserId()))
+                .collect(Collectors.toMap(
+                        snapshot -> UserInteractionFeature.idFor(snapshot.userId(), snapshot.targetUserId()),
+                        Function.identity(),
+                        this::mergeChatSnapshot))
+                .values()
+                .stream()
+                .toList();
+        if (validSnapshots.isEmpty()) {
+            return 0;
+        }
+
+        Map<String, UserInteractionFeature> featureById = findExistingFeatures(validSnapshots.stream()
+                .map(snapshot -> UserInteractionFeature.idFor(snapshot.userId(), snapshot.targetUserId()))
+                .toList());
+        Instant now = Instant.now();
+        List<UserInteractionFeature> features = validSnapshots.stream()
+                .map(snapshot -> applyChatSnapshot(
+                        featureById.getOrDefault(
+                                UserInteractionFeature.idFor(snapshot.userId(), snapshot.targetUserId()),
+                                createEmptyFeature(snapshot.userId(), snapshot.targetUserId())),
+                        snapshot,
+                        now))
+                .toList();
+
+        userInteractionFeatureRepository.saveAll(features);
+        return features.size();
+    }
+
+    @Override
+    @Transactional
+    public int upsertSocialSnapshots(List<SocialInteractionFeatureSnapshotResponse> snapshots) {
+        List<SocialInteractionFeatureSnapshotResponse> validSnapshots = snapshots == null
+                ? Collections.emptyList()
+                : snapshots.stream()
+                .filter(snapshot -> snapshot != null && isValidPair(snapshot.userId(), snapshot.targetUserId()))
+                .collect(Collectors.toMap(
+                        snapshot -> UserInteractionFeature.idFor(snapshot.userId(), snapshot.targetUserId()),
+                        Function.identity(),
+                        this::mergeSocialSnapshot))
+                .values()
+                .stream()
+                .toList();
+        if (validSnapshots.isEmpty()) {
+            return 0;
+        }
+
+        Map<String, UserInteractionFeature> featureById = findExistingFeatures(validSnapshots.stream()
+                .map(snapshot -> UserInteractionFeature.idFor(snapshot.userId(), snapshot.targetUserId()))
+                .toList());
+        Instant now = Instant.now();
+        List<UserInteractionFeature> features = validSnapshots.stream()
+                .map(snapshot -> applySocialSnapshot(
+                        featureById.getOrDefault(
+                                UserInteractionFeature.idFor(snapshot.userId(), snapshot.targetUserId()),
+                                createEmptyFeature(snapshot.userId(), snapshot.targetUserId())),
+                        snapshot,
+                        now))
+                .toList();
+
+        userInteractionFeatureRepository.saveAll(features);
+        return features.size();
+    }
+
     private void upsertChatFeature(String userId, String targetUserId, Instant occurredAt) {
         UserInteractionFeature feature = getOrCreate(userId, targetUserId);
 
@@ -120,15 +195,76 @@ public class UserInteractionFeatureServiceImpl implements UserInteractionFeature
 
     private UserInteractionFeature getOrCreate(String userId, String targetUserId) {
         return userInteractionFeatureRepository.findByUserIdAndTargetUserId(userId, targetUserId)
-                .orElseGet(() -> UserInteractionFeature.builder()
-                        .id(UserInteractionFeature.idFor(userId, targetUserId))
-                        .userId(userId)
-                        .targetUserId(targetUserId)
-                        .chatScore(0.0)
-                        .socialFeedScore(0.0)
-                        .recentInteractionScore(0.0)
-                        .updatedAt(Instant.now())
-                        .build());
+                .orElseGet(() -> createEmptyFeature(userId, targetUserId));
+    }
+
+    private Map<String, UserInteractionFeature> findExistingFeatures(List<String> ids) {
+        return userInteractionFeatureRepository.findAllById(ids).stream()
+                .collect(Collectors.toMap(UserInteractionFeature::getId, Function.identity()));
+    }
+
+    private UserInteractionFeature createEmptyFeature(String userId, String targetUserId) {
+        return UserInteractionFeature.builder()
+                .id(UserInteractionFeature.idFor(userId, targetUserId))
+                .userId(userId)
+                .targetUserId(targetUserId)
+                .chatScore(0.0)
+                .socialFeedScore(0.0)
+                .recentInteractionScore(0.0)
+                .updatedAt(Instant.now())
+                .build();
+    }
+
+    private UserInteractionFeature applyChatSnapshot(
+            UserInteractionFeature feature,
+            ChatInteractionFeatureSnapshotResponse snapshot,
+            Instant now) {
+        feature.setMessageCount30d(Math.max(snapshot.messageCount30d(), 0));
+        feature.setLastMessageAt(snapshot.lastMessageAt());
+        feature.setChatScore(calculateChatScore(feature, now));
+        refreshRecentInteractionScore(feature);
+        feature.setUpdatedAt(now);
+        return feature;
+    }
+
+    private UserInteractionFeature applySocialSnapshot(
+            UserInteractionFeature feature,
+            SocialInteractionFeatureSnapshotResponse snapshot,
+            Instant now) {
+        feature.setViewCount30d(Math.max(snapshot.viewCount30d(), 0));
+        feature.setReactionCount30d(Math.max(snapshot.reactionCount30d(), 0));
+        feature.setCommentCount30d(Math.max(snapshot.commentCount30d(), 0));
+        feature.setDislikeCount30d(Math.max(snapshot.dislikeCount30d(), 0));
+        feature.setLastSocialInteractionAt(snapshot.lastInteractionAt());
+        feature.setSocialFeedScore(calculateSocialFeedScore(feature, now));
+        refreshRecentInteractionScore(feature);
+        feature.setUpdatedAt(now);
+        return feature;
+    }
+
+    private ChatInteractionFeatureSnapshotResponse mergeChatSnapshot(
+            ChatInteractionFeatureSnapshotResponse first,
+            ChatInteractionFeatureSnapshotResponse second) {
+        return ChatInteractionFeatureSnapshotResponse.builder()
+                .userId(first.userId())
+                .targetUserId(first.targetUserId())
+                .messageCount30d(first.messageCount30d() + second.messageCount30d())
+                .lastMessageAt(maxInstant(first.lastMessageAt(), second.lastMessageAt()))
+                .build();
+    }
+
+    private SocialInteractionFeatureSnapshotResponse mergeSocialSnapshot(
+            SocialInteractionFeatureSnapshotResponse first,
+            SocialInteractionFeatureSnapshotResponse second) {
+        return SocialInteractionFeatureSnapshotResponse.builder()
+                .userId(first.userId())
+                .targetUserId(first.targetUserId())
+                .viewCount30d(first.viewCount30d() + second.viewCount30d())
+                .reactionCount30d(first.reactionCount30d() + second.reactionCount30d())
+                .commentCount30d(first.commentCount30d() + second.commentCount30d())
+                .dislikeCount30d(first.dislikeCount30d() + second.dislikeCount30d())
+                .lastInteractionAt(maxInstant(first.lastInteractionAt(), second.lastInteractionAt()))
+                .build();
     }
 
     private void incrementSocialCounter(UserInteractionFeature feature, InteractionType interactionType) {

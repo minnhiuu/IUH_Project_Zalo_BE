@@ -8,6 +8,8 @@ public record UserInteractionFeatureRebuildResponse(
         int sourceLimit,
         int chatSnapshotCount,
         int socialSnapshotCount,
+        int processedSnapshotCount,
+        int uniqueFeatureCount,
         int upsertedFeatureCount,
         long tookMs
 ) {

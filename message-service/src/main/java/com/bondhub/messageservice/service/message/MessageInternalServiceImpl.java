@@ -17,6 +17,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.bson.Document;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.aggregation.Aggregation;
 import org.springframework.data.mongodb.core.query.Criteria;
@@ -74,6 +75,7 @@ public class MessageInternalServiceImpl implements MessageInternalService {
                 Aggregation.group("conversationId")
                         .count().as("messageCount")
                         .max("createdAt").as("lastMessageAt"),
+                Aggregation.sort(Sort.Direction.DESC, "lastMessageAt"),
                 Aggregation.limit(boundedLimit)
         );
 

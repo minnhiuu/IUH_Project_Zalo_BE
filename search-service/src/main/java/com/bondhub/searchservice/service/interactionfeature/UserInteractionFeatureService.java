@@ -5,6 +5,8 @@ import com.bondhub.common.dto.client.socialfeedservice.SocialInteractionFeatureS
 import com.bondhub.common.event.search.ChatInteractionOccurredEvent;
 import com.bondhub.common.event.search.SocialFeedInteractionOccurredEvent;
 
+import java.util.List;
+
 public interface UserInteractionFeatureService {
 
     void recordChatInteraction(ChatInteractionOccurredEvent event);
@@ -14,4 +16,8 @@ public interface UserInteractionFeatureService {
     void upsertChatSnapshot(ChatInteractionFeatureSnapshotResponse snapshot);
 
     void upsertSocialSnapshot(SocialInteractionFeatureSnapshotResponse snapshot);
+
+    int upsertChatSnapshots(List<ChatInteractionFeatureSnapshotResponse> snapshots);
+
+    int upsertSocialSnapshots(List<SocialInteractionFeatureSnapshotResponse> snapshots);
 }
