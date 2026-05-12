@@ -5,16 +5,20 @@ import co.elastic.clients.elasticsearch._types.query_dsl.TextQueryType;
 import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.common.dto.client.friendservice.UserSearchContextRequest;
 import com.bondhub.common.dto.client.friendservice.UserSearchContextResponse;
+import com.bondhub.common.dto.client.userservice.user.request.UserSearchVisibilityRequest;
+import com.bondhub.common.dto.client.userservice.user.response.UserSearchVisibilityResponse;
 import com.bondhub.common.utils.PhoneUtil;
 import com.bondhub.common.dto.PageResponse;
 import com.bondhub.common.dto.client.userservice.user.response.UserSummaryResponse;
 import com.bondhub.common.enums.Role;
+import com.bondhub.common.enums.SearchVisibility;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
 import com.bondhub.common.utils.LocalizationUtil;
 import com.bondhub.common.utils.S3UtilV2;
 import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.searchservice.client.FriendServiceClient;
+import com.bondhub.searchservice.client.UserServiceClient;
 import com.bondhub.searchservice.config.ElasticsearchProperties;
 import com.bondhub.searchservice.dto.response.UserSearchResponse;
 import com.bondhub.searchservice.dto.response.UserSearchScoreBreakdown;
@@ -28,7 +32,6 @@ import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.core.env.Environment;
 import org.springframework.data.domain.*;
 import org.springframework.data.elasticsearch.client.elc.NativeQuery;
 import org.springframework.data.elasticsearch.core.*;
@@ -61,10 +64,10 @@ public class UserSearchServiceImpl implements UserSearchService {
         ElasticsearchProperties esProperties;
         S3UtilV2 s3UtilV2;
         FriendServiceClient friendServiceClient;
+        UserServiceClient userServiceClient;
         UserInteractionFeatureRepository userInteractionFeatureRepository;
         UserSearchRankingStrategy rankingStrategy;
         LocalizationUtil localizationUtil;
-        Environment environment;
 
         @Override
         public PageResponse<List<UserSearchResponse>> searchUsersWithMetadata(
@@ -195,21 +198,25 @@ public class UserSearchServiceImpl implements UserSearchService {
                                 IndexCoordinates.of(esProperties.getUserAlias()));
                 long esLatencyMs = elapsedMs(esStartedAt);
 
-                ContextFetchResult contextFetchResult = fetchUserSearchContext(hits.getSearchHits());
+                List<String> candidateUserIds = extractUserIds(hits.getSearchHits());
+                ContextFetchResult contextFetchResult = fetchUserSearchContext(candidateUserIds);
+                VisibilityFetchResult visibilityFetchResult = fetchUserSearchVisibility(candidateUserIds);
                 RecentInteractionFetchResult recentInteractionFetchResult = fetchRecentInteractionScores(
                                 currentUserId,
-                                extractUserIds(hits.getSearchHits()));
+                                candidateUserIds);
                 List<RankedUserSearchHit> rankedHits = rerankHits(
                                 hits.getSearchHits(),
                                 searchTerm,
                                 currentUserId,
                                 contextFetchResult.contextByUserId(),
-                                recentInteractionFetchResult.scoreByUserId());
+                                recentInteractionFetchResult.scoreByUserId(),
+                                visibilityFetchResult.visibilityByUserId(),
+                                phoneLikeSearch);
 
                 List<RankedUserSearchHit> pagedHits = paginateRankedHits(rankedHits, pageable);
 
                 log.info(
-                                "User search completed keywordLength={}, phoneSearch={}, candidateSize={}, esTotalHits={}, esReturnedHits={}, esLatencyMs={}, contextFetchSize={}, contextFetchLatencyMs={}, recentInteractionFetchSize={}, recentInteractionLatencyMs={}, returned={}, contextFallback={}, recentInteractionFallback={}, tookMs={}",
+                                "User search completed keywordLength={}, phoneSearch={}, candidateSize={}, esTotalHits={}, esReturnedHits={}, esLatencyMs={}, contextFetchSize={}, contextFetchLatencyMs={}, visibilityFetchSize={}, visibilityFetchLatencyMs={}, recentInteractionFetchSize={}, recentInteractionLatencyMs={}, returned={}, contextFallback={}, visibilityFallback={}, recentInteractionFallback={}, tookMs={}",
                                 searchTerm.length(),
                                 phoneLikeSearch,
                                 candidateSize,
@@ -218,10 +225,13 @@ public class UserSearchServiceImpl implements UserSearchService {
                                 esLatencyMs,
                                 contextFetchResult.contextFetchSize(),
                                 contextFetchResult.latencyMs(),
+                                visibilityFetchResult.fetchSize(),
+                                visibilityFetchResult.latencyMs(),
                                 recentInteractionFetchResult.fetchSize(),
                                 recentInteractionFetchResult.latencyMs(),
                                 pagedHits.size(),
                                 contextFetchResult.fallback(),
+                                visibilityFetchResult.fallback(),
                                 recentInteractionFetchResult.fallback(),
                                 elapsedMs(startedAt));
 
@@ -357,14 +367,23 @@ public class UserSearchServiceImpl implements UserSearchService {
                         String searchTerm,
                         String currentUserId,
                         Map<String, UserSearchContextResponse> contextByUserId,
-                        Map<String, Double> recentInteractionScoreByUserId) {
+                        Map<String, Double> recentInteractionScoreByUserId,
+                        Map<String, UserSearchVisibilityResponse> visibilityByUserId,
+                        boolean phoneLikeSearch) {
 
                 if (searchHits == null || searchHits.isEmpty()) {
                         return Collections.emptyList();
                 }
 
                 return searchHits.stream()
-                                .map(hit -> toRankedHit(hit, searchTerm, currentUserId, contextByUserId, recentInteractionScoreByUserId))
+                                .map(hit -> toRankedHit(
+                                                hit,
+                                                searchTerm,
+                                                currentUserId,
+                                                contextByUserId,
+                                                recentInteractionScoreByUserId,
+                                                visibilityByUserId,
+                                                phoneLikeSearch))
                                 .filter(Optional::isPresent)
                                 .map(Optional::get)
                                 .sorted(Comparator
@@ -374,9 +393,8 @@ public class UserSearchServiceImpl implements UserSearchService {
                                 .toList();
         }
 
-        private ContextFetchResult fetchUserSearchContext(List<SearchHit<UserIndex>> searchHits) {
+        private ContextFetchResult fetchUserSearchContext(List<String> userIds) {
                 long startedAt = System.nanoTime();
-                List<String> userIds = extractUserIds(searchHits);
 
                 if (userIds.isEmpty()) {
                         return new ContextFetchResult(Collections.emptyMap(), 0, elapsedMs(startedAt), false);
@@ -431,6 +449,37 @@ public class UserSearchServiceImpl implements UserSearchService {
                 }
         }
 
+        private VisibilityFetchResult fetchUserSearchVisibility(List<String> userIds) {
+                long startedAt = System.nanoTime();
+                if (userIds == null || userIds.isEmpty()) {
+                        return new VisibilityFetchResult(Collections.emptyMap(), 0, elapsedMs(startedAt), false);
+                }
+
+                try {
+                        ApiResponse<List<UserSearchVisibilityResponse>> response = userServiceClient.getSearchVisibility(
+                                        UserSearchVisibilityRequest.builder()
+                                                        .targetUserIds(userIds)
+                                                        .build());
+
+                        if (response == null || response.data() == null) {
+                                return new VisibilityFetchResult(Collections.emptyMap(), userIds.size(), elapsedMs(startedAt), false);
+                        }
+
+                        Map<String, UserSearchVisibilityResponse> visibilityByUserId = response.data().stream()
+                                        .filter(visibility -> StringUtils.hasText(visibility.userId()))
+                                        .collect(Collectors.toMap(
+                                                        UserSearchVisibilityResponse::userId,
+                                                        Function.identity(),
+                                                        (existing, replacement) -> existing));
+                        return new VisibilityFetchResult(visibilityByUserId, userIds.size(), elapsedMs(startedAt), false);
+                } catch (Exception e) {
+                        long latencyMs = elapsedMs(startedAt);
+                        log.warn("User search visibility fallback targetCount={}, latencyMs={}, reason={}",
+                                        userIds.size(), latencyMs, e.getMessage());
+                        return new VisibilityFetchResult(Collections.emptyMap(), userIds.size(), latencyMs, true);
+                }
+        }
+
         private List<String> extractUserIds(List<SearchHit<UserIndex>> searchHits) {
                 if (searchHits == null || searchHits.isEmpty()) {
                         return Collections.emptyList();
@@ -453,12 +502,18 @@ public class UserSearchServiceImpl implements UserSearchService {
                         String searchTerm,
                         String currentUserId,
                         Map<String, UserSearchContextResponse> contextByUserId,
-                        Map<String, Double> recentInteractionScoreByUserId) {
+                        Map<String, Double> recentInteractionScoreByUserId,
+                        Map<String, UserSearchVisibilityResponse> visibilityByUserId,
+                        boolean phoneLikeSearch) {
 
                 UserIndex userIndex = hit.getContent();
                 UserSearchContextResponse context = contextByUserId.get(userIndex.getId());
 
                 if (context != null && (Boolean.TRUE.equals(context.blockedByMe()) || Boolean.TRUE.equals(context.blockedMe()))) {
+                        return Optional.empty();
+                }
+
+                if (!isVisibleForSearch(visibilityByUserId.get(userIndex.getId()), context, phoneLikeSearch)) {
                         return Optional.empty();
                 }
 
@@ -502,6 +557,38 @@ public class UserSearchServiceImpl implements UserSearchService {
                                 recentInteractionScore);
         }
 
+        private boolean isVisibleForSearch(
+                        UserSearchVisibilityResponse visibility,
+                        UserSearchContextResponse context,
+                        boolean phoneLikeSearch) {
+
+                SearchVisibility searchVisibility = resolveSearchVisibility(visibility, phoneLikeSearch);
+                return switch (searchVisibility) {
+                        case PUBLIC -> true;
+                        case FRIENDS_ONLY -> isAcceptedFriend(context);
+                        case FRIENDS_OF_FRIENDS -> isAcceptedFriend(context) || hasMutualFriend(context);
+                        case NONE -> phoneLikeSearch ? isAcceptedFriend(context) : true;
+                };
+        }
+
+        private SearchVisibility resolveSearchVisibility(UserSearchVisibilityResponse visibility, boolean phoneLikeSearch) {
+                if (visibility == null) {
+                        return SearchVisibility.PUBLIC;
+                }
+                SearchVisibility searchVisibility = phoneLikeSearch
+                                ? visibility.phoneSearchVisibility()
+                                : visibility.nameSearchVisibility();
+                return searchVisibility != null ? searchVisibility : SearchVisibility.PUBLIC;
+        }
+
+        private boolean isAcceptedFriend(UserSearchContextResponse context) {
+                return context != null && "ACCEPTED".equalsIgnoreCase(context.friendshipStatus());
+        }
+
+        private boolean hasMutualFriend(UserSearchContextResponse context) {
+                return context != null && context.mutualFriendsCount() != null && context.mutualFriendsCount() > 0;
+        }
+
         private List<RankedUserSearchHit> paginateRankedHits(List<RankedUserSearchHit> rankedHits, Pageable pageable) {
                 int fromIndex = Math.toIntExact(Math.min(pageable.getOffset(), rankedHits.size()));
                 int toIndex = Math.min(fromIndex + pageable.getPageSize(), rankedHits.size());
@@ -516,22 +603,11 @@ public class UserSearchServiceImpl implements UserSearchService {
         }
 
         private void ensureDebugAllowed() {
-                if (securityUtil.hasRole(Role.ADMIN.name()) || isNonProductionProfile()) {
+                if (securityUtil.hasRole(Role.ADMIN.name())) {
                         return;
                 }
 
                 throw new AppException(ErrorCode.AUTH_UNAUTHORIZED);
-        }
-
-        private boolean isNonProductionProfile() {
-                for (String profile : environment.getActiveProfiles()) {
-                        if ("dev".equalsIgnoreCase(profile)
-                                        || "local".equalsIgnoreCase(profile)
-                                        || "test".equalsIgnoreCase(profile)) {
-                                return true;
-                        }
-                }
-                return false;
         }
 
         private record RankedUserSearchHit(
@@ -553,6 +629,13 @@ public class UserSearchServiceImpl implements UserSearchService {
 
         private record RecentInteractionFetchResult(
                 Map<String, Double> scoreByUserId,
+                int fetchSize,
+                long latencyMs,
+                boolean fallback) {
+        }
+
+        private record VisibilityFetchResult(
+                Map<String, UserSearchVisibilityResponse> visibilityByUserId,
                 int fetchSize,
                 long latencyMs,
                 boolean fallback) {

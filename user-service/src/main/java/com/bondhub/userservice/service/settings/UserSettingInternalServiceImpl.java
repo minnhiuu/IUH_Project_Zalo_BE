@@ -1,6 +1,7 @@
 package com.bondhub.userservice.service.settings;
 
 import com.bondhub.common.dto.client.userservice.user.response.UserNotificationPreferenceResponse;
+import com.bondhub.common.dto.client.userservice.user.response.UserSearchVisibilityResponse;
 import com.bondhub.userservice.model.UserSetting;
 import com.bondhub.userservice.repository.UserSettingRepository;
 import lombok.AccessLevel;
@@ -9,6 +10,7 @@ import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -54,5 +56,10 @@ public class UserSettingInternalServiceImpl implements UserSettingInternalServic
                 .languageByDeviceId(deviceLocales)
                 .devicePreferences(devicePreferences)
                 .build();
+    }
+
+    @Override
+    public List<UserSearchVisibilityResponse> getSearchVisibility(List<String> targetUserIds) {
+        return userSettingRepository.getSearchVisibilityByUserIds(targetUserIds);
     }
 }
