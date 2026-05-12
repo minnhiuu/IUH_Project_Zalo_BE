@@ -21,6 +21,7 @@ import java.time.Instant;
 public class CommentEventPublisher {
 
     OutboxEventPublisher outboxEventPublisher;
+    SocialFeedInteractionEventPublisher socialFeedInteractionEventPublisher;
 
     @Transactional
     public void publishPostCommentCountProjectionRequested(
@@ -69,6 +70,7 @@ public class CommentEventPublisher {
                 EventType.USER_INTERACTION_RECORDED,
                 event
         );
+        socialFeedInteractionEventPublisher.publishPostAuthorInteraction(userId, postId, InteractionType.COMMENT);
 
         log.info("Published USER_INTERACTION_RECORDED: userId={}, postId={}, interactionType={}, weight={}, groupId={}",
                 userId, postId, event.interactionType(), event.weight(), groupId);

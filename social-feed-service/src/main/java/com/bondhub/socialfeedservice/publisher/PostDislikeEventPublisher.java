@@ -20,6 +20,7 @@ import java.time.Instant;
 public class PostDislikeEventPublisher {
 
     OutboxEventPublisher outboxEventPublisher;
+    SocialFeedInteractionEventPublisher socialFeedInteractionEventPublisher;
 
     @Transactional
     public void publishPostDisliked(String postId, String userId) {
@@ -37,6 +38,7 @@ public class PostDislikeEventPublisher {
                 EventType.POST_DISLIKE_RECORDED,
                 event
         );
+        socialFeedInteractionEventPublisher.publishPostAuthorInteraction(userId, postId, InteractionType.DISLIKE);
 
         log.debug("Published POST_DISLIKE_RECORDED event: postId={}, userId={}", postId, userId);
     }

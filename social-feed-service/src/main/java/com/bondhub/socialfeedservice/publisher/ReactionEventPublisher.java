@@ -23,6 +23,7 @@ import java.time.Instant;
 public class ReactionEventPublisher {
 
     OutboxEventPublisher outboxEventPublisher;
+    SocialFeedInteractionEventPublisher socialFeedInteractionEventPublisher;
 
     @Transactional
     public void publishProjectionRequested(
@@ -81,6 +82,7 @@ public class ReactionEventPublisher {
                 EventType.USER_INTERACTION_RECORDED,
                 event
         );
+        socialFeedInteractionEventPublisher.publishPostAuthorInteraction(userId, postId, interactionType);
 
         log.info("Published USER_INTERACTION_RECORDED: userId={}, postId={}, interactionType={}, weight={}, groupId={}",
                 userId, postId, interactionType, event.weight(), groupId);
