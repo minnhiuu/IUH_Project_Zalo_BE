@@ -1,7 +1,6 @@
 package com.bondhub.messageservice.repository;
 
 import com.bondhub.common.enums.MessageType;
-import com.bondhub.common.enums.MessageStatus;
 import com.bondhub.messageservice.model.Message;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -47,11 +46,6 @@ public interface MessageRepository extends MongoRepository<Message, String> {
     List<Message> findAllByOrderByIdAsc(Pageable pageable);
 
     List<Message> findTop100ByConversationIdAndIdGreaterThanAndStatusNot(String conversationId, String sinceId, com.bondhub.common.enums.MessageStatus status);
-
-    List<Message> findByConversationIdAndStatusNotOrderByCreatedAtDesc(
-            String conversationId,
-            MessageStatus status,
-            Pageable pageable);
 
     void deleteByConversationId(String conversationId);
 }
