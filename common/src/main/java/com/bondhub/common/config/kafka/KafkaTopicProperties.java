@@ -87,6 +87,8 @@ public class KafkaTopicProperties {
     @Setter
     public static class InteractionEvents {
         private String userInteraction = "user.interaction";
+        private String chatInteractionOccurred = "search.chat-interaction.occurred";
+        private String socialFeedInteractionOccurred = "search.social-feed-interaction.occurred";
     }
 
     @Getter
