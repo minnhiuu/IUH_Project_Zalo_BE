@@ -7,6 +7,7 @@ import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.data.mongodb.repository.Query;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
 
 @Repository
@@ -18,6 +19,12 @@ public interface ConversationRepository extends MongoRepository<Conversation, St
      */
     @Query("{ 'isGroup': false, 'members': { '$size': 2, '$all': [ { '$elemMatch': { 'userId': ?0, 'active': { '$ne': false } } }, { '$elemMatch': { 'userId': ?1, 'active': { '$ne': false } } } ] } }")
     Optional<Conversation> findDirectConversation(String userA, String userB);
+
+    @Query("{ 'isGroup': false, 'members': { '$size': 2, '$all': [ { '$elemMatch': { 'userId': ?0, 'active': { '$ne': false } } }, { '$elemMatch': { 'userId': { '$in': ?1 }, 'active': { '$ne': false } } } ] } }")
+    List<Conversation> findDirectConversationsByUserAndTargets(String userId, List<String> targetUserIds);
+
+    @Query("{ 'isGroup': true, 'isDisbanded': { '$ne': true }, 'members': { '$elemMatch': { 'userId': ?0, 'active': { '$ne': false } } }, 'members.userId': { '$in': ?1 } }")
+    List<Conversation> findSharedGroupConversationsByUserAndTargets(String userId, List<String> targetUserIds);
 
     @Query("{ '$or': ["
             + "  { 'members': { '$elemMatch': { 'userId': ?0, 'active': { '$ne': false } } } },"

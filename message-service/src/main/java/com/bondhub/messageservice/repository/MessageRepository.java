@@ -48,11 +48,6 @@ public interface MessageRepository extends MongoRepository<Message, String> {
 
     List<Message> findTop100ByConversationIdAndIdGreaterThanAndStatusNot(String conversationId, String sinceId, com.bondhub.common.enums.MessageStatus status);
 
-    long countByConversationIdAndCreatedAtGreaterThanEqualAndStatusNot(
-            String conversationId,
-            LocalDateTime createdAt,
-            MessageStatus status);
-
     List<Message> findByConversationIdAndStatusNotOrderByCreatedAtDesc(
             String conversationId,
             MessageStatus status,
