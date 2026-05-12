@@ -76,12 +76,10 @@ public class PostCreatedNotificationListener {
                 }
 
                 try {
-                    PostPublishedPayload payload = PostPublishedPayload.builder()
-                            .postId(event.postId())
-                            .groupId(event.groupId())
-                            .postType(event.postType())
-                            .visibility(event.visibility())
-                            .build();
+                    Map<String, Object> payload = Map.of("postId", event.postId(),
+                                    "groupId", event.groupId(),
+                                    "postType", event.postType(),
+                                    "visibility", event.visibility());
 
                     RawNotificationEvent notificationEvent = RawNotificationEvent.builder()
                             .recipientId(recipientId)

@@ -288,10 +288,8 @@ public class ReactionServiceImpl implements ReactionService {
                 String actorAvatar = actorSummary != null ? actorSummary.getAvatar() : null;
 
                 try {
-                        PostReactionPayload payload = PostReactionPayload.builder()
-                                .postId(post.getId())
-                                .reactionType(reactionType.name())
-                                .build();
+                        Map<String, Object> payload = Map.of("postId", post.getId(),
+                                "reactionType", reactionType.name());
 
                         RawNotificationEvent notificationEvent = RawNotificationEvent.builder()
                                         .recipientId(post.getAuthorId())
@@ -337,10 +335,9 @@ public class ReactionServiceImpl implements ReactionService {
                 actorAvatar = null;
             }
 
-            PostReactionPayload payload = PostReactionPayload.builder()
-                    .postId(post.getId())
-                    .reactionType(ReactionType.LIKE.name())
-                    .build();
+            Map<String, Object> payload = Map.of("postId", post.getId(),
+                    "reactionType", ReactionType.LIKE.name());
+
 
             RawNotificationEvent notificationEvent = RawNotificationEvent.builder()
                     .recipientId(post.getAuthorId())

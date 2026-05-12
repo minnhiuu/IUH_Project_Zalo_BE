@@ -171,20 +171,20 @@ public class PostServiceImpl implements PostService {
         });
     }
 
-    @Override
-    public PageResponse<List<PostResponse>> getUserPosts(String userId, int page, int size) {
-        String currentUserId = securityUtil.getCurrentUserId();
-        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "uploadedAt"));
-
-        Page<Post> posts = postRepository.findByAuthorIdAndActiveTrueAndIsCurrentTrueOrderByUploadedAtDesc(
-                userId,
-                pageable);
-
-        String s3BaseUrl = getS3BaseUrl();
-        Map<String, UserSummary> authorMap = buildAuthorMap(posts);
-        return PageResponse.fromPage(posts, post -> postMapper.toPostResponse(post, s3BaseUrl,
-                getCurrentUserReaction(currentUserId, post.getId()), authorMap.get(post.getAuthorId())));
-    }
+//    @Override
+//    public PageResponse<List<PostResponse>> getUserPosts(String userId, int page, int size) {
+//        String currentUserId = securityUtil.getCurrentUserId();
+//        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "uploadedAt"));
+//
+//        Page<Post> posts = postRepository.findByAuthorIdAndActiveTrueAndIsCurrentTrueOrderByUploadedAtDesc(
+//                userId,
+//                pageable);
+//
+//        String s3BaseUrl = getS3BaseUrl();
+//        Map<String, UserSummary> authorMap = buildAuthorMap(posts);
+//        return PageResponse.fromPage(posts, post -> postMapper.toPostResponse(post, s3BaseUrl,
+//                getCurrentUserReaction(currentUserId, post.getId()), authorMap.get(post.getAuthorId())));
+//    }
 
     @Override
     public PageResponse<List<PostResponse>> getFeedAndSharePosts(int page, int size) {

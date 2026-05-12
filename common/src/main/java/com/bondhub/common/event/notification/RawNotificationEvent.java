@@ -21,7 +21,7 @@ public class RawNotificationEvent {
     NotificationType type;
     String referenceId;
 
-    Object payload;
+    Map<String, Object> payload;
 
     LocalDateTime occurredAt;
 }

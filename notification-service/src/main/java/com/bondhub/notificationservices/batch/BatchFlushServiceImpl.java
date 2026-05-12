@@ -63,15 +63,13 @@ public class BatchFlushServiceImpl implements BatchFlushService {
                 .toList();
 
         int actorCount = actorIds.size();
-        int othersCount = actorCount > 2 ? actorCount - 1 : 0;
-        var prefs = userPreferenceService.getPreferences(last.getRecipientId());
-        String locale = prefs != null ? prefs.getLanguage() : "vi";
+        int othersCount = actorCount - 1;
+        String locale = userPreferenceService.getLocale(last.getRecipientId());
 
         List<Map<String, Object>> rawPayloads = events.stream()
                 .map(e -> {
-                    @SuppressWarnings("unchecked")
                     Map<String, Object> p = new HashMap<>(
-                            e.getPayload() != null ? (Map<String, Object>) e.getPayload() : Collections.emptyMap()
+                            e.getPayload() != null ? e.getPayload() : Collections.emptyMap()
                     );
                     p.put("actorId", e.getActorId());
                     p.put("actorName", e.getActorName());

@@ -26,6 +26,8 @@ public interface PostService {
 
     PostResponse updatePost(String postId, UpdatePostRequest request);
 
+//    PageResponse<List<PostResponse>> getUserPosts(String userId, int page, int size);
+
     void deletePost(String postId);
 
     /**
