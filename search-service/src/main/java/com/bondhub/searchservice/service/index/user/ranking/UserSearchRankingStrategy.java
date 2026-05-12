@@ -1,11 +1,17 @@
 package com.bondhub.searchservice.service.index.user.ranking;
 
 import com.bondhub.common.utils.PhoneUtil;
+import com.bondhub.searchservice.config.SearchRankingProperties;
 import com.bondhub.searchservice.dto.response.UserSearchScoreBreakdown;
+import lombok.AccessLevel;
+import lombok.RequiredArgsConstructor;
+import lombok.experimental.FieldDefaults;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 @Component
+@RequiredArgsConstructor
+@FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public class UserSearchRankingStrategy {
 
     public static final String FRIEND_LABEL_KEY = "search.user.relationship.friend";
@@ -14,22 +20,10 @@ public class UserSearchRankingStrategy {
     public static final String MUTUAL_FRIENDS_LABEL_KEY = "search.user.relationship.mutual_friends";
     public static final String CONTACT_LABEL_KEY = "search.user.relationship.contact";
 
-    public static final double EXACT_PHONE_MATCH_BOOST = 10_000.0;
-    public static final double ES_SCORE_MULTIPLIER = 100.0;
-    public static final double FRIEND_BOOST = 1_000.0;
-    public static final double PENDING_RECEIVED_BOOST = 800.0;
-    public static final double PENDING_SENT_BOOST = 500.0;
-    public static final double MUTUAL_FRIEND_WEIGHT = 30.0;
-    public static final int MUTUAL_FRIEND_CAP = 10;
-    public static final double SHARED_GROUP_WEIGHT = 15.0;
-    public static final int SHARED_GROUP_CAP = 10;
-    public static final double CONTACT_SCORE_WEIGHT = 50.0;
-    public static final double CONTACT_SCORE_CAP = 5.0;
-    public static final double RECENT_INTERACTION_WEIGHT = 40.0;
-    public static final double RECENT_INTERACTION_CAP = 5.0;
-
     private static final String ACCEPTED = "ACCEPTED";
     private static final String PENDING = "PENDING";
+
+    SearchRankingProperties searchRankingProperties;
 
     public double calculateFinalScore(double elasticsearchScore, UserSearchRankingContext context, String currentUserId) {
         return calculateScoreBreakdown(elasticsearchScore, context, currentUserId).finalScore();
@@ -100,33 +94,34 @@ public class UserSearchRankingStrategy {
     }
 
     private double exactPhoneBoost(UserSearchRankingContext context) {
-        return context.exactPhoneMatch() ? EXACT_PHONE_MATCH_BOOST : 0.0;
+        return context.exactPhoneMatch() ? userRanking().getExactPhoneBoost() : 0.0;
     }
 
     private double normalizedElasticsearchScore(double elasticsearchScore) {
-        return Math.max(elasticsearchScore, 0.0) * ES_SCORE_MULTIPLIER;
+        return Math.max(elasticsearchScore, 0.0) * userRanking().getEsScoreMultiplier();
     }
 
     private double relationshipBoost(UserSearchRankingContext context, String currentUserId) {
         if (isAccepted(context.friendshipStatus())) {
-            return FRIEND_BOOST;
+            return userRanking().getAcceptedFriendBoost();
         }
 
         if (isPending(context.friendshipStatus())) {
             return isRequestedByCurrentUser(context.requestedBy(), currentUserId)
-                    ? PENDING_SENT_BOOST
-                    : PENDING_RECEIVED_BOOST;
+                    ? userRanking().getPendingSentBoost()
+                    : userRanking().getPendingReceivedBoost();
         }
 
         return 0.0;
     }
 
     private double graphBoost(UserSearchRankingContext context) {
-        int mutualFriends = Math.min(Math.max(context.mutualFriendsCount(), 0), MUTUAL_FRIEND_CAP);
-        int sharedGroups = Math.min(Math.max(context.sharedGroupsCount(), 0), SHARED_GROUP_CAP);
+        SearchRankingProperties.User userRanking = userRanking();
+        int mutualFriends = Math.min(Math.max(context.mutualFriendsCount(), 0), userRanking.getMutualFriendCap());
+        int sharedGroups = Math.min(Math.max(context.sharedGroupsCount(), 0), userRanking.getSharedGroupCap());
 
-        return mutualFriends * MUTUAL_FRIEND_WEIGHT
-                + sharedGroups * SHARED_GROUP_WEIGHT;
+        return mutualFriends * userRanking.getMutualFriendWeight()
+                + sharedGroups * userRanking.getSharedGroupWeight();
     }
 
     private double contactBoost(UserSearchRankingContext context) {
@@ -134,13 +129,19 @@ public class UserSearchRankingStrategy {
             return 0.0;
         }
 
-        double cappedScore = Math.min(Math.max(context.contactScore(), 0.0), CONTACT_SCORE_CAP);
-        return cappedScore * CONTACT_SCORE_WEIGHT;
+        SearchRankingProperties.User userRanking = userRanking();
+        double cappedScore = Math.min(Math.max(context.contactScore(), 0.0), userRanking.getContactScoreCap());
+        return cappedScore * userRanking.getContactScoreWeight();
     }
 
     private double recentInteractionBoost(UserSearchRankingContext context) {
-        double cappedScore = Math.min(Math.max(context.recentInteractionScore(), 0.0), RECENT_INTERACTION_CAP);
-        return cappedScore * RECENT_INTERACTION_WEIGHT;
+        SearchRankingProperties.User userRanking = userRanking();
+        double cappedScore = Math.min(Math.max(context.recentInteractionScore(), 0.0), userRanking.getRecentInteractionCap());
+        return cappedScore * userRanking.getRecentInteractionWeight();
+    }
+
+    private SearchRankingProperties.User userRanking() {
+        return searchRankingProperties.getUser();
     }
 
     private boolean isAccepted(String status) {
