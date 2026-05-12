@@ -30,6 +30,7 @@ import com.bondhub.common.dto.client.socketservice.SocketEvent;
 import com.bondhub.common.enums.SocketEventType;
 import com.bondhub.common.publisher.RawNotificationEventPublisher;
 import com.bondhub.messageservice.publisher.MessageIndexEventPublisher;
+import com.bondhub.messageservice.publisher.ChatInteractionEventPublisher;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -76,6 +77,7 @@ public class MessageServiceImpl implements MessageService {
     private final ConversationHelper conversationHelper;
     private final S3UtilV2 s3UtilV2;
     private final MessageIndexEventPublisher messageIndexEventPublisher;
+    private final ChatInteractionEventPublisher chatInteractionEventPublisher;
     private final RawNotificationEventPublisher rawNotificationEventPublisher;
 
     @Value("${kafka.topics.socket-events}")
@@ -501,6 +503,7 @@ public class MessageServiceImpl implements MessageService {
                 .build());
 
         messageIndexEventPublisher.publishIndexRequest(message);
+        chatInteractionEventPublisher.publishDirectChatInteraction(message, finalRoom);
     }
 
     // ─────────────────────────── Thu hồi / Xóa ───────────────────────────
