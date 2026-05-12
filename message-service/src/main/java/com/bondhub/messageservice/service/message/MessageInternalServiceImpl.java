@@ -1,5 +1,7 @@
 package com.bondhub.messageservice.service.message;
 
+import com.bondhub.common.dto.client.messageservice.ChatInteractionFeatureSnapshotResponse;
+import com.bondhub.common.enums.MessageStatus;
 import com.bondhub.messageservice.dto.response.MessageSyncResponse;
 import com.bondhub.messageservice.model.ChatUser;
 import com.bondhub.messageservice.model.Conversation;
@@ -12,13 +14,20 @@ import com.bondhub.messageservice.service.conversation.ConversationHelper;
 import com.bondhub.messageservice.util.SearchableTextBuilder;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.bson.Document;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.aggregation.Aggregation;
+import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -33,6 +42,7 @@ public class MessageInternalServiceImpl implements MessageInternalService {
     private final ConversationRepository conversationRepository;
     private final ChatUserRepository chatUserRepository;
     private final ConversationHelper conversationHelper;
+    private final MongoTemplate mongoTemplate;
 
     @Override
     public List<MessageSyncResponse> getMessagesBatch(String lastId, int batchSize) {
@@ -51,6 +61,87 @@ public class MessageInternalServiceImpl implements MessageInternalService {
     @Override
     public long getMessageCount() {
         return messageRepository.count();
+    }
+
+    @Override
+    public List<ChatInteractionFeatureSnapshotResponse> getSearchInteractionFeatureSnapshot(int sinceDays, int limit) {
+        LocalDateTime since = LocalDateTime.now().minusDays(Math.max(sinceDays, 1));
+        int boundedLimit = Math.min(Math.max(limit, 1), 10_000);
+
+        Aggregation aggregation = Aggregation.newAggregation(
+                Aggregation.match(Criteria.where("createdAt").gte(since)
+                        .and("status").ne(MessageStatus.REVOKED)),
+                Aggregation.group("conversationId")
+                        .count().as("messageCount")
+                        .max("createdAt").as("lastMessageAt"),
+                Aggregation.limit(boundedLimit)
+        );
+
+        List<Document> rows = mongoTemplate.aggregate(
+                aggregation,
+                "chat_messages",
+                Document.class).getMappedResults();
+        if (rows.isEmpty()) {
+            return List.of();
+        }
+
+        Map<String, ConversationSnapshot> snapshotByConversationId = new HashMap<>();
+        for (Document row : rows) {
+            String conversationId = row.getString("_id");
+            if (conversationId == null) {
+                continue;
+            }
+
+            snapshotByConversationId.put(
+                    conversationId,
+                    new ConversationSnapshot(readCount(row), readInstant(row.get("lastMessageAt"))));
+        }
+
+        return conversationRepository.findAllById(snapshotByConversationId.keySet())
+                .stream()
+                .filter(conversation -> !conversation.isGroup())
+                .map(conversation -> toDirectMemberPair(conversation, snapshotByConversationId.get(conversation.getId())))
+                .filter(Objects::nonNull)
+                .flatMap(pair -> pair.toResponses().stream())
+                .sorted(Comparator.comparing(ChatInteractionFeatureSnapshotResponse::lastMessageAt, Comparator.nullsLast(Comparator.reverseOrder())))
+                .limit(boundedLimit)
+                .toList();
+    }
+
+    private DirectConversationSnapshot toDirectMemberPair(Conversation conversation, ConversationSnapshot snapshot) {
+        if (conversation == null || conversation.getMembers() == null || snapshot == null) {
+            return null;
+        }
+
+        List<String> memberIds = conversation.getMembers().stream()
+                .filter(member -> !Boolean.FALSE.equals(member.getActive()))
+                .map(ConversationMember::getUserId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (memberIds.size() != 2) {
+            return null;
+        }
+
+        return new DirectConversationSnapshot(memberIds.get(0), memberIds.get(1), snapshot);
+    }
+
+    private long readCount(Document row) {
+        Object value = row.get("messageCount");
+        return value instanceof Number number ? number.longValue() : 0L;
+    }
+
+    private Instant readInstant(Object value) {
+        if (value instanceof java.util.Date date) {
+            return date.toInstant();
+        }
+        if (value instanceof LocalDateTime localDateTime) {
+            return localDateTime.toInstant(ZoneOffset.UTC);
+        }
+        if (value instanceof Instant instant) {
+            return instant;
+        }
+        return null;
     }
 
     private MessageSyncResponse mapToSyncResponse(Message message) {
@@ -178,4 +269,30 @@ public class MessageInternalServiceImpl implements MessageInternalService {
         }
     }
 
+    private record ConversationSnapshot(long messageCount, Instant lastMessageAt) {
+    }
+
+    private record DirectConversationSnapshot(
+            String firstUserId,
+            String secondUserId,
+            ConversationSnapshot snapshot
+    ) {
+        private List<ChatInteractionFeatureSnapshotResponse> toResponses() {
+            int count = Math.toIntExact(Math.min(snapshot.messageCount(), Integer.MAX_VALUE));
+            return List.of(
+                    ChatInteractionFeatureSnapshotResponse.builder()
+                            .userId(firstUserId)
+                            .targetUserId(secondUserId)
+                            .messageCount30d(count)
+                            .lastMessageAt(snapshot.lastMessageAt())
+                            .build(),
+                    ChatInteractionFeatureSnapshotResponse.builder()
+                            .userId(secondUserId)
+                            .targetUserId(firstUserId)
+                            .messageCount30d(count)
+                            .lastMessageAt(snapshot.lastMessageAt())
+                            .build()
+            );
+        }
+    }
 }

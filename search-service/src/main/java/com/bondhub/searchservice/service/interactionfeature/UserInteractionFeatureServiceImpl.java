@@ -1,5 +1,7 @@
 package com.bondhub.searchservice.service.interactionfeature;
 
+import com.bondhub.common.dto.client.messageservice.ChatInteractionFeatureSnapshotResponse;
+import com.bondhub.common.dto.client.socialfeedservice.SocialInteractionFeatureSnapshotResponse;
 import com.bondhub.common.event.search.ChatInteractionOccurredEvent;
 import com.bondhub.common.event.search.SocialFeedInteractionOccurredEvent;
 import com.bondhub.common.event.socialfeed.InteractionType;
@@ -61,6 +63,43 @@ public class UserInteractionFeatureServiceImpl implements UserInteractionFeature
         incrementSocialCounter(feature, event.interactionType());
         feature.setLastSocialInteractionAt(maxInstant(feature.getLastSocialInteractionAt(), occurredAt));
         feature.setSocialFeedScore(calculateSocialFeedScore(feature, occurredAt));
+        refreshRecentInteractionScore(feature);
+        feature.setUpdatedAt(Instant.now());
+
+        userInteractionFeatureRepository.save(feature);
+    }
+
+    @Override
+    @Transactional
+    public void upsertChatSnapshot(ChatInteractionFeatureSnapshotResponse snapshot) {
+        if (snapshot == null || !isValidPair(snapshot.userId(), snapshot.targetUserId())) {
+            return;
+        }
+
+        UserInteractionFeature feature = getOrCreate(snapshot.userId(), snapshot.targetUserId());
+        feature.setMessageCount30d(Math.max(snapshot.messageCount30d(), 0));
+        feature.setLastMessageAt(snapshot.lastMessageAt());
+        feature.setChatScore(calculateChatScore(feature, Instant.now()));
+        refreshRecentInteractionScore(feature);
+        feature.setUpdatedAt(Instant.now());
+
+        userInteractionFeatureRepository.save(feature);
+    }
+
+    @Override
+    @Transactional
+    public void upsertSocialSnapshot(SocialInteractionFeatureSnapshotResponse snapshot) {
+        if (snapshot == null || !isValidPair(snapshot.userId(), snapshot.targetUserId())) {
+            return;
+        }
+
+        UserInteractionFeature feature = getOrCreate(snapshot.userId(), snapshot.targetUserId());
+        feature.setViewCount30d(Math.max(snapshot.viewCount30d(), 0));
+        feature.setReactionCount30d(Math.max(snapshot.reactionCount30d(), 0));
+        feature.setCommentCount30d(Math.max(snapshot.commentCount30d(), 0));
+        feature.setDislikeCount30d(Math.max(snapshot.dislikeCount30d(), 0));
+        feature.setLastSocialInteractionAt(snapshot.lastInteractionAt());
+        feature.setSocialFeedScore(calculateSocialFeedScore(feature, Instant.now()));
         refreshRecentInteractionScore(feature);
         feature.setUpdatedAt(Instant.now());
 

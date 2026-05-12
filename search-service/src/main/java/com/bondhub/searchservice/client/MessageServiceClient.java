@@ -1,6 +1,7 @@
 package com.bondhub.searchservice.client;
 
 import com.bondhub.common.dto.ApiResponse;
+import com.bondhub.common.dto.client.messageservice.ChatInteractionFeatureSnapshotResponse;
 import com.bondhub.searchservice.dto.response.MessageSyncResponse;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -18,4 +19,9 @@ public interface MessageServiceClient {
 
     @GetMapping("/internal/messages/sync/count")
     ApiResponse<Long> getMessageCount();
+
+    @GetMapping("/internal/messages/search-interaction-features/snapshot")
+    ApiResponse<List<ChatInteractionFeatureSnapshotResponse>> getSearchInteractionFeatureSnapshot(
+            @RequestParam("sinceDays") int sinceDays,
+            @RequestParam("limit") int limit);
 }

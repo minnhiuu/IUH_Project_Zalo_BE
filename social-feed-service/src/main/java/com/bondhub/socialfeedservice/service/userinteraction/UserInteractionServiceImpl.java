@@ -1,12 +1,15 @@
 package com.bondhub.socialfeedservice.service.userinteraction;
 
 import com.bondhub.common.dto.PageResponse;
+import com.bondhub.common.dto.client.socialfeedservice.SocialInteractionFeatureSnapshotResponse;
 import com.bondhub.common.event.socialfeed.InteractionType;
 import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.socialfeedservice.dto.response.interaction.UserInteractionResponse;
+import com.bondhub.socialfeedservice.model.Post;
 import com.bondhub.socialfeedservice.model.UserInteraction;
 import com.bondhub.socialfeedservice.publisher.PostDislikeEventPublisher;
 import com.bondhub.socialfeedservice.publisher.PostViewEventPublisher;
+import com.bondhub.socialfeedservice.repository.PostRepository;
 import com.bondhub.socialfeedservice.repository.UserInteractionRepository;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
@@ -18,7 +21,12 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 @Slf4j
@@ -27,6 +35,7 @@ import java.util.List;
 public class UserInteractionServiceImpl implements UserInteractionService {
 
     UserInteractionRepository userInteractionRepository;
+    PostRepository postRepository;
     PostViewEventPublisher postViewEventPublisher;
     PostDislikeEventPublisher postDislikeEventPublisher;
     SecurityUtil securityUtil;
@@ -54,6 +63,43 @@ public class UserInteractionServiceImpl implements UserInteractionService {
         return userInteractionRepository.findTopByUserIdOrderByCreatedAtDesc(userId, pageable)
                 .stream()
                 .map(this::toResponse)
+                .toList();
+    }
+
+    @Override
+    public List<SocialInteractionFeatureSnapshotResponse> getSearchInteractionFeatureSnapshot(int sinceDays, int limit) {
+        Instant since = Instant.now().minus(Math.max(sinceDays, 1), ChronoUnit.DAYS);
+        int boundedLimit = Math.min(Math.max(limit, 1), 10_000);
+        List<UserInteraction> interactions = userInteractionRepository
+                .findByCreatedAtGreaterThanEqualOrderByCreatedAtDesc(since, PageRequest.of(0, boundedLimit));
+        if (interactions.isEmpty()) {
+            return List.of();
+        }
+
+        Map<String, Post> postById = postRepository.findAllByIdInAndActiveTrueAndIsCurrentTrue(
+                        interactions.stream()
+                                .map(UserInteraction::getPostId)
+                                .filter(Objects::nonNull)
+                                .distinct()
+                                .toList())
+                .stream()
+                .collect(Collectors.toMap(Post::getId, Function.identity(), (existing, replacement) -> existing));
+
+        return interactions.stream()
+                .map(interaction -> toAuthorInteraction(interaction, postById.get(interaction.getPostId())))
+                .filter(Objects::nonNull)
+                .filter(authorInteraction -> !authorInteraction.interaction().getUserId().equals(authorInteraction.authorId()))
+                .collect(Collectors.groupingBy(
+                        authorInteraction -> new SocialFeatureKey(
+                                authorInteraction.interaction().getUserId(),
+                                authorInteraction.authorId()),
+                        Collectors.reducing(
+                                SocialFeatureCounts.empty(),
+                                authorInteraction -> SocialFeatureCounts.from(authorInteraction.interaction()),
+                                SocialFeatureCounts::merge)))
+                .entrySet()
+                .stream()
+                .map(entry -> toSnapshotResponse(entry.getKey(), entry.getValue()))
                 .toList();
     }
 
@@ -121,6 +167,79 @@ public class UserInteractionServiceImpl implements UserInteractionService {
                 .createdAt(interaction.getCreatedAt())
                 .ingestedAt(interaction.getIngestedAt())
                 .build();
+    }
+
+    private AuthorInteraction toAuthorInteraction(UserInteraction interaction, Post post) {
+        if (interaction == null
+                || post == null
+                || interaction.getUserId() == null
+                || post.getAuthorId() == null
+                || interaction.getInteractionType() == null) {
+            return null;
+        }
+
+        return new AuthorInteraction(post.getAuthorId(), interaction);
+    }
+
+    private SocialInteractionFeatureSnapshotResponse toSnapshotResponse(
+            SocialFeatureKey key,
+            SocialFeatureCounts counts) {
+        return SocialInteractionFeatureSnapshotResponse.builder()
+                .userId(key.userId())
+                .targetUserId(key.targetUserId())
+                .lastInteractionAt(counts.lastInteractionAt())
+                .viewCount30d(counts.viewCount())
+                .reactionCount30d(counts.reactionCount())
+                .commentCount30d(counts.commentCount())
+                .dislikeCount30d(counts.dislikeCount())
+                .build();
+    }
+
+    private record AuthorInteraction(String authorId, UserInteraction interaction) {
+    }
+
+    private record SocialFeatureKey(String userId, String targetUserId) {
+    }
+
+    private record SocialFeatureCounts(
+            int viewCount,
+            int reactionCount,
+            int commentCount,
+            int dislikeCount,
+            Instant lastInteractionAt
+    ) {
+        private static SocialFeatureCounts empty() {
+            return new SocialFeatureCounts(0, 0, 0, 0, null);
+        }
+
+        private static SocialFeatureCounts from(UserInteraction interaction) {
+            InteractionType type = interaction.getInteractionType();
+            return new SocialFeatureCounts(
+                    type == InteractionType.VIEW ? 1 : 0,
+                    type == InteractionType.LIKE ? 1 : 0,
+                    type == InteractionType.COMMENT ? 1 : 0,
+                    type == InteractionType.DISLIKE ? 1 : 0,
+                    interaction.getCreatedAt());
+        }
+
+        private SocialFeatureCounts merge(SocialFeatureCounts other) {
+            return new SocialFeatureCounts(
+                    viewCount + other.viewCount(),
+                    reactionCount + other.reactionCount(),
+                    commentCount + other.commentCount(),
+                    dislikeCount + other.dislikeCount(),
+                    latest(lastInteractionAt, other.lastInteractionAt()));
+        }
+
+        private Instant latest(Instant first, Instant second) {
+            if (first == null) {
+                return second;
+            }
+            if (second == null) {
+                return first;
+            }
+            return first.isAfter(second) ? first : second;
+        }
     }
 
 }
