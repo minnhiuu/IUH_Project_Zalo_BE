@@ -1,6 +1,7 @@
 package com.bondhub.searchservice.service.index.user.ranking;
 
 import com.bondhub.common.utils.PhoneUtil;
+import com.bondhub.searchservice.dto.response.UserSearchScoreBreakdown;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -31,14 +32,37 @@ public class UserSearchRankingStrategy {
     private static final String PENDING = "PENDING";
 
     public double calculateFinalScore(double elasticsearchScore, UserSearchRankingContext context, String currentUserId) {
-        UserSearchRankingContext safeContext = context != null ? context : UserSearchRankingContext.empty();
+        return calculateScoreBreakdown(elasticsearchScore, context, currentUserId).finalScore();
+    }
 
-        return exactPhoneBoost(safeContext)
-                + normalizedElasticsearchScore(elasticsearchScore)
-                + relationshipBoost(safeContext, currentUserId)
-                + graphBoost(safeContext)
-                + contactBoost(safeContext)
-                + recentInteractionBoost(safeContext);
+    public UserSearchScoreBreakdown calculateScoreBreakdown(
+            double elasticsearchScore,
+            UserSearchRankingContext context,
+            String currentUserId) {
+        UserSearchRankingContext safeContext = context != null ? context : UserSearchRankingContext.empty();
+        double exactPhoneBoost = exactPhoneBoost(safeContext);
+        double esScoreBoost = normalizedElasticsearchScore(elasticsearchScore);
+        double relationshipBoost = relationshipBoost(safeContext, currentUserId);
+        double graphBoost = graphBoost(safeContext);
+        double contactBoost = contactBoost(safeContext);
+        double recentInteractionBoost = recentInteractionBoost(safeContext);
+        double finalScore = exactPhoneBoost
+                + esScoreBoost
+                + relationshipBoost
+                + graphBoost
+                + contactBoost
+                + recentInteractionBoost;
+
+        return UserSearchScoreBreakdown.builder()
+                .esScore(elasticsearchScore)
+                .exactPhoneBoost(exactPhoneBoost)
+                .esScoreBoost(esScoreBoost)
+                .relationshipBoost(relationshipBoost)
+                .graphBoost(graphBoost)
+                .contactBoost(contactBoost)
+                .recentInteractionBoost(recentInteractionBoost)
+                .finalScore(finalScore)
+                .build();
     }
 
     public UserSearchRelationshipLabel resolveRelationshipLabel(UserSearchRankingContext context, String currentUserId) {

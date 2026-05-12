@@ -14,6 +14,7 @@ public record UserSearchResponse(
         String relationshipLabel,
         Integer mutualFriendsCount,
         Integer sharedGroupsCount,
-        Boolean inContact
+        Boolean inContact,
+        UserSearchScoreBreakdown debug
 ) {
 }

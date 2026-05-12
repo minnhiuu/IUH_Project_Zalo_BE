@@ -9,12 +9,15 @@ import com.bondhub.common.utils.PhoneUtil;
 import com.bondhub.common.dto.PageResponse;
 import com.bondhub.common.dto.client.userservice.user.response.UserSummaryResponse;
 import com.bondhub.common.enums.Role;
+import com.bondhub.common.exception.AppException;
+import com.bondhub.common.exception.ErrorCode;
 import com.bondhub.common.utils.LocalizationUtil;
 import com.bondhub.common.utils.S3UtilV2;
 import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.searchservice.client.FriendServiceClient;
 import com.bondhub.searchservice.config.ElasticsearchProperties;
 import com.bondhub.searchservice.dto.response.UserSearchResponse;
+import com.bondhub.searchservice.dto.response.UserSearchScoreBreakdown;
 import com.bondhub.searchservice.model.elasticsearch.UserIndex;
 import com.bondhub.searchservice.model.mongodb.UserInteractionFeature;
 import com.bondhub.searchservice.repository.mongodb.UserInteractionFeatureRepository;
@@ -25,6 +28,7 @@ import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.env.Environment;
 import org.springframework.data.domain.*;
 import org.springframework.data.elasticsearch.client.elc.NativeQuery;
 import org.springframework.data.elasticsearch.core.*;
@@ -50,6 +54,7 @@ public class UserSearchServiceImpl implements UserSearchService {
         private static final int MIN_RERANK_CANDIDATE_SIZE = 100;
         private static final int MAX_RERANK_CANDIDATE_SIZE = 300;
         private static final int RERANK_WINDOW_MULTIPLIER = 5;
+        private static final int MAX_USER_SEARCH_PAGE_SIZE = 50;
 
         ElasticsearchOperations esOps;
         SecurityUtil securityUtil;
@@ -59,14 +64,23 @@ public class UserSearchServiceImpl implements UserSearchService {
         UserInteractionFeatureRepository userInteractionFeatureRepository;
         UserSearchRankingStrategy rankingStrategy;
         LocalizationUtil localizationUtil;
+        Environment environment;
 
         @Override
-        public PageResponse<List<UserSearchResponse>> searchUsersWithMetadata(String keyword, Pageable pageable) {
+        public PageResponse<List<UserSearchResponse>> searchUsersWithMetadata(
+                        String keyword,
+                        int page,
+                        int size,
+                        boolean debug) {
+                if (debug) {
+                        ensureDebugAllowed();
+                }
+                Pageable pageable = toPageable(page, size);
                 PageResponse<List<RankedUserSearchHit>> rankedPage = searchRankedUsers(keyword, pageable);
 
                 return PageResponse.<List<UserSearchResponse>>builder()
                                 .data(rankedPage.data().stream()
-                                                .map(hit -> toUserSearchResponse(hit, keyword))
+                                                .map(hit -> toUserSearchResponse(hit, keyword, debug))
                                                 .toList())
                                 .page(rankedPage.page())
                                 .totalPages(rankedPage.totalPages())
@@ -77,6 +91,7 @@ public class UserSearchServiceImpl implements UserSearchService {
 
         @Override
         public PageResponse<List<UserSummaryResponse>> searchUsers(String keyword, Pageable pageable) {
+                pageable = normalizePageable(pageable);
                 PageResponse<List<RankedUserSearchHit>> rankedPage = searchRankedUsers(keyword, pageable);
 
                 return PageResponse.<List<UserSummaryResponse>>builder()
@@ -219,7 +234,7 @@ public class UserSearchServiceImpl implements UserSearchService {
                                 .build();
         }
 
-        private UserSearchResponse toUserSearchResponse(RankedUserSearchHit hit, String searchTerm) {
+        private UserSearchResponse toUserSearchResponse(RankedUserSearchHit hit, String searchTerm, boolean debug) {
                 UserIndex userIndex = hit.userIndex();
                 UserSearchContextResponse context = hit.context();
 
@@ -235,6 +250,7 @@ public class UserSearchServiceImpl implements UserSearchService {
                                 .mutualFriendsCount(context != null && context.mutualFriendsCount() != null ? context.mutualFriendsCount() : 0)
                                 .sharedGroupsCount(context != null && context.sharedGroupsCount() != null ? context.sharedGroupsCount() : 0)
                                 .inContact(context != null && Boolean.TRUE.equals(context.inContact()))
+                                .debug(debug ? hit.scoreBreakdown() : null)
                                 .build();
         }
 
@@ -319,6 +335,21 @@ public class UserSearchServiceImpl implements UserSearchService {
                 int requestedEnd = (pageable.getPageNumber() + 1) * pageable.getPageSize();
                 int candidateSize = Math.max(requestedEnd * RERANK_WINDOW_MULTIPLIER, MIN_RERANK_CANDIDATE_SIZE);
                 return Math.min(candidateSize, MAX_RERANK_CANDIDATE_SIZE);
+        }
+
+        private Pageable toPageable(int page, int size) {
+                return PageRequest.of(Math.max(page, 0), Math.max(size, 1));
+        }
+
+        private Pageable normalizePageable(Pageable pageable) {
+                if (pageable == null || pageable.isUnpaged()) {
+                        return PageRequest.of(0, 20);
+                }
+
+                return PageRequest.of(
+                                Math.max(pageable.getPageNumber(), 0),
+                                Math.min(Math.max(pageable.getPageSize(), 1), MAX_USER_SEARCH_PAGE_SIZE),
+                                pageable.getSort());
         }
 
         private List<RankedUserSearchHit> rerankHits(
@@ -436,7 +467,10 @@ public class UserSearchServiceImpl implements UserSearchService {
                                 userIndex,
                                 context,
                                 recentInteractionScoreByUserId.getOrDefault(userIndex.getId(), 0.0));
-                double finalScore = rankingStrategy.calculateFinalScore(hit.getScore(), rankingContext, currentUserId);
+                UserSearchScoreBreakdown scoreBreakdown = rankingStrategy.calculateScoreBreakdown(
+                                hit.getScore(),
+                                rankingContext,
+                                currentUserId);
                 UserSearchRelationshipLabel relationshipLabel = rankingStrategy.resolveRelationshipLabel(
                                 rankingContext,
                                 currentUserId);
@@ -446,7 +480,8 @@ public class UserSearchServiceImpl implements UserSearchService {
                                 context,
                                 relationshipLabel,
                                 hit.getScore(),
-                                finalScore,
+                                scoreBreakdown,
+                                scoreBreakdown.finalScore(),
                                 userIndex.getCreatedAt()));
         }
 
@@ -480,11 +515,31 @@ public class UserSearchServiceImpl implements UserSearchService {
                 return (int) Math.ceil((double) totalItems / pageSize);
         }
 
+        private void ensureDebugAllowed() {
+                if (securityUtil.hasRole(Role.ADMIN.name()) || isNonProductionProfile()) {
+                        return;
+                }
+
+                throw new AppException(ErrorCode.AUTH_UNAUTHORIZED);
+        }
+
+        private boolean isNonProductionProfile() {
+                for (String profile : environment.getActiveProfiles()) {
+                        if ("dev".equalsIgnoreCase(profile)
+                                        || "local".equalsIgnoreCase(profile)
+                                        || "test".equalsIgnoreCase(profile)) {
+                                return true;
+                        }
+                }
+                return false;
+        }
+
         private record RankedUserSearchHit(
                 UserIndex userIndex,
                 UserSearchContextResponse context,
                 UserSearchRelationshipLabel relationshipLabel,
                 double elasticsearchScore,
+                UserSearchScoreBreakdown scoreBreakdown,
                 double finalScore,
                 LocalDateTime createdAt) {
         }
