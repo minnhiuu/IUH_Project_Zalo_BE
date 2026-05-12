@@ -24,6 +24,8 @@ public class UserSearchRankingStrategy {
     public static final int SHARED_GROUP_CAP = 10;
     public static final double CONTACT_SCORE_WEIGHT = 50.0;
     public static final double CONTACT_SCORE_CAP = 5.0;
+    public static final double RECENT_INTERACTION_WEIGHT = 40.0;
+    public static final double RECENT_INTERACTION_CAP = 5.0;
 
     private static final String ACCEPTED = "ACCEPTED";
     private static final String PENDING = "PENDING";
@@ -35,7 +37,8 @@ public class UserSearchRankingStrategy {
                 + normalizedElasticsearchScore(elasticsearchScore)
                 + relationshipBoost(safeContext, currentUserId)
                 + graphBoost(safeContext)
-                + contactBoost(safeContext);
+                + contactBoost(safeContext)
+                + recentInteractionBoost(safeContext);
     }
 
     public UserSearchRelationshipLabel resolveRelationshipLabel(UserSearchRankingContext context, String currentUserId) {
@@ -109,6 +112,11 @@ public class UserSearchRankingStrategy {
 
         double cappedScore = Math.min(Math.max(context.contactScore(), 0.0), CONTACT_SCORE_CAP);
         return cappedScore * CONTACT_SCORE_WEIGHT;
+    }
+
+    private double recentInteractionBoost(UserSearchRankingContext context) {
+        double cappedScore = Math.min(Math.max(context.recentInteractionScore(), 0.0), RECENT_INTERACTION_CAP);
+        return cappedScore * RECENT_INTERACTION_WEIGHT;
     }
 
     private boolean isAccepted(String status) {
