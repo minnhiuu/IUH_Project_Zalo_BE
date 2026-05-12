@@ -3,12 +3,8 @@ package com.bondhub.searchservice.service.index.user;
 import co.elastic.clients.elasticsearch._types.query_dsl.Query;
 import co.elastic.clients.elasticsearch._types.query_dsl.TextQueryType;
 import com.bondhub.common.dto.ApiResponse;
-import com.bondhub.common.dto.client.messageservice.RecentChatInteractionRequest;
-import com.bondhub.common.dto.client.messageservice.RecentChatInteractionResponse;
 import com.bondhub.common.dto.client.friendservice.UserSearchContextRequest;
 import com.bondhub.common.dto.client.friendservice.UserSearchContextResponse;
-import com.bondhub.common.dto.client.socialfeedservice.RecentAuthorInteractionRequest;
-import com.bondhub.common.dto.client.socialfeedservice.RecentAuthorInteractionResponse;
 import com.bondhub.common.utils.PhoneUtil;
 import com.bondhub.common.dto.PageResponse;
 import com.bondhub.common.dto.client.userservice.user.response.UserSummaryResponse;
@@ -17,11 +13,11 @@ import com.bondhub.common.utils.LocalizationUtil;
 import com.bondhub.common.utils.S3UtilV2;
 import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.searchservice.client.FriendServiceClient;
-import com.bondhub.searchservice.client.MessageServiceClient;
-import com.bondhub.searchservice.client.SocialFeedServiceClient;
 import com.bondhub.searchservice.config.ElasticsearchProperties;
 import com.bondhub.searchservice.dto.response.UserSearchResponse;
 import com.bondhub.searchservice.model.elasticsearch.UserIndex;
+import com.bondhub.searchservice.model.mongodb.UserInteractionFeature;
+import com.bondhub.searchservice.repository.mongodb.UserInteractionFeatureRepository;
 import com.bondhub.searchservice.service.index.user.ranking.UserSearchRankingContext;
 import com.bondhub.searchservice.service.index.user.ranking.UserSearchRankingStrategy;
 import com.bondhub.searchservice.service.index.user.ranking.UserSearchRelationshipLabel;
@@ -60,8 +56,7 @@ public class UserSearchServiceImpl implements UserSearchService {
         ElasticsearchProperties esProperties;
         S3UtilV2 s3UtilV2;
         FriendServiceClient friendServiceClient;
-        MessageServiceClient messageServiceClient;
-        SocialFeedServiceClient socialFeedServiceClient;
+        UserInteractionFeatureRepository userInteractionFeatureRepository;
         UserSearchRankingStrategy rankingStrategy;
         LocalizationUtil localizationUtil;
 
@@ -187,6 +182,7 @@ public class UserSearchServiceImpl implements UserSearchService {
 
                 ContextFetchResult contextFetchResult = fetchUserSearchContext(hits.getSearchHits());
                 RecentInteractionFetchResult recentInteractionFetchResult = fetchRecentInteractionScores(
+                                currentUserId,
                                 extractUserIds(hits.getSearchHits()));
                 List<RankedUserSearchHit> rankedHits = rerankHits(
                                 hits.getSearchHits(),
@@ -380,74 +376,27 @@ public class UserSearchServiceImpl implements UserSearchService {
                 }
         }
 
-        private RecentInteractionFetchResult fetchRecentInteractionScores(List<String> userIds) {
+        private RecentInteractionFetchResult fetchRecentInteractionScores(String currentUserId, List<String> userIds) {
                 long startedAt = System.nanoTime();
-                if (userIds == null || userIds.isEmpty()) {
+                if (!StringUtils.hasText(currentUserId) || userIds == null || userIds.isEmpty()) {
                         return new RecentInteractionFetchResult(Collections.emptyMap(), 0, elapsedMs(startedAt), false);
                 }
 
-                FetchScoreResult socialFeedScores = fetchSocialFeedInteractionScores(userIds);
-                FetchScoreResult chatScores = fetchChatInteractionScores(userIds);
-
-                Map<String, Double> mergedScores = userIds.stream()
-                                .collect(Collectors.toMap(
-                                                Function.identity(),
-                                                userId -> Math.max(
-                                                                chatScores.scoreByUserId().getOrDefault(userId, 0.0),
-                                                                socialFeedScores.scoreByUserId().getOrDefault(userId, 0.0))));
-
-                return new RecentInteractionFetchResult(
-                                mergedScores,
-                                userIds.size(),
-                                elapsedMs(startedAt),
-                                socialFeedScores.fallback() || chatScores.fallback());
-        }
-
-        private FetchScoreResult fetchSocialFeedInteractionScores(List<String> userIds) {
                 try {
-                        ApiResponse<List<RecentAuthorInteractionResponse>> response =
-                                        socialFeedServiceClient.getRecentAuthorInteractions(
-                                                        new RecentAuthorInteractionRequest(userIds));
-
-                        if (response == null || response.data() == null) {
-                                return new FetchScoreResult(Collections.emptyMap(), false);
-                        }
-
-                        Map<String, Double> scores = response.data().stream()
-                                        .filter(item -> StringUtils.hasText(item.userId()))
+                        Map<String, Double> scores = userInteractionFeatureRepository
+                                        .findByUserIdAndTargetUserIdIn(currentUserId, userIds)
+                                        .stream()
+                                        .filter(feature -> StringUtils.hasText(feature.getTargetUserId()))
                                         .collect(Collectors.toMap(
-                                                        RecentAuthorInteractionResponse::userId,
-                                                        RecentAuthorInteractionResponse::socialInteractionScore,
+                                                        UserInteractionFeature::getTargetUserId,
+                                                        UserInteractionFeature::getRecentInteractionScore,
                                                         Math::max));
-                        return new FetchScoreResult(scores, false);
+                        return new RecentInteractionFetchResult(scores, userIds.size(), elapsedMs(startedAt), false);
                 } catch (Exception e) {
-                        log.warn("User search social-feed recent interaction fallback targetCount={}, reason={}",
-                                        userIds.size(), e.getMessage());
-                        return new FetchScoreResult(Collections.emptyMap(), true);
-                }
-        }
-
-        private FetchScoreResult fetchChatInteractionScores(List<String> userIds) {
-                try {
-                        ApiResponse<List<RecentChatInteractionResponse>> response =
-                                        messageServiceClient.getRecentChatInteractions(
-                                                        new RecentChatInteractionRequest(userIds));
-
-                        if (response == null || response.data() == null) {
-                                return new FetchScoreResult(Collections.emptyMap(), false);
-                        }
-
-                        Map<String, Double> scores = response.data().stream()
-                                        .filter(item -> StringUtils.hasText(item.userId()))
-                                        .collect(Collectors.toMap(
-                                                        RecentChatInteractionResponse::userId,
-                                                        RecentChatInteractionResponse::chatInteractionScore,
-                                                        Math::max));
-                        return new FetchScoreResult(scores, false);
-                } catch (Exception e) {
-                        log.warn("User search message recent interaction fallback targetCount={}, reason={}",
-                                        userIds.size(), e.getMessage());
-                        return new FetchScoreResult(Collections.emptyMap(), true);
+                        long latencyMs = elapsedMs(startedAt);
+                        log.warn("User search precomputed recent interaction fallback targetCount={}, latencyMs={}, reason={}",
+                                        userIds.size(), latencyMs, e.getMessage());
+                        return new RecentInteractionFetchResult(Collections.emptyMap(), userIds.size(), latencyMs, true);
                 }
         }
 
@@ -551,11 +500,6 @@ public class UserSearchServiceImpl implements UserSearchService {
                 Map<String, Double> scoreByUserId,
                 int fetchSize,
                 long latencyMs,
-                boolean fallback) {
-        }
-
-        private record FetchScoreResult(
-                Map<String, Double> scoreByUserId,
                 boolean fallback) {
         }
 }
