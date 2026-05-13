@@ -53,6 +53,9 @@ public class RecentSearchServiceImpl implements RecentSearchService {
 
             RecentSearch newItem = recentSearchMapper.toModel(request);
             newItem.setUserId(userId);
+            if (request.type() == SearchType.KEYWORD) {
+                newItem.setTargetId(null);
+            }
             newItem.setTimestamp(System.currentTimeMillis());
             recentSearchRepository.save(newItem);
 

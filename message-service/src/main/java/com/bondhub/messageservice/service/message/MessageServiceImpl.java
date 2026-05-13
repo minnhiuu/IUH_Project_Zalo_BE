@@ -588,8 +588,8 @@ public class MessageServiceImpl implements MessageService {
                         if (senderRole == MemberRole.OWNER) {
                             throw new AppException(ErrorCode.CHAT_ADMIN_CANNOT_DELETE_OWNER_MESSAGE);
                         }
-                    });
-        }
+            });
+    }
 
         message.setStatus(MessageStatus.DELETED_BY_ADMIN);
         message.setDeletedByAdminId(currentUserId);

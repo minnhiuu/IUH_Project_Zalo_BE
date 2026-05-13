@@ -5,6 +5,7 @@ import com.bondhub.common.dto.PageResponse;
 import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.common.dto.client.messageservice.ConversationSearchResponse;
 import com.bondhub.searchservice.dto.request.MessageSearchRequest;
+import com.bondhub.searchservice.dto.response.MessageSearchGroupResponse;
 import com.bondhub.searchservice.dto.response.MessageSearchResponse;
 import com.bondhub.searchservice.enums.MessageSearchSection;
 import com.bondhub.searchservice.service.index.message.MessageSearchService;
@@ -41,6 +42,16 @@ public class MessageSearchController {
         Pageable pageable = PageRequest.of(page, size);
         return ResponseEntity.ok(ApiResponse.success(
                 messageSearchService.searchMessages(securityUtil.getCurrentUserId(), request, section, pageable)));
+    }
+
+    @GetMapping("/groups")
+    public ResponseEntity<ApiResponse<PageResponse<List<MessageSearchGroupResponse>>>> searchMessageGroups(
+            @Valid @ModelAttribute MessageSearchRequest request,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        Pageable pageable = PageRequest.of(page, size);
+        return ResponseEntity.ok(ApiResponse.success(
+                messageSearchService.searchMessageGroups(securityUtil.getCurrentUserId(), request, pageable)));
     }
 
     @GetMapping("/senders")

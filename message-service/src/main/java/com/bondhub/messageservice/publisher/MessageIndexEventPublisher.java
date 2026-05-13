@@ -60,6 +60,7 @@ public class MessageIndexEventPublisher {
         String resolvedLinkGroupName = resolveLinkGroupName(linkPreview);
         String resolvedLinkUrl = resolveLinkUrl(message, linkPreview);
         ConversationIndexMetadata conversationMetadata = resolveConversationMetadata(message.getConversationId());
+        ChatUser sender = resolveSender(message);
 
         MessageIndexRequestedEvent event = MessageIndexRequestedEvent.builder()
                 .messageId(message.getId())
@@ -71,8 +72,8 @@ public class MessageIndexEventPublisher {
                 .conversationAvatar(conversationMetadata.conversationAvatar())
                 .group(conversationMetadata.group())
                 .senderId(message.getSenderId())
-                .senderName(message.getSenderName())
-                .senderAvatar(message.getSenderAvatar())
+                .senderName(firstNonBlank(message.getSenderName(), sender != null ? sender.getFullName() : null))
+                .senderAvatar(firstNonBlank(message.getSenderAvatar(), sender != null ? sender.getAvatar() : null))
                 .content(message.getContent())
                 .linkGroupName(resolvedLinkGroupName)
                 .linkUrl(resolvedLinkUrl)
@@ -98,6 +99,16 @@ public class MessageIndexEventPublisher {
         );
 
         log.info("Published MESSAGE_INDEX_REQUESTED: messageId={}", message.getId());
+    }
+
+    private ChatUser resolveSender(Message message) {
+        if (message == null || !hasText(message.getSenderId())) {
+            return null;
+        }
+        if (hasText(message.getSenderName()) && hasText(message.getSenderAvatar())) {
+            return null;
+        }
+        return chatUserRepository.findById(message.getSenderId()).orElse(null);
     }
 
     private AttachmentInfo resolvePrimaryAttachment(Message message) {
@@ -241,6 +252,15 @@ public class MessageIndexEventPublisher {
 
         Matcher matcher = JOIN_LINK_PATTERN.matcher(linkPreview.getUrl().trim());
         return matcher.matches() ? matcher.group(1) : null;
+    }
+
+    private String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (hasText(value)) {
+                return value;
+            }
+        }
+        return null;
     }
 
     private boolean hasText(String value) {

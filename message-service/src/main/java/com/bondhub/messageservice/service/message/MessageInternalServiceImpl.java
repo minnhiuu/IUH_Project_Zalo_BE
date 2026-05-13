@@ -162,6 +162,7 @@ public class MessageInternalServiceImpl implements MessageInternalService {
         }
 
         String linkUrl = hasLink ? message.getLinkPreview().getUrl() : null;
+        ChatUser sender = resolveSender(message);
 
         return MessageSyncResponse.builder()
                 .id(message.getId())
@@ -173,8 +174,8 @@ public class MessageInternalServiceImpl implements MessageInternalService {
                 .conversationAvatar(conversationMetadata.conversationAvatar())
                 .group(conversationMetadata.group())
                 .senderId(message.getSenderId())
-                .senderName(message.getSenderName())
-                .senderAvatar(message.getSenderAvatar())
+                .senderName(firstNonBlank(message.getSenderName(), sender != null ? sender.getFullName() : null))
+                .senderAvatar(firstNonBlank(message.getSenderAvatar(), sender != null ? sender.getAvatar() : null))
                 .content(message.getContent())
                 .type(message.getType())
                 .status(message.getStatus())
@@ -190,6 +191,16 @@ public class MessageInternalServiceImpl implements MessageInternalService {
                 .deletedBy(message.getDeletedBy())
                 .visibleTo(message.getVisibleTo())
                 .build();
+    }
+
+    private ChatUser resolveSender(Message message) {
+        if (message == null || !hasText(message.getSenderId())) {
+            return null;
+        }
+        if (hasText(message.getSenderName()) && hasText(message.getSenderAvatar())) {
+            return null;
+        }
+        return chatUserRepository.findById(message.getSenderId()).orElse(null);
     }
 
     private ConversationIndexMetadata resolveConversationMetadata(String conversationId) {
@@ -255,6 +266,19 @@ public class MessageInternalServiceImpl implements MessageInternalService {
         }
 
         return parts.isEmpty() ? null : String.join(" ", parts);
+    }
+
+    private String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (hasText(value)) {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 
     private record ConversationIndexMetadata(
