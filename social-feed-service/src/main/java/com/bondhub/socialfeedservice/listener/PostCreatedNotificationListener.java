@@ -2,6 +2,7 @@ package com.bondhub.socialfeedservice.listener;
 
 import com.bondhub.common.enums.NotificationType;
 import com.bondhub.common.event.notification.RawNotificationEvent;
+import com.bondhub.common.event.notification.payload.PostPublishedPayload;
 import com.bondhub.common.event.socialfeed.PostEvent;
 import com.bondhub.common.publisher.RawNotificationEventPublisher;
 import com.bondhub.socialfeedservice.client.FriendServiceClient;
@@ -75,11 +76,10 @@ public class PostCreatedNotificationListener {
                 }
 
                 try {
-                    Map<String, Object> payload = new HashMap<>();
-                    payload.put("postId", event.postId());
-                    payload.put("groupId", event.groupId());
-                    payload.put("postType", event.postType());
-                    payload.put("visibility", event.visibility());
+                    Map<String, Object> payload = Map.of("postId", event.postId(),
+                                    "groupId", event.groupId(),
+                                    "postType", event.postType(),
+                                    "visibility", event.visibility());
 
                     RawNotificationEvent notificationEvent = RawNotificationEvent.builder()
                             .recipientId(recipientId)

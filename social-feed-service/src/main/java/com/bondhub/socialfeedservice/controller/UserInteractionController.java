@@ -3,6 +3,7 @@ package com.bondhub.socialfeedservice.controller;
 import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.common.dto.PageResponse;
 import com.bondhub.socialfeedservice.dto.response.interaction.UserInteractionResponse;
+import com.bondhub.socialfeedservice.dto.response.interaction.ViewerResponse;
 import com.bondhub.socialfeedservice.service.userinteraction.UserInteractionService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -38,6 +39,15 @@ public class UserInteractionController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         return ResponseEntity.ok(ApiResponse.success(userInteractionService.getInteractionsByPost(postId, page, size)));
+    }
+
+    @GetMapping("/posts/{postId}/viewers")
+    @Operation(summary = "Get viewers of a post")
+    public ResponseEntity<ApiResponse<PageResponse<List<ViewerResponse>>>> getViewersByPost(
+            @PathVariable String postId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(ApiResponse.success(userInteractionService.getViewersByPost(postId, page, size)));
     }
 
     @PostMapping("/posts/{postId}/view")

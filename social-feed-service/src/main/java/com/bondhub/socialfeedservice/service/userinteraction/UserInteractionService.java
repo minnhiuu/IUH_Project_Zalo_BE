@@ -11,6 +11,8 @@ public interface UserInteractionService {
 
     PageResponse<List<UserInteractionResponse>> getInteractionsByPost(String postId, int page, int size);
 
+    PageResponse<List<com.bondhub.socialfeedservice.dto.response.interaction.ViewerResponse>> getViewersByPost(String postId, int page, int size);
+
     List<UserInteractionResponse> getNewestInteractionsByUser(String userId, int limit);
 
     void recordView(String postId);

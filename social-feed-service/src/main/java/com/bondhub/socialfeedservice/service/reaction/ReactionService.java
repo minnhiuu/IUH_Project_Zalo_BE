@@ -17,4 +17,6 @@ public interface ReactionService {
     List<ReactionResponse> searchReactions(ReactionTargetType targetType, ReactionType reactionType);
 
     ReactionStatsResponse getReactionStats(String targetId, ReactionTargetType targetType);
+
+    void simulateBatchLikes(String postId, int count);
 }

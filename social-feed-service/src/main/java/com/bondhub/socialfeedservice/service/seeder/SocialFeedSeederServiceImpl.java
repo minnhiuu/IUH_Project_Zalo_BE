@@ -106,14 +106,18 @@ public class SocialFeedSeederServiceImpl implements SocialFeedSeederService {
     };
 
     static final String[] VIDEO_URLS = {
-            "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
-            "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
-            "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4",
-            "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4",
-            "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerMeltdowns.mp4",
-            "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/SubaruOutbackOnStreetAndDirt.mp4",
-            "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/WeAreGoingOnBullrun.mp4",
-            "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/VolkswagenGTIReview.mp4",
+            "https://raw.githubusercontent.com/intel-iot-devkit/sample-videos/master/person-bicycle-car-detection.mp4",
+            "https://raw.githubusercontent.com/intel-iot-devkit/sample-videos/master/bottle-detection.mp4",
+            "https://raw.githubusercontent.com/intel-iot-devkit/sample-videos/master/car-detection.mp4",
+            "https://raw.githubusercontent.com/intel-iot-devkit/sample-videos/master/head-pose-face-detection-female-and-male.mp4",
+            "https://raw.githubusercontent.com/intel-iot-devkit/sample-videos/master/face-demographics-walking-and-pause.mp4",
+            "https://raw.githubusercontent.com/intel-iot-devkit/sample-videos/master/classroom.mp4",
+            "https://www.w3schools.com/html/mov_bbb.mp4",
+            "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
+            "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/friday.mp4",
+            "https://raw.githubusercontent.com/intel-iot-devkit/sample-videos/master/person-bicycle-car-detection.mp4",
+            "https://raw.githubusercontent.com/intel-iot-devkit/sample-videos/master/bottle-detection.mp4",
+            "https://raw.githubusercontent.com/intel-iot-devkit/sample-videos/master/car-detection.mp4",
     };
 
     // ── Comment pool ─────────────────────────────────────────────────────────
@@ -493,6 +497,8 @@ public class SocialFeedSeederServiceImpl implements SocialFeedSeederService {
             return buildSummary(0, 0, 0, 0, 0, "No user IDs available in user-service");
         }
 
+        purgeSocialFeedData();
+
         Random random = new Random();
         ReactionType[] reactionTypes = ReactionType.values();
 
@@ -528,6 +534,34 @@ public class SocialFeedSeederServiceImpl implements SocialFeedSeederService {
         return buildSummary(allSavedPosts.size(), engagementCounts[0], engagementCounts[1], engagementCounts[2], interestsPublished, message);
     }
 
+    private void purgeSocialFeedData() {
+        long postCount = postRepository.count();
+        long commentCount = commentRepository.count();
+        long reactionCount = reactionRepository.count();
+        long interactionCount = userInteractionRepository.count();
+        long hashtagCount = hashtagRepository.count();
+
+        long total = postCount + commentCount + reactionCount + interactionCount + hashtagCount;
+        if (total == 0) {
+            log.info("🧹 No existing social-feed data found. Starting clean seed.");
+            return;
+        }
+
+        log.info(
+                "🧹 Clearing social-feed data before reseed: posts={}, comments={}, reactions={}, interactions={}, hashtags={}",
+                postCount, commentCount, reactionCount, interactionCount, hashtagCount
+        );
+
+        // Delete child collections first, then posts.
+        userInteractionRepository.deleteAll();
+        reactionRepository.deleteAll();
+        commentRepository.deleteAll();
+        hashtagRepository.deleteAll();
+        postRepository.deleteAll();
+
+        log.info("✅ Social-feed data cleared. Proceeding with reseed.");
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // Step helpers
     // ─────────────────────────────────────────────────────────────────────────
@@ -545,7 +579,7 @@ public class SocialFeedSeederServiceImpl implements SocialFeedSeederService {
                 String userId = accountIdToUserId.get(account.id());
                 if (userId != null && !userId.isBlank()) {
                     try {
-                        postRecommendationClient.revectorizeUser(userId);
+                        postRecommendationClient.seedUserInterests(userId, new UserInterestSeedUpdateRequest(interests));
                     } catch (Exception ex) {
                         log.warn("⚠️  Re-vectorization failed for userId={}: {}", userId, ex.getMessage());
                     }
