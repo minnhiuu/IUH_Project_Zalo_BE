@@ -3,6 +3,7 @@ package com.bondhub.searchservice.service.index.message;
 import com.bondhub.common.dto.PageResponse;
 import com.bondhub.common.dto.client.messageservice.ConversationSearchResponse;
 import com.bondhub.searchservice.dto.request.MessageSearchRequest;
+import com.bondhub.searchservice.dto.response.MessageNavigationResponse;
 import com.bondhub.searchservice.dto.response.MessageSearchGroupResponse;
 import com.bondhub.searchservice.dto.response.MessageSearchResponse;
 import com.bondhub.searchservice.enums.MessageSearchSection;
@@ -31,4 +32,13 @@ public interface MessageSearchService {
     List<ConversationSearchResponse> searchMessageSenders(
             String userId,
             String keyword);
+
+    MessageNavigationResponse navigateSearchResult(
+            String userId,
+            String conversationId,
+            String keyword,
+            String senderId,
+            String currentMessageId,
+            String direction,
+            MessageSearchSection section);
 }

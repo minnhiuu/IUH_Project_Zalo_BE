@@ -20,6 +20,7 @@ import com.bondhub.common.utils.S3UtilV2;
 import com.bondhub.searchservice.client.ConversationMemberClient;
 import com.bondhub.searchservice.config.ElasticsearchProperties;
 import com.bondhub.searchservice.dto.request.MessageSearchRequest;
+import com.bondhub.searchservice.dto.response.MessageNavigationResponse;
 import com.bondhub.searchservice.dto.response.MessageSearchGroupResponse;
 import com.bondhub.searchservice.dto.response.MessageSearchResponse;
 import com.bondhub.searchservice.enums.MessageSearchSection;
@@ -82,7 +83,6 @@ public class MessageSearchServiceImpl implements MessageSearchService {
             "Bấm vào đây để tham gia nhóm trên Zalo zalo.me"
     );
     private static final Pattern URL_PATTERN = Pattern.compile("https?://\\S+");
-
     ElasticsearchOperations esOperations;
     ElasticsearchProperties esProperties;
     ConversationMemberClient conversationMemberClient;
@@ -462,15 +462,14 @@ public class MessageSearchServiceImpl implements MessageSearchService {
                         getString(source, "conversationSearchText"),
                         joinParticipantNames(participantNames))
                 : firstNonBlank(
-                        getString(source, "conversationName"),
-                        getString(source, "conversationSearchText"),
                         getValueAt(participantNames, peerIndex),
+                        getString(source, "conversationName"),
                         getString(source, "senderName"));
         String avatar = isGroup
                 ? getString(source, "conversationAvatar")
                 : firstNonBlank(
-                        getString(source, "conversationAvatar"),
                         getValueAt(participantAvatars, peerIndex),
+                        getString(source, "conversationAvatar"),
                         getString(source, "senderAvatar"));
 
         return MessageSearchGroupResponse.builder()
@@ -1155,4 +1154,204 @@ public class MessageSearchServiceImpl implements MessageSearchService {
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
     }
+
+    @Override
+    public MessageNavigationResponse navigateSearchResult(
+            String userId,
+            String conversationId,
+            String keyword,
+            String senderId,
+            String currentMessageId,
+            String direction,
+            MessageSearchSection section) {
+
+        log.info("navigateSearchResult start userId={}, conversationId={}, keyword={}, senderId={}, currentMessageId={}, direction={}, section={}",
+                userId, conversationId, keyword, senderId, currentMessageId, direction, section);
+
+        if (!hasText(keyword) && !hasText(senderId)) {
+            throw new AppException(ErrorCode.VALIDATION_ERROR);
+        }
+        if (!hasText(conversationId)) {
+            throw new AppException(ErrorCode.VALIDATION_ERROR);
+        }
+
+        ConversationMemberLookupResponse membership = resolveConversationMembership(conversationId, userId);
+        Instant joinedAt = membership != null ? membership.joinedAt() : null;
+        MessageSearchRequest baseRequest = new MessageSearchRequest(
+                keyword, conversationId, senderId, null, null, null, null, null);
+        Query baseQuery = Objects.requireNonNull(
+                buildQuery(userId, baseRequest, joinedAt, section, Pageable.unpaged()).getQuery());
+        long totalMatches = countNavigationMatches(baseQuery);
+        log.info("navigateSearchResult matches total={}, conversationId={}, keyword={}, senderId={}",
+                totalMatches, conversationId, keyword, senderId);
+
+        if (totalMatches == 0) {
+            throw new AppException(ErrorCode.MESSAGE_NOT_FOUND);
+        }
+
+        boolean isCurrent = "CURRENT".equalsIgnoreCase(direction);
+        boolean isNext = "NEXT".equalsIgnoreCase(direction);
+        SearchHit<MessageIndex> targetHit = null;
+
+        if (hasText(currentMessageId)) {
+            MessageIndex currentMessage = esOperations.get(
+                    currentMessageId,
+                    MessageIndex.class,
+                    IndexCoordinates.of(esProperties.getMessageAlias()));
+
+            if (currentMessage != null && currentMessage.getCreatedAt() != null) {
+                long currentMillis = currentMessage.getCreatedAt().toEpochMilli();
+                if (isCurrent) {
+                    targetHit = findNavigationTargetById(userId, conversationId, keyword, senderId, joinedAt, section, currentMessageId);
+                } else {
+                    targetHit = findNavigationTarget(
+                            userId,
+                            conversationId,
+                            keyword,
+                            senderId,
+                            joinedAt,
+                            section,
+                            isNext ? currentMillis + 1 : null,
+                            isNext ? null : currentMillis - 1,
+                            isNext ? SortOrder.Asc : SortOrder.Desc);
+                }
+            }
+        }
+
+        if (targetHit == null) {
+            targetHit = findNavigationTarget(
+                    userId,
+                    conversationId,
+                    keyword,
+                    senderId,
+                    joinedAt,
+                    section,
+                    null,
+                    null,
+                    isNext || isCurrent ? SortOrder.Desc : SortOrder.Asc);
+        }
+
+        if (targetHit == null) {
+            throw new AppException(ErrorCode.MESSAGE_NOT_FOUND);
+        }
+
+        MessageIndex targetMessage = targetHit.getContent();
+        log.info("navigateSearchResult target messageId={}, createdAt={}, senderId={}",
+                targetMessage.getId(), targetMessage.getCreatedAt(), targetMessage.getSenderId());
+        String rawHighlights = resolveHighlight(targetHit, targetMessage, keyword);
+        String displayContent = resolveDisplayContent(targetMessage);
+        String displayHighlights = resolveDisplayHighlights(targetMessage, displayContent, rawHighlights, keyword);
+        int displayIndex = countDisplayIndex(
+                userId,
+                conversationId,
+                keyword,
+                senderId,
+                joinedAt,
+                section,
+                targetMessage.getCreatedAt());
+
+        return MessageNavigationResponse.builder()
+                .messageId(targetMessage.getId())
+                .conversationId(targetMessage.getConversationId())
+                .index(displayIndex)
+                .total((int) Math.min(totalMatches, Integer.MAX_VALUE))
+                .createdAt(targetMessage.getCreatedAt())
+                .displayHighlights(displayHighlights)
+                .direction(direction != null ? direction.toUpperCase() : "NEXT")
+                .build();
+    }
+
+    private SearchHit<MessageIndex> findNavigationTargetById(
+            String userId,
+            String conversationId,
+            String keyword,
+            String senderId,
+            Instant joinedAt,
+            MessageSearchSection section,
+            String messageId) {
+        MessageSearchRequest request = new MessageSearchRequest(
+                keyword, conversationId, senderId, null, null, null, null, null);
+        Query baseQuery = Objects.requireNonNull(
+                buildQuery(userId, request, joinedAt, section, PageRequest.of(0, 1)).getQuery());
+        Query query = Query.of(q -> q.bool(b -> b
+                .must(baseQuery)
+                .filter(f -> f.term(t -> t.field("id").value(messageId)))));
+
+        NativeQuery navigationQuery = NativeQuery.builder()
+                .withQuery(query)
+                .withPageable(PageRequest.of(0, 1))
+                .withHighlightQuery(buildHighlightQuery())
+                .build();
+
+        SearchHits<MessageIndex> hits = esOperations.search(
+                navigationQuery,
+                MessageIndex.class,
+                IndexCoordinates.of(esProperties.getMessageAlias()));
+
+        return hits.hasSearchHits() ? hits.getSearchHit(0) : null;
+    }
+
+    private SearchHit<MessageIndex> findNavigationTarget(
+            String userId,
+            String conversationId,
+            String keyword,
+            String senderId,
+            Instant joinedAt,
+            MessageSearchSection section,
+            Long from,
+            Long to,
+            SortOrder sortOrder) {
+        MessageSearchRequest request = new MessageSearchRequest(
+                keyword, conversationId, senderId, from, to, null, null, null);
+        NativeQuery query = buildQuery(userId, request, joinedAt, section, PageRequest.of(0, 1));
+        NativeQuery navigationQuery = NativeQuery.builder()
+                .withQuery(query.getQuery())
+                .withPageable(PageRequest.of(0, 1))
+                .withSort(s -> s.field(f -> f.field("createdAt").order(sortOrder)))
+                .withHighlightQuery(buildHighlightQuery())
+                .build();
+
+        SearchHits<MessageIndex> hits = esOperations.search(
+                navigationQuery,
+                MessageIndex.class,
+                IndexCoordinates.of(esProperties.getMessageAlias()));
+
+        return hits.hasSearchHits() ? hits.getSearchHit(0) : null;
+    }
+
+    private long countNavigationMatches(Query query) {
+        NativeQuery countQuery = NativeQuery.builder()
+                .withQuery(query)
+                .build();
+        return esOperations.count(countQuery, MessageIndex.class, IndexCoordinates.of(esProperties.getMessageAlias()));
+    }
+
+    private int countDisplayIndex(
+            String userId,
+            String conversationId,
+            String keyword,
+            String senderId,
+            Instant joinedAt,
+            MessageSearchSection section,
+            Instant targetCreatedAt) {
+        if (targetCreatedAt == null) {
+            return 1;
+        }
+
+        MessageSearchRequest request = new MessageSearchRequest(
+                keyword,
+                conversationId,
+                senderId,
+                null,
+                targetCreatedAt.toEpochMilli() - 1,
+                null,
+                null,
+                null);
+        Query indexQuery = Objects.requireNonNull(
+                buildQuery(userId, request, joinedAt, section, Pageable.unpaged()).getQuery());
+        long index = countNavigationMatches(indexQuery) + 1;
+        return (int) Math.max(1, Math.min(index, Integer.MAX_VALUE));
+    }
+
+
 }

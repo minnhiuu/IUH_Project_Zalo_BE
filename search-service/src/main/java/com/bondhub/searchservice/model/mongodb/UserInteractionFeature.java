@@ -8,6 +8,9 @@ import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.index.CompoundIndex;
 import org.springframework.data.mongodb.core.index.CompoundIndexes;
 import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.mapping.Field;
+import org.springframework.data.mongodb.core.mapping.FieldType;
+import org.springframework.data.mongodb.core.mapping.MongoId;
 
 import java.time.Instant;
 
@@ -22,11 +25,13 @@ import java.time.Instant;
 })
 public class UserInteractionFeature {
 
-    @Id
+    @MongoId(FieldType.OBJECT_ID)
     private String id;
 
+    @Field(targetType = FieldType.OBJECT_ID)
     private String userId;
 
+    @Field(targetType = FieldType.OBJECT_ID)
     private String targetUserId;
 
     private double chatScore;
