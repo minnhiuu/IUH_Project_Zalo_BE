@@ -1,6 +1,7 @@
 package com.bondhub.friendservice.service.friendship;
 
 import com.bondhub.common.dto.PageResponse;
+import com.bondhub.common.dto.client.userservice.user.response.UserSummaryResponse;
 import com.bondhub.friendservice.dto.request.FriendRequestSendRequest;
 import com.bondhub.friendservice.dto.response.*;
 import org.springframework.data.domain.Pageable;
@@ -31,6 +32,8 @@ public interface FriendshipService {
     MutualFriendsResponse getMutualFriends(String userId);
     
     Integer getMutualFriendsCount(String userId);
+
+    PageResponse<List<UserSummaryResponse>> getOnlineFriends(Pageable pageable);
 
     Set<String> getFriendIds(String userId);
 

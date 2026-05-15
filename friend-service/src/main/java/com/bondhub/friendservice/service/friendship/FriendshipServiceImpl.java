@@ -6,6 +6,7 @@ import com.bondhub.common.dto.client.userservice.user.response.UserSummaryRespon
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
 import com.bondhub.common.utils.SecurityUtil;
+import com.bondhub.friendservice.client.SocketServiceClient;
 import com.bondhub.friendservice.client.UserServiceClient;
 import com.bondhub.friendservice.dto.request.FriendRequestSendRequest;
 import com.bondhub.common.enums.NotificationType;
@@ -17,6 +18,7 @@ import com.bondhub.common.enums.FriendshipAction;
 import com.bondhub.common.event.friend.FriendshipChangedEvent;
 import com.bondhub.common.model.kafka.EventType;
 import com.bondhub.common.publisher.OutboxEventPublisher;
+import com.bondhub.friendservice.graph.dto.UserSearchGraphMetrics;
 import com.bondhub.friendservice.mapper.FriendShipMapper;
 import com.bondhub.friendservice.model.FriendShip;
 import com.bondhub.friendservice.model.enums.FriendStatus;
@@ -47,6 +49,7 @@ public class FriendshipServiceImpl implements FriendshipService {
     OutboxEventPublisher outboxEventPublisher;
     RawNotificationEventPublisher rawNotificationEventPublisher;
     GraphFriendService graphFriendService;
+    SocketServiceClient socketServiceClient;
 
     @Override
     @Transactional
@@ -416,6 +419,63 @@ public class FriendshipServiceImpl implements FriendshipService {
         String currentUserId = securityUtil.getCurrentUserId();
         log.info("Counting mutual friends between {} and {} (via Neo4j)", currentUserId, userId);
         return graphFriendService.getMutualFriendsCount(currentUserId, userId);
+    }
+
+    @Override
+    public PageResponse<List<UserSummaryResponse>> getOnlineFriends(Pageable pageable) {
+        String currentUserId = securityUtil.getCurrentUserId();
+        log.info("Fetching paginated online friends summaries for user {} with page: {}, size: {}", 
+                currentUserId, pageable.getPageNumber(), pageable.getPageSize());
+
+        // 1. Get all friend IDs from graph
+        List<String> allFriendIds = graphFriendService.getFriendIds(currentUserId);
+        if (allFriendIds.isEmpty()) return PageResponse.empty(pageable);
+
+        // 2. Check which ones are online via socket-service (batch)
+        List<String> onlineIds = socketServiceClient.getOnlineUsers(allFriendIds);
+        if (onlineIds.isEmpty()) return PageResponse.empty(pageable);
+
+        int totalOnline = onlineIds.size();
+        int start = (int) pageable.getOffset();
+        int end = Math.min(start + pageable.getPageSize(), totalOnline);
+
+        if (start >= totalOnline) {
+            return PageResponse.<List<UserSummaryResponse>>builder()
+                    .data(Collections.emptyList())
+                    .page(pageable.getPageNumber())
+                    .totalPages((int) Math.ceil((double) totalOnline / pageable.getPageSize()))
+                    .limit(pageable.getPageSize())
+                    .totalItems(totalOnline)
+                    .build();
+        }
+
+        List<String> paginatedOnlineIds = onlineIds.subList(start, end);
+
+        // 3. Fetch user summaries (batch)
+        Map<String, UserSummaryResponse> userMap = fetchUserSummariesInBatch(paginatedOnlineIds);
+        
+        List<UserSummaryResponse> friends = paginatedOnlineIds.stream()
+                .map(id -> {
+                    UserSummaryResponse user = userMap.get(id);
+                    if (user == null) return null;
+                    
+                    return UserSummaryResponse.builder()
+                            .id(id)
+                            .fullName(user.fullName())
+                            .avatar(user.avatar())
+                            .phoneNumber(user.phoneNumber())
+                            .build();
+                })
+                .filter(Objects::nonNull)
+                .toList();
+
+        return PageResponse.<List<com.bondhub.common.dto.client.userservice.user.response.UserSummaryResponse>>builder()
+                .data(friends)
+                .page(pageable.getPageNumber())
+                .totalPages((int) Math.ceil((double) totalOnline / pageable.getPageSize()))
+                .limit(pageable.getPageSize())
+                .totalItems(totalOnline)
+                .build();
     }
 
     @Override
