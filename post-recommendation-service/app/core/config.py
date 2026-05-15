@@ -62,6 +62,7 @@ class Settings(BaseSettings):
 
     social_feed_service_url: str = "http://social-feed-service"
     friend_service_url: str = "http://friend-service"
+    user_service_url: str = "http://user-service"
     user_vector_alpha: float = 0.7
     user_vector_interaction_limit: int = 20
     user_vector_decay_half_life_days: float = 7.0

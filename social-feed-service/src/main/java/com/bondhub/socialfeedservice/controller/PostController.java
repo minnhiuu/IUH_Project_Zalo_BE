@@ -75,11 +75,11 @@ public class PostController {
 
     @GetMapping("/users/{userId}")
     @Operation(summary = "Get posts by user ID")
-    public ResponseEntity<ApiResponse<PageResponse<List<PostResponse>>>> getUserPosts(
+    public ResponseEntity<ApiResponse<PageResponse<List<PostResponse>>>> getPostsByUserId(
             @PathVariable String userId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(ApiResponse.success(postService.getUserPosts(userId, page, size)));
+        return ResponseEntity.ok(ApiResponse.success(postService.getPostsByUserId(userId, page, size)));
     }
 
     @PutMapping("/{postId}")

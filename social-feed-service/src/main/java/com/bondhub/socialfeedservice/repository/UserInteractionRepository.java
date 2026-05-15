@@ -16,12 +16,16 @@ public interface UserInteractionRepository extends MongoRepository<UserInteracti
 
     Page<UserInteraction> findByPostIdOrderByCreatedAtDesc(String postId, Pageable pageable);
 
+    Page<UserInteraction> findByPostIdAndInteractionTypeOrderByCreatedAtDesc(String postId, InteractionType interactionType, Pageable pageable);
+
     List<UserInteraction> findTopByUserIdOrderByCreatedAtDesc(String userId, Pageable pageable);
 
     List<UserInteraction> findByCreatedAtGreaterThanEqualOrderByCreatedAtDesc(Instant createdAt, Pageable pageable);
 
     Optional<UserInteraction> findByUserIdAndPostIdAndInteractionType(
             String userId, String postId, InteractionType interactionType);
+
+    List<UserInteraction> findByUserIdAndInteractionType(String userId, InteractionType interactionType);
 
     boolean existsByUserIdAndPostIdAndInteractionType(
             String userId, String postId, InteractionType interactionType);

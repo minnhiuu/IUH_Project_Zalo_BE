@@ -127,7 +127,7 @@ public class NotificationPersistenceServiceImpl implements NotificationPersisten
         persisted.setActorIds(finalActors);
 
         int actorCount = finalActors.size();
-        int othersCount = Math.max(0, actorCount - 1);
+        int othersCount = actorCount > 2 ? actorCount - 1 : 0;
 
         List<Map<String, Object>> payloads = event.getRawPayloads() != null ? event.getRawPayloads() : List.of();
         Map<String, Object> basePayload = !payloads.isEmpty() ? payloads.get(payloads.size() - 1) : Map.of();
