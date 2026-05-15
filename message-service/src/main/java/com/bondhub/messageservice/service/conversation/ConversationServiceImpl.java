@@ -4,6 +4,7 @@ import com.bondhub.common.utils.S3UtilV2;
 import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
+import com.bondhub.common.dto.client.userservice.user.response.UserSummaryResponse;
 import com.bondhub.messageservice.dto.response.*;
 import com.bondhub.messageservice.event.UserSyncEvent;
 import com.bondhub.messageservice.model.ChatUser;
@@ -169,6 +170,55 @@ public class ConversationServiceImpl implements ConversationService {
             String friendshipStatus = friendshipStatusMap.get(partnerId);
             return helper.buildConversationResponse(room, partner, currentUserId, userCache, baseUrl, viewerCanSee, friendshipStatus);
         });
+    }
+
+    @Override
+    public List<UserSummaryResponse> getQuickConversations(int size) {
+        String currentUserId = securityUtil.getCurrentUserId();
+        Pageable pageable = PageRequest.of(0, size, Sort.by(Sort.Direction.DESC, "lastMessage.timestamp"));
+        Page<Conversation> roomsPage = conversationRepository.findAllByMembersUserId(currentUserId, pageable);
+        
+        if (roomsPage.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        // Get only the partners from these conversations
+        Set<String> partnerIds = roomsPage.getContent().stream()
+                .map(room -> room.getMembers().stream()
+                        .filter(helper::isActiveMember)
+                        .map(ConversationMember::getUserId)
+                        .filter(uid -> !uid.equals(currentUserId))
+                        .findFirst()
+                        .orElse(null))
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        if (partnerIds.isEmpty()) return Collections.emptyList();
+
+        Map<String, ChatUser> userCache = chatUserRepository.findAllById(partnerIds).stream()
+                .collect(Collectors.toMap(ChatUser::getId, u -> u));
+
+        String baseUrl = s3UtilV2.getS3BaseUrl();
+
+        return partnerIds.stream()
+                .map(pid -> {
+                    ChatUser user = userCache.get(pid);
+                    if (user == null) {
+                        // Trigger sync if missing
+                        eventPublisher.publishEvent(new UserSyncEvent(pid));
+                        return com.bondhub.common.dto.client.userservice.user.response.UserSummaryResponse.builder()
+                                .id(pid)
+                                .fullName("Unknown User")
+                                .build();
+                    }
+                    return com.bondhub.common.dto.client.userservice.user.response.UserSummaryResponse.builder()
+                            .id(pid)
+                            .fullName(user.getFullName())
+                            .avatar(user.getAvatar() != null ? baseUrl + user.getAvatar() : null)
+                            .phoneNumber(user.getPhoneNumber())
+                            .build();
+                })
+                .toList();
     }
 
     // ─────────────────────────── Đánh dấu đã đọc ───────────────────────────

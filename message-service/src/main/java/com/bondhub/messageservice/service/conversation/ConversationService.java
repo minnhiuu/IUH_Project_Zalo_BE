@@ -1,6 +1,7 @@
 package com.bondhub.messageservice.service.conversation;
 
 import com.bondhub.common.dto.PageResponse;
+import com.bondhub.common.dto.client.userservice.user.response.UserSummaryResponse;
 import com.bondhub.messageservice.dto.response.ConversationParticipantResponse;
 import com.bondhub.messageservice.dto.response.ConversationResponse;
 import com.bondhub.messageservice.dto.response.UnreadAnchorResponse;
@@ -16,6 +17,8 @@ public interface ConversationService {
     ConversationResponse getOrCreateConversationForUser(String partnerId);
 
     PageResponse<List<ConversationResponse>> getUserConversations(int page, int size);
+    
+    List<UserSummaryResponse> getQuickConversations(int size);
 
     void markAsRead(String conversationId, String lastReadMessageId);
 
