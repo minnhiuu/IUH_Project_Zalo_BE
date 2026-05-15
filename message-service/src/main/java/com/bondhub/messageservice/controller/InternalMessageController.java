@@ -1,6 +1,7 @@
 package com.bondhub.messageservice.controller;
 
 import com.bondhub.common.dto.ApiResponse;
+import com.bondhub.common.dto.client.messageservice.ChatInteractionFeatureSnapshotResponse;
 import com.bondhub.messageservice.dto.response.MessageSyncResponse;
 import com.bondhub.messageservice.service.message.MessageInternalService;
 import lombok.RequiredArgsConstructor;
@@ -31,5 +32,13 @@ public class InternalMessageController {
     public ResponseEntity<ApiResponse<Long>> getMessageCount() {
         return ResponseEntity.ok(ApiResponse.success(
                 messageInternalService.getMessageCount()));
+    }
+
+    @GetMapping("/search-interaction-features/snapshot")
+    public ResponseEntity<ApiResponse<List<ChatInteractionFeatureSnapshotResponse>>> getSearchInteractionFeatureSnapshot(
+            @RequestParam(defaultValue = "30") int sinceDays,
+            @RequestParam(defaultValue = "5000") int limit) {
+        return ResponseEntity.ok(ApiResponse.success(
+                messageInternalService.getSearchInteractionFeatureSnapshot(sinceDays, limit)));
     }
 }

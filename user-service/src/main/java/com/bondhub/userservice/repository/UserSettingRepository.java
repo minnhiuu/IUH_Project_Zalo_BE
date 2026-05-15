@@ -1,7 +1,10 @@
 package com.bondhub.userservice.repository;
 
+import org.bson.Document;
 import org.bson.types.ObjectId;
 
+import com.bondhub.common.dto.client.userservice.user.response.UserSearchVisibilityResponse;
+import com.bondhub.common.enums.SearchVisibility;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
 import com.bondhub.userservice.model.UserSetting;
@@ -13,6 +16,11 @@ import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.stereotype.Repository;
+
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
+import java.util.Objects;
 
 /**
  * Custom repository for UserSetting operations using MongoTemplate with dot
@@ -201,5 +209,67 @@ public class UserSettingRepository {
     public boolean resetNestedSetting(String userId, String settingName, Object defaultValue) {
         log.info("Resetting {} to default for userId: {}", settingName, userId);
         return updateNestedSetting(userId, settingName, defaultValue);
+    }
+
+    public List<UserSearchVisibilityResponse> getSearchVisibilityByUserIds(Collection<String> userIds) {
+        if (userIds == null || userIds.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        List<ObjectId> objectIds = userIds.stream()
+                .filter(Objects::nonNull)
+                .filter(ObjectId::isValid)
+                .distinct()
+                .map(ObjectId::new)
+                .toList();
+
+        if (objectIds.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        Query query = new Query(Criteria.where("_id").in(objectIds));
+        query.fields()
+                .include(USER_SETTING_FIELD + ".privacySettings.nameSearchVisibility")
+                .include(USER_SETTING_FIELD + ".privacySettings.phoneSearchVisibility");
+
+        return mongoTemplate.find(query, Document.class, USER_COLLECTION).stream()
+                .map(this::toUserSearchVisibilityResponse)
+                .toList();
+    }
+
+    private UserSearchVisibilityResponse toUserSearchVisibilityResponse(Document user) {
+        ObjectId userId = user.getObjectId("_id");
+        Document userSetting = user.get(USER_SETTING_FIELD, Document.class);
+        Document privacySettings = userSetting != null ? userSetting.get("privacySettings", Document.class) : null;
+
+        return UserSearchVisibilityResponse.builder()
+                .userId(userId != null ? userId.toHexString() : null)
+                .nameSearchVisibility(readNameSearchVisibility(privacySettings))
+                .phoneSearchVisibility(readSearchVisibility(privacySettings, "phoneSearchVisibility"))
+                .build();
+    }
+
+    private SearchVisibility readNameSearchVisibility(Document privacySettings) {
+        SearchVisibility searchVisibility = readSearchVisibility(privacySettings, "nameSearchVisibility");
+        return searchVisibility == SearchVisibility.NONE ? SearchVisibility.PUBLIC : searchVisibility;
+    }
+
+    private SearchVisibility readSearchVisibility(Document privacySettings, String fieldName) {
+        if (privacySettings == null) {
+            return SearchVisibility.PUBLIC;
+        }
+
+        Object value = privacySettings.get(fieldName);
+        if (value instanceof SearchVisibility searchVisibility) {
+            return searchVisibility;
+        }
+        if (value instanceof String searchVisibility) {
+            try {
+                return SearchVisibility.valueOf(searchVisibility);
+            } catch (IllegalArgumentException ignored) {
+                log.warn("Unknown search visibility value {} for field {}", searchVisibility, fieldName);
+            }
+        }
+        return SearchVisibility.PUBLIC;
     }
 }

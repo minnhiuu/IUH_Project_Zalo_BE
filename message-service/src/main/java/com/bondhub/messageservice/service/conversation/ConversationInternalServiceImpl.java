@@ -173,6 +173,7 @@ public class ConversationInternalServiceImpl implements ConversationInternalServ
                 .group(false)
                 .memberCount(memberCount)
                 .displayHighlights(highlight(name, keyword))
+                .phoneNumber(partner.getPhoneNumber())
                 .build();
     }
 

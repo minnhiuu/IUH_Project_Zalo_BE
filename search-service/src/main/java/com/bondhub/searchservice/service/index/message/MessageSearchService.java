@@ -3,6 +3,8 @@ package com.bondhub.searchservice.service.index.message;
 import com.bondhub.common.dto.PageResponse;
 import com.bondhub.common.dto.client.messageservice.ConversationSearchResponse;
 import com.bondhub.searchservice.dto.request.MessageSearchRequest;
+import com.bondhub.searchservice.dto.response.MessageNavigationResponse;
+import com.bondhub.searchservice.dto.response.MessageSearchGroupResponse;
 import com.bondhub.searchservice.dto.response.MessageSearchResponse;
 import com.bondhub.searchservice.enums.MessageSearchSection;
 import org.springframework.data.domain.Pageable;
@@ -22,7 +24,21 @@ public interface MessageSearchService {
             MessageSearchSection section,
             Pageable pageable);
 
+    PageResponse<List<MessageSearchGroupResponse>> searchMessageGroups(
+            String userId,
+            MessageSearchRequest request,
+            Pageable pageable);
+
     List<ConversationSearchResponse> searchMessageSenders(
             String userId,
             String keyword);
+
+    MessageNavigationResponse navigateSearchResult(
+            String userId,
+            String conversationId,
+            String keyword,
+            String senderId,
+            String currentMessageId,
+            String direction,
+            MessageSearchSection section);
 }

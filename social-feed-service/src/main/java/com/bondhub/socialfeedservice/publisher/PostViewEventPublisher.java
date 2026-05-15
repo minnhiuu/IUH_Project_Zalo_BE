@@ -20,6 +20,7 @@ import java.time.Instant;
 public class PostViewEventPublisher {
 
     OutboxEventPublisher outboxEventPublisher;
+    SocialFeedInteractionEventPublisher socialFeedInteractionEventPublisher;
 
     @Transactional
     public void publishPostViewed(String postId, String userId) {
@@ -37,6 +38,7 @@ public class PostViewEventPublisher {
                 EventType.POST_VIEW_RECORDED,
                 event
         );
+        socialFeedInteractionEventPublisher.publishPostAuthorInteraction(userId, postId, InteractionType.VIEW);
 
         log.debug("Published POST_VIEW_RECORDED event: postId={}, userId={}", postId, userId);
     }

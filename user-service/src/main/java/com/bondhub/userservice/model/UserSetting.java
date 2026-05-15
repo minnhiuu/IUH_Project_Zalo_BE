@@ -1,5 +1,6 @@
 package com.bondhub.userservice.model;
 
+import com.bondhub.common.enums.SearchVisibility;
 import com.bondhub.userservice.model.enums.AppLanguage;
 import com.bondhub.userservice.model.enums.AudioQuality;
 import com.bondhub.userservice.model.enums.BackupFrequency;
@@ -134,6 +135,8 @@ public class UserSetting {
         private boolean blockUnknownUsers = false;
         private boolean friendSourceByPhone = true;
         private boolean friendSourceByQr = true;
+        private SearchVisibility nameSearchVisibility = SearchVisibility.PUBLIC;
+        private SearchVisibility phoneSearchVisibility = SearchVisibility.PUBLIC;
         private List<String> utilityPermissions = new ArrayList<>();
         private List<String> blockedUserIds = new ArrayList<>();
     }

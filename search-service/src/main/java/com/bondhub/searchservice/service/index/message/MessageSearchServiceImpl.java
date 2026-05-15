@@ -6,21 +6,32 @@ import co.elastic.clients.elasticsearch._types.query_dsl.Query;
 import co.elastic.clients.elasticsearch._types.aggregations.Aggregation;
 import co.elastic.clients.elasticsearch._types.aggregations.StringTermsBucket;
 import co.elastic.clients.elasticsearch.core.search.Hit;
+import co.elastic.clients.util.NamedValue;
 import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.common.dto.PageResponse;
 import com.bondhub.common.dto.client.messageservice.ConversationMemberLookupResponse;
 import com.bondhub.common.dto.client.messageservice.ConversationSearchResponse;
+import com.bondhub.common.dto.client.userservice.user.response.UserSummaryResponse;
 import com.bondhub.common.enums.MessageStatus;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
+import com.bondhub.common.utils.PhoneUtil;
 import com.bondhub.common.utils.S3UtilV2;
 import com.bondhub.searchservice.client.ConversationMemberClient;
 import com.bondhub.searchservice.config.ElasticsearchProperties;
 import com.bondhub.searchservice.dto.request.MessageSearchRequest;
+import com.bondhub.searchservice.dto.response.MessageNavigationResponse;
+import com.bondhub.searchservice.dto.response.MessageSearchGroupResponse;
 import com.bondhub.searchservice.dto.response.MessageSearchResponse;
 import com.bondhub.searchservice.enums.MessageSearchSection;
 import com.bondhub.searchservice.model.elasticsearch.MessageIndex;
+import com.bondhub.searchservice.service.index.user.UserSearchService;
 import feign.FeignException;
+import jakarta.json.JsonArray;
+import jakarta.json.JsonNumber;
+import jakarta.json.JsonObject;
+import jakarta.json.JsonString;
+import jakarta.json.JsonValue;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
@@ -72,10 +83,10 @@ public class MessageSearchServiceImpl implements MessageSearchService {
             "Bấm vào đây để tham gia nhóm trên Zalo zalo.me"
     );
     private static final Pattern URL_PATTERN = Pattern.compile("https?://\\S+");
-
     ElasticsearchOperations esOperations;
     ElasticsearchProperties esProperties;
     ConversationMemberClient conversationMemberClient;
+    UserSearchService userSearchService;
     S3UtilV2 s3UtilV2;
 
     @Override
@@ -84,6 +95,8 @@ public class MessageSearchServiceImpl implements MessageSearchService {
             String keyword,
             Boolean isGroup,
             Pageable pageable) {
+
+        // 1. Get existing conversations (contacts you've chatted with)
         ApiResponse<PageResponse<List<ConversationSearchResponse>>> response =
                 conversationMemberClient.searchConversations(
                         userId,
@@ -92,9 +105,95 @@ public class MessageSearchServiceImpl implements MessageSearchService {
                         pageable.getPageNumber(),
                         pageable.getPageSize());
 
-        return response != null && response.data() != null
-                ? response.data()
-                : PageResponse.empty(pageable);
+        PageResponse<List<ConversationSearchResponse>> conversationPage =
+                response != null && response.data() != null
+                        ? sanitizeConversationPhones(response.data(), keyword, pageable)
+                        : PageResponse.empty(pageable);
+
+        // 2. If it's not a group-only search and keyword exists, also search global users
+        if (!Boolean.TRUE.equals(isGroup) && hasText(keyword)) {
+            String searchTerm = PhoneUtil.normalizeVnPhone(keyword).orElse(keyword);
+            PageResponse<List<UserSummaryResponse>> userPage = userSearchService.searchUsers(searchTerm, pageable);
+
+            if (userPage != null && userPage.data() != null && !userPage.data().isEmpty()) {
+                List<ConversationSearchResponse> mergedResults = new ArrayList<>(conversationPage.data());
+
+                // Avoid duplicates: don't add users who already have a conversation in the results
+                List<String> existingRecipientIds = mergedResults.stream()
+                        .map(ConversationSearchResponse::recipientId)
+                        .filter(Objects::nonNull)
+                        .toList();
+
+                for (UserSummaryResponse user : userPage.data()) {
+                    if (!existingRecipientIds.contains(user.id())) {
+                        mergedResults.add(ConversationSearchResponse.builder()
+                                .conversationId(null) // No conversation yet
+                                .recipientId(user.id())
+                                .name(user.fullName())
+                                .avatar(user.avatar())
+                                .group(false)
+                                .memberCount(0)
+                                .displayHighlights(user.fullName())
+                                .phoneNumber(user.phoneNumber())
+                                .build());
+                    }
+                }
+
+                // Update the total items and data
+                long totalItems = Math.max(conversationPage.totalItems(), mergedResults.size());
+                return PageResponse.<List<ConversationSearchResponse>>builder()
+                        .data(mergedResults)
+                        .page(conversationPage.page())
+                        .limit(conversationPage.limit())
+                        .totalItems(totalItems)
+                        .totalPages(conversationPage.totalPages())
+                        .build();
+            }
+        }
+
+        return conversationPage;
+    }
+
+    private PageResponse<List<ConversationSearchResponse>> sanitizeConversationPhones(
+            PageResponse<List<ConversationSearchResponse>> page,
+            String keyword,
+            Pageable pageable) {
+        if (page == null || page.data() == null || shouldExposePhone(keyword)) {
+            return page;
+        }
+
+        return PageResponse.<List<ConversationSearchResponse>>builder()
+                .data(page.data().stream()
+                        .map(this::withoutPhoneNumber)
+                        .toList())
+                .page(page.page())
+                .limit(page.limit())
+                .totalItems(page.totalItems())
+                .totalPages(page.totalPages())
+                .build();
+    }
+
+    private ConversationSearchResponse withoutPhoneNumber(ConversationSearchResponse response) {
+        if (response == null || response.phoneNumber() == null) {
+            return response;
+        }
+
+        return ConversationSearchResponse.builder()
+                .conversationId(response.conversationId())
+                .recipientId(response.recipientId())
+                .name(response.name())
+                .avatar(response.avatar())
+                .group(response.group())
+                .memberCount(response.memberCount())
+                .participantNames(response.participantNames())
+                .participantAvatars(response.participantAvatars())
+                .displayHighlights(response.displayHighlights())
+                .phoneNumber(null)
+                .build();
+    }
+
+    private boolean shouldExposePhone(String keyword) {
+        return PhoneUtil.isValidVnPhone(keyword);
     }
 
     @Override
@@ -243,6 +342,290 @@ public class MessageSearchServiceImpl implements MessageSearchService {
                 .toList();
     }
 
+    @Override
+    public PageResponse<List<MessageSearchGroupResponse>> searchMessageGroups(
+            String userId,
+            MessageSearchRequest request,
+            Pageable pageable) {
+        if (!hasText(request.keyword())) {
+            return PageResponse.empty(pageable);
+        }
+
+        NativeQuery nativeQuery = buildGroupQuery(userId, request, pageable);
+        SearchHits<MessageIndex> searchHits = esOperations.search(
+                nativeQuery,
+                MessageIndex.class,
+                IndexCoordinates.of(esProperties.getMessageAlias())
+        );
+
+        if (!searchHits.hasAggregations()) {
+            return PageResponse.empty(pageable);
+        }
+
+        ElasticsearchAggregations aggregationsContainer =
+                (ElasticsearchAggregations) Objects.requireNonNull(searchHits.getAggregations());
+        ElasticsearchAggregation conversationsAggregation = aggregationsContainer.get("conversations");
+
+        if (conversationsAggregation == null) {
+            return PageResponse.empty(pageable);
+        }
+
+        List<StringTermsBucket> buckets = conversationsAggregation.aggregation()
+                .getAggregate()
+                .sterms()
+                .buckets()
+                .array();
+
+        int offset = (int) pageable.getOffset();
+        int pageSize = pageable.getPageSize();
+        List<MessageSearchGroupResponse> groups = buckets.stream()
+                .skip(offset)
+                .limit(pageSize)
+                .map(bucket -> toGroupResponse(bucket, request.keyword(), userId))
+                .filter(Objects::nonNull)
+                .toList();
+
+        long totalItems = resolveCardinalityTotal(aggregationsContainer, buckets.size());
+        int totalPages = pageSize > 0 ? (int) Math.ceil((double) totalItems / pageSize) : 0;
+
+        return PageResponse.<List<MessageSearchGroupResponse>>builder()
+                .data(groups)
+                .page(pageable.getPageNumber())
+                .limit(pageSize)
+                .totalItems(totalItems)
+                .totalPages(totalPages)
+                .build();
+    }
+
+    private NativeQuery buildGroupQuery(String userId, MessageSearchRequest request, Pageable pageable) {
+        NativeQuery baseQuery = buildQuery(userId, request, null, MessageSearchSection.ALL, Pageable.unpaged());
+        int aggregationSize = Math.max(pageable.getPageSize(), (int) pageable.getOffset() + pageable.getPageSize());
+
+        return NativeQuery.builder()
+                .withQuery(baseQuery.getQuery())
+                .withMaxResults(0)
+                .withAggregation("conversation_count", Aggregation.of(a -> a
+                        .cardinality(c -> c.field("conversationId"))
+                ))
+                .withAggregation("conversations", Aggregation.of(a -> a
+                        .terms(t -> t
+                                .field("conversationId")
+                                .size(aggregationSize)
+                                .order(List.of(NamedValue.of(
+                                        "last_matched_at",
+                                        SortOrder.Desc
+                                )))
+                        )
+                        .aggregations("last_matched_at", Aggregation.of(sub -> sub
+                                .max(m -> m.field("createdAt"))
+                        ))
+                        .aggregations("latest_match", Aggregation.of(sub -> sub
+                                .topHits(th -> th
+                                        .size(1)
+                                        .sort(s -> s.field(f -> f.field("createdAt").order(SortOrder.Desc)))
+                                )
+                        ))
+                ))
+                .build();
+    }
+
+    private long resolveCardinalityTotal(ElasticsearchAggregations aggregationsContainer, int fallback) {
+        ElasticsearchAggregation countAggregation = aggregationsContainer.get("conversation_count");
+        if (countAggregation == null) {
+            return fallback;
+        }
+
+        Aggregate aggregate = countAggregation.aggregation().getAggregate();
+        return aggregate.isCardinality() ? aggregate.cardinality().value() : fallback;
+    }
+
+    private MessageSearchGroupResponse toGroupResponse(StringTermsBucket bucket, String keyword, String userId) {
+        var topHits = bucket.aggregations().get("latest_match").topHits();
+        if (topHits.hits().hits().isEmpty() || topHits.hits().hits().get(0).source() == null) {
+            return null;
+        }
+
+        JsonObject source = topHits.hits().hits().get(0).source().toJson().asJsonObject();
+        String type = getString(source, "type");
+        String displayContent = resolveDisplayContent(source);
+        String displayHighlights = highlightDisplayContent(displayContent, keyword);
+        boolean isGroup = getBoolean(source, "group");
+        List<String> participantNames = getStringList(source, "participantNames");
+        List<String> participantAvatars = getStringList(source, "participantAvatars").stream()
+                .map(s3UtilV2::getFullUrl)
+                .toList();
+        int peerIndex = resolvePeerParticipantIndex(source, userId);
+
+        String title = isGroup
+                ? firstNonBlank(
+                        getString(source, "conversationName"),
+                        getString(source, "conversationSearchText"),
+                        joinParticipantNames(participantNames))
+                : firstNonBlank(
+                        getValueAt(participantNames, peerIndex),
+                        getString(source, "conversationName"),
+                        getString(source, "senderName"));
+        String avatar = isGroup
+                ? getString(source, "conversationAvatar")
+                : firstNonBlank(
+                        getValueAt(participantAvatars, peerIndex),
+                        getString(source, "conversationAvatar"),
+                        getString(source, "senderAvatar"));
+
+        return MessageSearchGroupResponse.builder()
+                .messageId(getString(source, "id"))
+                .conversationId(bucket.key().stringValue())
+                .title(title)
+                .avatar(s3UtilV2.getFullUrl(avatar))
+                .isGroup(isGroup)
+                .matchCount(bucket.docCount())
+                .previewContent(displayContent)
+                .previewHighlights(displayHighlights)
+                .previewType(type)
+                .size(getLong(source, "size"))
+                .hasAttachment(getBoolean(source, "hasAttachment"))
+                .hasLink(getBoolean(source, "hasLink"))
+                .lastMatchedAt(getInstant(source, "createdAt"))
+                .participantNames(participantNames)
+                .participantAvatars(participantAvatars)
+                .build();
+    }
+
+    private int resolvePeerParticipantIndex(JsonObject source, String userId) {
+        List<String> participantIds = getStringList(source, "participantIds");
+        for (int index = 0; index < participantIds.size(); index++) {
+            if (!Objects.equals(participantIds.get(index), userId)) {
+                return index;
+            }
+        }
+        return -1;
+    }
+
+    private String getValueAt(List<String> values, int index) {
+        if (index < 0 || index >= values.size()) {
+            return null;
+        }
+        return values.get(index);
+    }
+
+    private String joinParticipantNames(List<String> participantNames) {
+        if (participantNames == null || participantNames.isEmpty()) {
+            return null;
+        }
+        return String.join(", ", participantNames);
+    }
+
+    private String resolveDisplayContent(JsonObject source) {
+        String type = getString(source, "type");
+        if (FILE_MESSAGE_TYPE.equalsIgnoreCase(type)) {
+            return firstNonBlank(getString(source, "originalFileName"), getString(source, "content"));
+        }
+
+        boolean hasLink = getBoolean(source, "hasLink");
+        if (LINK_MESSAGE_TYPE.equalsIgnoreCase(type) || hasLink) {
+            String groupName = getString(source, "linkGroupName");
+            String linkUrl = firstNonBlank(getString(source, "linkUrl"), extractFirstUrl(getString(source, "searchableText")));
+            String content = getString(source, "content");
+
+            if (!hasText(groupName) && !hasText(linkUrl)) {
+                return firstNonBlank(getString(source, "searchableText"), content);
+            }
+
+            List<String> parts = new ArrayList<>();
+            if (hasText(content)) {
+                parts.add(content);
+            }
+            if (hasText(groupName)) {
+                parts.add(groupName);
+            }
+            if (hasText(linkUrl)) {
+                parts.add(linkUrl);
+            }
+            return String.join(" ", parts);
+        }
+
+        return getString(source, "content");
+    }
+
+    private String getString(JsonObject source, String field) {
+        return source.containsKey(field) && !source.isNull(field)
+                ? source.getString(field, null)
+                : null;
+    }
+
+    private boolean getBoolean(JsonObject source, String field) {
+        return source.containsKey(field) && !source.isNull(field) && source.getBoolean(field, false);
+    }
+
+    private Long getLong(JsonObject source, String field) {
+        if (!source.containsKey(field) || source.isNull(field)) {
+            return null;
+        }
+        JsonValue value = source.get(field);
+        if (value instanceof JsonNumber number) {
+            return number.longValue();
+        }
+        if (value instanceof JsonString string) {
+            String text = string.getString();
+            return hasText(text) && text.trim().matches("\\d+") ? Long.parseLong(text.trim()) : null;
+        }
+        return null;
+    }
+
+    private Instant getInstant(JsonObject source, String field) {
+        if (!source.containsKey(field) || source.isNull(field)) {
+            return null;
+        }
+        JsonValue value = source.get(field);
+        if (value instanceof JsonNumber number) {
+            return Instant.ofEpochMilli(number.longValue());
+        }
+        if (!(value instanceof JsonString)) {
+            return null;
+        }
+
+        String text = getString(source, field);
+        if (!hasText(text)) {
+            return null;
+        }
+
+        String trimmed = text.trim();
+        if (trimmed.matches("\\d+")) {
+            return Instant.ofEpochMilli(Long.parseLong(trimmed));
+        }
+
+        return Instant.parse(trimmed);
+    }
+
+    private List<String> getStringList(JsonObject source, String field) {
+        if (!source.containsKey(field) || source.isNull(field)) {
+            return List.of();
+        }
+
+        JsonArray array = source.getJsonArray(field);
+        if (array == null) {
+            return List.of();
+        }
+
+        return array.stream()
+                .filter(value -> value.getValueType() == JsonValue.ValueType.STRING)
+                .map(value -> {
+                    String text = ((JsonString) value).getString();
+                    return hasText(text) ? text : null;
+                })
+                .filter(Objects::nonNull)
+                .toList();
+    }
+
+    private String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (hasText(value)) {
+                return value;
+            }
+        }
+        return null;
+    }
+
     private ConversationMemberLookupResponse resolveConversationMembership(String conversationId, String userId) {
         if (!hasText(conversationId)) {
             return null;
@@ -279,6 +662,7 @@ public class MessageSearchServiceImpl implements MessageSearchService {
         Instant lowerBound = resolveLowerBound(request, joinedAt);
         Instant upperBound = request.to() != null ? Instant.ofEpochMilli(request.to()) : null;
         boolean hasKeyword = hasText(request.keyword());
+        List<String> requestedTypeFilters = resolveRequestedTypeFilters(request.filters());
 
         if (lowerBound != null && upperBound != null && lowerBound.isAfter(upperBound)) {
             throw new AppException(ErrorCode.VALIDATION_ERROR);
@@ -311,7 +695,14 @@ public class MessageSearchServiceImpl implements MessageSearchService {
                 ));
             }
 
-            if (section == MessageSearchSection.FILES) {
+            if (!requestedTypeFilters.isEmpty()) {
+                b.filter(f -> f.terms(t -> t
+                        .field("type")
+                        .terms(values -> values.value(requestedTypeFilters.stream()
+                                .map(co.elastic.clients.elasticsearch._types.FieldValue::of)
+                                .toList()))
+                ));
+            } else if (section == MessageSearchSection.FILES) {
                 b.filter(f -> f.term(t -> t
                         .field("type")
                         .value(FILE_MESSAGE_TYPE)
@@ -411,6 +802,24 @@ public class MessageSearchServiceImpl implements MessageSearchService {
 
         SearchPage<MessageIndex> page = SearchHitSupport.searchPageFor(hits, pageable);
         return PageResponse.fromPage(page, hit -> this.toResponse(hit, request.keyword()));
+    }
+
+    private List<String> resolveRequestedTypeFilters(String filters) {
+        if (!hasText(filters)) {
+            return List.of();
+        }
+
+        List<String> types = new ArrayList<>();
+        for (String token : filters.split(",")) {
+            String normalized = token.trim().toLowerCase(Locale.ROOT);
+            if ("link".equals(normalized) && !types.contains(LINK_MESSAGE_TYPE)) {
+                types.add(LINK_MESSAGE_TYPE);
+            }
+            if ("file".equals(normalized) && !types.contains(FILE_MESSAGE_TYPE)) {
+                types.add(FILE_MESSAGE_TYPE);
+            }
+        }
+        return types;
     }
 
     private HighlightQuery buildHighlightQuery() {
@@ -745,4 +1154,204 @@ public class MessageSearchServiceImpl implements MessageSearchService {
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
     }
+
+    @Override
+    public MessageNavigationResponse navigateSearchResult(
+            String userId,
+            String conversationId,
+            String keyword,
+            String senderId,
+            String currentMessageId,
+            String direction,
+            MessageSearchSection section) {
+
+        log.info("navigateSearchResult start userId={}, conversationId={}, keyword={}, senderId={}, currentMessageId={}, direction={}, section={}",
+                userId, conversationId, keyword, senderId, currentMessageId, direction, section);
+
+        if (!hasText(keyword) && !hasText(senderId)) {
+            throw new AppException(ErrorCode.VALIDATION_ERROR);
+        }
+        if (!hasText(conversationId)) {
+            throw new AppException(ErrorCode.VALIDATION_ERROR);
+        }
+
+        ConversationMemberLookupResponse membership = resolveConversationMembership(conversationId, userId);
+        Instant joinedAt = membership != null ? membership.joinedAt() : null;
+        MessageSearchRequest baseRequest = new MessageSearchRequest(
+                keyword, conversationId, senderId, null, null, null, null, null);
+        Query baseQuery = Objects.requireNonNull(
+                buildQuery(userId, baseRequest, joinedAt, section, Pageable.unpaged()).getQuery());
+        long totalMatches = countNavigationMatches(baseQuery);
+        log.info("navigateSearchResult matches total={}, conversationId={}, keyword={}, senderId={}",
+                totalMatches, conversationId, keyword, senderId);
+
+        if (totalMatches == 0) {
+            throw new AppException(ErrorCode.MESSAGE_NOT_FOUND);
+        }
+
+        boolean isCurrent = "CURRENT".equalsIgnoreCase(direction);
+        boolean isNext = "NEXT".equalsIgnoreCase(direction);
+        SearchHit<MessageIndex> targetHit = null;
+
+        if (hasText(currentMessageId)) {
+            MessageIndex currentMessage = esOperations.get(
+                    currentMessageId,
+                    MessageIndex.class,
+                    IndexCoordinates.of(esProperties.getMessageAlias()));
+
+            if (currentMessage != null && currentMessage.getCreatedAt() != null) {
+                long currentMillis = currentMessage.getCreatedAt().toEpochMilli();
+                if (isCurrent) {
+                    targetHit = findNavigationTargetById(userId, conversationId, keyword, senderId, joinedAt, section, currentMessageId);
+                } else {
+                    targetHit = findNavigationTarget(
+                            userId,
+                            conversationId,
+                            keyword,
+                            senderId,
+                            joinedAt,
+                            section,
+                            isNext ? currentMillis + 1 : null,
+                            isNext ? null : currentMillis - 1,
+                            isNext ? SortOrder.Asc : SortOrder.Desc);
+                }
+            }
+        }
+
+        if (targetHit == null) {
+            targetHit = findNavigationTarget(
+                    userId,
+                    conversationId,
+                    keyword,
+                    senderId,
+                    joinedAt,
+                    section,
+                    null,
+                    null,
+                    isNext || isCurrent ? SortOrder.Desc : SortOrder.Asc);
+        }
+
+        if (targetHit == null) {
+            throw new AppException(ErrorCode.MESSAGE_NOT_FOUND);
+        }
+
+        MessageIndex targetMessage = targetHit.getContent();
+        log.info("navigateSearchResult target messageId={}, createdAt={}, senderId={}",
+                targetMessage.getId(), targetMessage.getCreatedAt(), targetMessage.getSenderId());
+        String rawHighlights = resolveHighlight(targetHit, targetMessage, keyword);
+        String displayContent = resolveDisplayContent(targetMessage);
+        String displayHighlights = resolveDisplayHighlights(targetMessage, displayContent, rawHighlights, keyword);
+        int displayIndex = countDisplayIndex(
+                userId,
+                conversationId,
+                keyword,
+                senderId,
+                joinedAt,
+                section,
+                targetMessage.getCreatedAt());
+
+        return MessageNavigationResponse.builder()
+                .messageId(targetMessage.getId())
+                .conversationId(targetMessage.getConversationId())
+                .index(displayIndex)
+                .total((int) Math.min(totalMatches, Integer.MAX_VALUE))
+                .createdAt(targetMessage.getCreatedAt())
+                .displayHighlights(displayHighlights)
+                .direction(direction != null ? direction.toUpperCase() : "NEXT")
+                .build();
+    }
+
+    private SearchHit<MessageIndex> findNavigationTargetById(
+            String userId,
+            String conversationId,
+            String keyword,
+            String senderId,
+            Instant joinedAt,
+            MessageSearchSection section,
+            String messageId) {
+        MessageSearchRequest request = new MessageSearchRequest(
+                keyword, conversationId, senderId, null, null, null, null, null);
+        Query baseQuery = Objects.requireNonNull(
+                buildQuery(userId, request, joinedAt, section, PageRequest.of(0, 1)).getQuery());
+        Query query = Query.of(q -> q.bool(b -> b
+                .must(baseQuery)
+                .filter(f -> f.term(t -> t.field("id").value(messageId)))));
+
+        NativeQuery navigationQuery = NativeQuery.builder()
+                .withQuery(query)
+                .withPageable(PageRequest.of(0, 1))
+                .withHighlightQuery(buildHighlightQuery())
+                .build();
+
+        SearchHits<MessageIndex> hits = esOperations.search(
+                navigationQuery,
+                MessageIndex.class,
+                IndexCoordinates.of(esProperties.getMessageAlias()));
+
+        return hits.hasSearchHits() ? hits.getSearchHit(0) : null;
+    }
+
+    private SearchHit<MessageIndex> findNavigationTarget(
+            String userId,
+            String conversationId,
+            String keyword,
+            String senderId,
+            Instant joinedAt,
+            MessageSearchSection section,
+            Long from,
+            Long to,
+            SortOrder sortOrder) {
+        MessageSearchRequest request = new MessageSearchRequest(
+                keyword, conversationId, senderId, from, to, null, null, null);
+        NativeQuery query = buildQuery(userId, request, joinedAt, section, PageRequest.of(0, 1));
+        NativeQuery navigationQuery = NativeQuery.builder()
+                .withQuery(query.getQuery())
+                .withPageable(PageRequest.of(0, 1))
+                .withSort(s -> s.field(f -> f.field("createdAt").order(sortOrder)))
+                .withHighlightQuery(buildHighlightQuery())
+                .build();
+
+        SearchHits<MessageIndex> hits = esOperations.search(
+                navigationQuery,
+                MessageIndex.class,
+                IndexCoordinates.of(esProperties.getMessageAlias()));
+
+        return hits.hasSearchHits() ? hits.getSearchHit(0) : null;
+    }
+
+    private long countNavigationMatches(Query query) {
+        NativeQuery countQuery = NativeQuery.builder()
+                .withQuery(query)
+                .build();
+        return esOperations.count(countQuery, MessageIndex.class, IndexCoordinates.of(esProperties.getMessageAlias()));
+    }
+
+    private int countDisplayIndex(
+            String userId,
+            String conversationId,
+            String keyword,
+            String senderId,
+            Instant joinedAt,
+            MessageSearchSection section,
+            Instant targetCreatedAt) {
+        if (targetCreatedAt == null) {
+            return 1;
+        }
+
+        MessageSearchRequest request = new MessageSearchRequest(
+                keyword,
+                conversationId,
+                senderId,
+                null,
+                targetCreatedAt.toEpochMilli() - 1,
+                null,
+                null,
+                null);
+        Query indexQuery = Objects.requireNonNull(
+                buildQuery(userId, request, joinedAt, section, Pageable.unpaged()).getQuery());
+        long index = countNavigationMatches(indexQuery) + 1;
+        return (int) Math.max(1, Math.min(index, Integer.MAX_VALUE));
+    }
+
+
 }

@@ -14,5 +14,6 @@ public record ConversationSearchResponse(
         int memberCount,
         List<String> participantNames,
         List<String> participantAvatars,
-        String displayHighlights
+        String displayHighlights,
+        String phoneNumber
 ) {}
