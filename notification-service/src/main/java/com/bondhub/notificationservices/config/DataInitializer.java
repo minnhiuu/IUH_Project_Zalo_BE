@@ -113,10 +113,10 @@ public class DataInitializer {
         // --- FCM TEMPLATES (Standard Push Notifications) ---
         seedIfAbsent(NotificationType.FRIEND_REQUEST, NotificationChannel.FCM, "vi",
                 "Lời mời kết bạn",
-                "{{actorName}}{{#othersCount}} và {{othersCount}} người khác{{/othersCount}} đã gửi cho bạn lời mời kết bạn.");
+                "{{actorName}}{{#showSecondActor}} và {{secondActorName}}{{/showSecondActor}}{{#othersCount}} và {{othersCount}} người khác{{/othersCount}} đã gửi cho bạn lời mời kết bạn.");
         seedIfAbsent(NotificationType.FRIEND_REQUEST, NotificationChannel.FCM, "en",
                 "New friend request",
-                "{{actorName}}{{#othersCount}} and {{othersCount}} others{{/othersCount}} sent you a friend request.");
+                "{{actorName}}{{#showSecondActor}} and {{secondActorName}}{{/showSecondActor}}{{#othersCount}} and {{othersCount}} others{{/othersCount}} sent you a friend request.");
 
         seedIfAbsent(NotificationType.MESSAGE_DIRECT, NotificationChannel.FCM, "vi",
                 "Tin nhắn mới",
@@ -141,24 +141,24 @@ public class DataInitializer {
 
         seedIfAbsent(NotificationType.POST_LIKE, NotificationChannel.FCM, "vi",
                 "Lượt thích bài viết",
-                "{{actorName}}{{#othersCount}} và {{othersCount}} người khác{{/othersCount}} đã thích bài viết của bạn.");
+                "{{actorName}}{{#showSecondActor}} và {{secondActorName}}{{/showSecondActor}}{{#othersCount}} và {{othersCount}} người khác{{/othersCount}} đã thích bài viết của bạn.");
         seedIfAbsent(NotificationType.POST_LIKE, NotificationChannel.FCM, "en",
                 "Post liked",
-                "{{actorName}}{{#othersCount}} and {{othersCount}} others{{/othersCount}} liked your post.");
+                "{{actorName}}{{#showSecondActor}} and {{secondActorName}}{{/showSecondActor}}{{#othersCount}} and {{othersCount}} others{{/othersCount}} liked your post.");
 
         seedIfAbsent(NotificationType.POST_COMMENT, NotificationChannel.FCM, "vi",
                 "Bình luận mới",
-                "{{actorName}}{{#othersCount}} và {{othersCount}} người khác{{/othersCount}} đã bình luận về bài viết của bạn.");
+                "{{actorName}}{{#showSecondActor}} và {{secondActorName}}{{/showSecondActor}}{{#othersCount}} và {{othersCount}} người khác{{/othersCount}} đã bình luận về bài viết của bạn.");
         seedIfAbsent(NotificationType.POST_COMMENT, NotificationChannel.FCM, "en",
                 "New comment",
-                "{{actorName}}{{#othersCount}} and {{othersCount}} others{{/othersCount}} commented on your post.");
+                "{{actorName}}{{#showSecondActor}} and {{secondActorName}}{{/showSecondActor}}{{#othersCount}} and {{othersCount}} others{{/othersCount}} commented on your post.");
 
         seedIfAbsent(NotificationType.COMMENT_REPLY, NotificationChannel.FCM, "vi",
                 "Phản hồi bình luận",
-                "{{actorName}}{{#othersCount}} và {{othersCount}} người khác{{/othersCount}} đã trả lời bình luận của bạn.");
+                "{{actorName}}{{#showSecondActor}} và {{secondActorName}}{{/showSecondActor}}{{#othersCount}} và {{othersCount}} người khác{{/othersCount}} đã trả lời bình luận của bạn.");
         seedIfAbsent(NotificationType.COMMENT_REPLY, NotificationChannel.FCM, "en",
                 "Comment reply",
-                "{{actorName}}{{#othersCount}} and {{othersCount}} others{{/othersCount}} replied to your comment.");
+                "{{actorName}}{{#showSecondActor}} and {{secondActorName}}{{/showSecondActor}}{{#othersCount}} and {{othersCount}} others{{/othersCount}} replied to your comment.");
 
         seedIfAbsent(NotificationType.POST_PUBLISHED, NotificationChannel.FCM, "vi",
                 "Bài viết mới",

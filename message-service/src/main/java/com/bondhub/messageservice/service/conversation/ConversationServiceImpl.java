@@ -182,8 +182,8 @@ public class ConversationServiceImpl implements ConversationService {
             return Collections.emptyList();
         }
 
-        // Get only the partners from these conversations
-        Set<String> partnerIds = roomsPage.getContent().stream()
+        // Get partners maintaining order of conversations
+        List<String> orderedPartnerIds = roomsPage.getContent().stream()
                 .map(room -> room.getMembers().stream()
                         .filter(helper::isActiveMember)
                         .map(ConversationMember::getUserId)
@@ -191,16 +191,17 @@ public class ConversationServiceImpl implements ConversationService {
                         .findFirst()
                         .orElse(null))
                 .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
+                .distinct()
+                .toList();
 
-        if (partnerIds.isEmpty()) return Collections.emptyList();
+        if (orderedPartnerIds.isEmpty()) return Collections.emptyList();
 
-        Map<String, ChatUser> userCache = chatUserRepository.findAllById(partnerIds).stream()
+        Map<String, ChatUser> userCache = chatUserRepository.findAllById(orderedPartnerIds).stream()
                 .collect(Collectors.toMap(ChatUser::getId, u -> u));
 
         String baseUrl = s3UtilV2.getS3BaseUrl();
 
-        return partnerIds.stream()
+        return orderedPartnerIds.stream()
                 .map(pid -> {
                     ChatUser user = userCache.get(pid);
                     if (user == null) {
