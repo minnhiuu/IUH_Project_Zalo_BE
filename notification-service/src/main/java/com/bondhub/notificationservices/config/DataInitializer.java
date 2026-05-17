@@ -68,12 +68,12 @@ public class DataInitializer {
                 "Group message",
                 "<b>{{groupName}}</b>: {{actorName}} {{contentEn}}");
 
-        seedIfAbsent(NotificationType.POST_LIKE, NotificationChannel.IN_APP, "vi",
-                "Lượt thích bài viết",
-                "<b>{{actorName}}</b>{{#showSecondActor}} và <b>{{secondActorName}}</b>{{/showSecondActor}}{{#othersCount}} và <b>{{othersCount}} người khác</b>{{/othersCount}} đã thích bài viết của bạn");
-        seedIfAbsent(NotificationType.POST_LIKE, NotificationChannel.IN_APP, "en",
-                "Post liked",
-                "<b>{{actorName}}</b>{{#showSecondActor}} and <b>{{secondActorName}}</b>{{/showSecondActor}}{{#othersCount}} and <b>{{othersCount}} others</b>{{/othersCount}} liked your post");
+        seedIfAbsent(NotificationType.POST_REACTION, NotificationChannel.IN_APP, "vi",
+                "Cảm xúc bài viết",
+                "<b>{{actorName}}</b>{{#showSecondActor}} và <b>{{secondActorName}}</b>{{/showSecondActor}}{{#othersCount}} và <b>{{othersCount}} người khác</b>{{/othersCount}} đã {{reactionActionVi}} bài viết của bạn");
+        seedIfAbsent(NotificationType.POST_REACTION, NotificationChannel.IN_APP, "en",
+                "Post Reaction",
+                "<b>{{actorName}}</b>{{#showSecondActor}} and <b>{{secondActorName}}</b>{{/showSecondActor}}{{#othersCount}} and <b>{{othersCount}} others</b>{{/othersCount}} {{reactionActionEn}} your post");
 
         seedIfAbsent(NotificationType.POST_COMMENT, NotificationChannel.IN_APP, "vi",
                 "Bình luận mới",
@@ -139,12 +139,12 @@ public class DataInitializer {
                 "Friend accepted",
                 "{{actorName}} accepted your friend request.");
 
-        seedIfAbsent(NotificationType.POST_LIKE, NotificationChannel.FCM, "vi",
-                "Lượt thích bài viết",
-                "{{actorName}}{{#showSecondActor}} và {{secondActorName}}{{/showSecondActor}}{{#othersCount}} và {{othersCount}} người khác{{/othersCount}} đã thích bài viết của bạn.");
-        seedIfAbsent(NotificationType.POST_LIKE, NotificationChannel.FCM, "en",
-                "Post liked",
-                "{{actorName}}{{#showSecondActor}} and {{secondActorName}}{{/showSecondActor}}{{#othersCount}} and {{othersCount}} others{{/othersCount}} liked your post.");
+        seedIfAbsent(NotificationType.POST_REACTION, NotificationChannel.FCM, "vi",
+                "Cảm xúc bài viết",
+                "{{actorName}}{{#showSecondActor}} và {{secondActorName}}{{/showSecondActor}}{{#othersCount}} và {{othersCount}} người khác{{/othersCount}} đã {{reactionActionVi}} bài viết của bạn.");
+        seedIfAbsent(NotificationType.POST_REACTION, NotificationChannel.FCM, "en",
+                "Post Reaction",
+                "{{actorName}}{{#showSecondActor}} and {{secondActorName}}{{/showSecondActor}}{{#othersCount}} and {{othersCount}} others{{/othersCount}} {{reactionActionEn}} your post.");
 
         seedIfAbsent(NotificationType.POST_COMMENT, NotificationChannel.FCM, "vi",
                 "Bình luận mới",
@@ -225,44 +225,45 @@ public class DataInitializer {
                 "Your account was just logged into from a new device ({{deviceName}}) with IP: {{ipAddress}}. If this was not you, please secure your account.");
 
         // --- MODERATION TEMPLATES ---
-        seedIfAbsent(NotificationType.CONTENT_REMOVED, NotificationChannel.IN_APP, "vi",
+        // --- MODERATION TEMPLATES ---
+        seedOrUpdate(NotificationType.CONTENT_REMOVED, NotificationChannel.IN_APP, "vi",
                 "Nội dung đã bị xóa",
-                "{{targetTypeVi}} của bạn đã bị gỡ do vi phạm chính sách cộng đồng.");
-        seedIfAbsent(NotificationType.CONTENT_REMOVED, NotificationChannel.IN_APP, "en",
+                "Một trong những {{targetTypeVi}} của bạn đã vi phạm chính sách nền tảng.");
+        seedOrUpdate(NotificationType.CONTENT_REMOVED, NotificationChannel.IN_APP, "en",
                 "Content Removed",
-                "Your {{targetType}} has been removed for violating community guidelines.");
-        seedIfAbsent(NotificationType.CONTENT_REMOVED, NotificationChannel.FCM, "vi",
+                "One of your {{targetType}}s has violated the platform policy.");
+        seedOrUpdate(NotificationType.CONTENT_REMOVED, NotificationChannel.FCM, "vi",
                 "Nội dung đã bị xóa",
-                "{{targetTypeVi}} của bạn đã bị gỡ do vi phạm chính sách cộng đồng.");
-        seedIfAbsent(NotificationType.CONTENT_REMOVED, NotificationChannel.FCM, "en",
+                "Một trong những {{targetTypeVi}} của bạn đã vi phạm chính sách nền tảng.");
+        seedOrUpdate(NotificationType.CONTENT_REMOVED, NotificationChannel.FCM, "en",
                 "Content Removed",
-                "Your {{targetType}} has been removed for violating community guidelines.");
+                "One of your {{targetType}}s has violated the platform policy.");
 
-        seedIfAbsent(NotificationType.CONTENT_HIDDEN, NotificationChannel.IN_APP, "vi",
+        seedOrUpdate(NotificationType.CONTENT_HIDDEN, NotificationChannel.IN_APP, "vi",
                 "Nội dung đã bị ẩn",
-                "{{targetTypeVi}} của bạn đã bị ẩn do vi phạm chính sách cộng đồng.");
-        seedIfAbsent(NotificationType.CONTENT_HIDDEN, NotificationChannel.IN_APP, "en",
+                "Một trong những {{targetTypeVi}} của bạn đã vi phạm chính sách nền tảng.");
+        seedOrUpdate(NotificationType.CONTENT_HIDDEN, NotificationChannel.IN_APP, "en",
                 "Content Hidden",
-                "Your {{targetType}} has been hidden for violating community guidelines.");
-        seedIfAbsent(NotificationType.CONTENT_HIDDEN, NotificationChannel.FCM, "vi",
+                "One of your {{targetType}}s has violated the platform policy.");
+        seedOrUpdate(NotificationType.CONTENT_HIDDEN, NotificationChannel.FCM, "vi",
                 "Nội dung đã bị ẩn",
-                "{{targetTypeVi}} của bạn đã bị ẩn do vi phạm chính sách cộng đồng.");
-        seedIfAbsent(NotificationType.CONTENT_HIDDEN, NotificationChannel.FCM, "en",
+                "Một trong những {{targetTypeVi}} của bạn đã vi phạm chính sách nền tảng.");
+        seedOrUpdate(NotificationType.CONTENT_HIDDEN, NotificationChannel.FCM, "en",
                 "Content Hidden",
-                "Your {{targetType}} has been hidden for violating community guidelines.");
+                "One of your {{targetType}}s has violated the platform policy.");
 
-        seedIfAbsent(NotificationType.USER_WARNED, NotificationChannel.IN_APP, "vi",
+        seedOrUpdate(NotificationType.USER_WARNED, NotificationChannel.IN_APP, "vi",
                 "Cảnh báo tài khoản",
-                "Bạn đã nhận được cảnh báo từ quản trị viên.{{#adminNote}} Ghi chú: {{adminNote}}{{/adminNote}}");
-        seedIfAbsent(NotificationType.USER_WARNED, NotificationChannel.IN_APP, "en",
+                "Một trong những {{targetTypeVi}} của bạn đã vi phạm chính sách nền tảng.{{#adminNote}} Ghi chú: {{adminNote}}{{/adminNote}}");
+        seedOrUpdate(NotificationType.USER_WARNED, NotificationChannel.IN_APP, "en",
                 "Account Warning",
-                "You have received a warning from an administrator.{{#adminNote}} Note: {{adminNote}}{{/adminNote}}");
-        seedIfAbsent(NotificationType.USER_WARNED, NotificationChannel.FCM, "vi",
+                "One of your {{targetType}}s has violated the platform policy.{{#adminNote}} Note: {{adminNote}}{{/adminNote}}");
+        seedOrUpdate(NotificationType.USER_WARNED, NotificationChannel.FCM, "vi",
                 "Cảnh báo tài khoản",
-                "Bạn đã nhận được cảnh báo từ quản trị viên.{{#adminNote}} Ghi chú: {{adminNote}}{{/adminNote}}");
-        seedIfAbsent(NotificationType.USER_WARNED, NotificationChannel.FCM, "en",
+                "Một trong những {{targetTypeVi}} của bạn đã vi phạm chính sách nền tảng.{{#adminNote}} Ghi chú: {{adminNote}}{{/adminNote}}");
+        seedOrUpdate(NotificationType.USER_WARNED, NotificationChannel.FCM, "en",
                 "Account Warning",
-                "You have received a warning from an administrator.{{#adminNote}} Note: {{adminNote}}{{/adminNote}}");
+                "One of your {{targetType}}s has violated the platform policy.{{#adminNote}} Note: {{adminNote}}{{/adminNote}}");
 
         // --- DND SUMMARY ---
         // Use a force update approach for DND_SUMMARY to ensure latest placeholders are present
@@ -328,7 +329,7 @@ public class DataInitializer {
 
         LocalDateTime now = LocalDateTime.now();
         List<NotificationType> types = List.of(
-                NotificationType.FRIEND_REQUEST, NotificationType.MESSAGE_DIRECT, NotificationType.POST_LIKE,
+                NotificationType.FRIEND_REQUEST, NotificationType.MESSAGE_DIRECT, NotificationType.POST_REACTION,
                 NotificationType.POST_COMMENT, NotificationType.POST_TAG, NotificationType.FRIEND_ACCEPT,
                 NotificationType.SYSTEM
         );

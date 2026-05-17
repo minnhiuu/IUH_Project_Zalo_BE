@@ -11,10 +11,10 @@ public enum BatchWindowConfig {
     // --- BATCHABLE ---
     DOB             (NotificationType.DOB,             300, false),
     FRIEND_REQUEST  (NotificationType.FRIEND_REQUEST,  0,   true),
-    POST_LIKE       (NotificationType.POST_LIKE,       30,  true),
+    POST_REACTION   (NotificationType.POST_REACTION,   30,  true),
     POST_COMMENT    (NotificationType.POST_COMMENT,    10,  true),
     POST_PUBLISHED  (NotificationType.POST_PUBLISHED,  0,   true),
-    COMMENT_LIKE    (NotificationType.COMMENT_LIKE,    30,  true),
+    COMMENT_REACTION(NotificationType.COMMENT_REACTION,30,  true),
     COMMENT_REPLY   (NotificationType.COMMENT_REPLY,   5,   true),
 
     // --- NON-BATCHABLE HOẶC URGENT ---

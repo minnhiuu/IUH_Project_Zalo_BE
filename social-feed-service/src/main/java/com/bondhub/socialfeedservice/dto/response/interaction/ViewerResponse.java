@@ -5,10 +5,13 @@ import lombok.Builder;
 
 import java.time.Instant;
 
+import com.bondhub.socialfeedservice.model.enums.ReactionType;
+
 @Builder
 public record ViewerResponse(
         String id,
         AuthorInfo authorInfo,
-        Instant viewedAt
+        Instant viewedAt,
+        ReactionType reactionType
 ) {
 }

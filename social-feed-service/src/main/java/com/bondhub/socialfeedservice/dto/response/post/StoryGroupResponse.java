@@ -11,6 +11,7 @@ import java.util.List;
 @Builder
 public record StoryGroupResponse(
         AuthorInfo authorInfo,
-        List<PostResponse> stories
+        List<PostResponse> stories,
+        boolean hasUnviewed
 ) {
 }

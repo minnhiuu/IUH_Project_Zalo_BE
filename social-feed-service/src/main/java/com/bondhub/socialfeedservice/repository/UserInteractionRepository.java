@@ -29,4 +29,7 @@ public interface UserInteractionRepository extends MongoRepository<UserInteracti
 
     boolean existsByUserIdAndPostIdAndInteractionType(
             String userId, String postId, InteractionType interactionType);
+
+    List<UserInteraction> findByUserIdAndPostIdInAndInteractionType(
+            String userId, List<String> postIds, InteractionType interactionType);
 }

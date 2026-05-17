@@ -51,6 +51,12 @@ public class PostController {
         return ResponseEntity.ok(ApiResponse.success(postService.getStoryPosts(page, size)));
     }
 
+    @GetMapping("/stories/users/{userId}")
+    @Operation(summary = "Get STORY posts by user ID")
+    public ResponseEntity<ApiResponse<StoryGroupResponse>> getStoryPostsByUserId(@PathVariable String userId) {
+        return ResponseEntity.ok(ApiResponse.success(postService.getStoryPostsByUserId(userId)));
+    }
+
     @GetMapping("/reels")
     @Operation(summary = "Get REEL posts")
     public ResponseEntity<ApiResponse<PageResponse<List<PostResponse>>>> getReelPosts(

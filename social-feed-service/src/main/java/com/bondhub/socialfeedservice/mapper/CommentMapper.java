@@ -27,19 +27,27 @@ public interface CommentMapper {
     }
 
     default CommentResponse toCommentResponse(Comment comment) {
-        return toCommentResponse(comment, null, null);
+        return toCommentResponse(comment, null, null, "");
     }
 
     default CommentResponse toCommentResponse(Comment comment, ReactionType currentUserReaction) {
-        return toCommentResponse(comment, currentUserReaction, null);
+        return toCommentResponse(comment, currentUserReaction, null, "");
     }
 
-    default CommentResponse toCommentResponse(Comment comment, ReactionType currentUserReaction, UserSummary author) {
+    default CommentResponse toCommentResponse(Comment comment, ReactionType currentUserReaction, UserSummary author, String s3BaseUrl) {
         AuthorInfo authorInfo = AuthorInfo.builder()
                 .id(comment.getAuthorId())
                 .fullName(author != null ? author.getFullName() : null)
-                .avatar(author != null ? author.getAvatar() : null)
+                .avatar(author != null && author.getAvatar() != null ? resolveMediaUrl(author.getAvatar(), s3BaseUrl) : null)
                 .build();
+
+        List<PostMedia> resolvedMedia = comment.getMedia() == null ? null
+                : comment.getMedia().stream()
+                        .map(m -> PostMedia.builder()
+                                .url(resolveMediaUrl(m.getUrl(), s3BaseUrl))
+                                .type(m.getType())
+                                .build())
+                        .toList();
 
         return CommentResponse.builder()
                 .id(comment.getId())
@@ -47,15 +55,34 @@ public interface CommentMapper {
                 .authorInfo(authorInfo)
                 .parentId(comment.getParentId())
                 .content(comment.getContent())
-                .media(comment.getMedia())
+                .media(resolvedMedia)
                 .replyDepth(comment.getReplyDepth())
                 .replyCount(comment.getReplyCount())
                 .reactionCount(comment.getReactionCount())
                 .currentUserReaction(currentUserReaction)
+                .topReactions(comment.getTopReactions())
                 .isEdited(comment.isEdited())
                 .createdAt(comment.getCreatedAt())
                 .lastModifiedAt(comment.getLastModifiedAt())
                 .build();
+    }
+
+    default String resolveMediaUrl(String url, String s3BaseUrl) {
+        if (url == null || url.isBlank() || s3BaseUrl == null) {
+            return url;
+        }
+
+        // Clean up legacy localhost URLs if present
+        if (url.contains("/api/files/download/")) {
+            String key = url.substring(url.lastIndexOf("/api/files/download/") + "/api/files/download/".length());
+            key = key.replace("%2F", "/").replace("%2f", "/");
+            return s3BaseUrl + key;
+        }
+
+        if (url.startsWith("http://") || url.startsWith("https://")) {
+            return url;
+        }
+        return s3BaseUrl + url;
     }
 
     default void updateComment(Comment comment, UpdateCommentRequest request) {
