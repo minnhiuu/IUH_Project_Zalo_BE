@@ -22,6 +22,8 @@ public interface PostService {
 
     List<StoryGroupResponse> getStoryPosts(int page, int size);
 
+    StoryGroupResponse getStoryPostsByUserId(String userId);
+
     PageResponse<List<PostResponse>> getReelPosts(int page, int size);
 
     PostResponse updatePost(String postId, UpdatePostRequest request);

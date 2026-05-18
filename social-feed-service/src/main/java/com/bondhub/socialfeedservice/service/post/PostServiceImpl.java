@@ -124,7 +124,7 @@ public class PostServiceImpl implements PostService {
         String currentUserId = securityUtil.getCurrentUserId();
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "uploadedAt"));
 
-        Page<Post> posts = postRepository.findByAuthorIdAndVisibilityInAndActiveTrueAndIsCurrentTrueOrderByUploadedAtDesc(
+        Page<Post> posts = postRepository.findByAuthorIdAndVisibilityInAndActiveTrueAndIsCurrentTrueAndHiddenFalseOrderByUploadedAtDesc(
                 currentUserId,
                 List.of(Visibility.ALL, Visibility.FRIEND, Visibility.ONLY_ME),
                 pageable);
@@ -132,6 +132,7 @@ public class PostServiceImpl implements PostService {
         String s3BaseUrl = getS3BaseUrl();
         Map<String, UserSummary> authorMap = buildAuthorMap(posts.getContent());
         Map<String, Post> sharedPostMap = buildSharedPostMap(posts.getContent());
+        Set<String> viewedPostIds = getViewedPostIds(currentUserId, posts.getContent());
         return PageResponse.fromPage(posts, post -> {
             SharedPostPreview preview = buildSharedPostPreview(post, sharedPostMap, authorMap, s3BaseUrl);
             return postMapper.toPostResponse(post, s3BaseUrl,
@@ -156,7 +157,7 @@ public class PostServiceImpl implements PostService {
             }
         }
 
-        Page<Post> posts = postRepository.findByAuthorIdAndVisibilityInAndActiveTrueAndIsCurrentTrueOrderByUploadedAtDesc(
+        Page<Post> posts = postRepository.findByAuthorIdAndVisibilityInAndActiveTrueAndIsCurrentTrueAndHiddenFalseOrderByUploadedAtDesc(
                 userId,
                 allowedVisibilities,
                 pageable);
@@ -164,6 +165,7 @@ public class PostServiceImpl implements PostService {
         String s3BaseUrl = getS3BaseUrl();
         Map<String, UserSummary> authorMap = buildAuthorMap(posts.getContent());
         Map<String, Post> sharedPostMap = buildSharedPostMap(posts.getContent());
+        Set<String> viewedPostIds = getViewedPostIds(currentUserId, posts.getContent());
         return PageResponse.fromPage(posts, post -> {
             SharedPostPreview preview = buildSharedPostPreview(post, sharedPostMap, authorMap, s3BaseUrl);
             return postMapper.toPostResponse(post, s3BaseUrl,
@@ -235,7 +237,7 @@ public class PostServiceImpl implements PostService {
         String currentUserId = securityUtil.getCurrentUserId();
         List<String> friendIdsAndMe = getFriendIdsAndMe(currentUserId);
 
-        Page<Post> posts = postRepository.findVisiblePostsByType(
+        Page<Post> posts = postRepository.findVisiblePostsFromFriendsAndMe(
                 PostType.STORY,
                 friendIdsAndMe,
                 currentUserId,
@@ -243,6 +245,8 @@ public class PostServiceImpl implements PostService {
 
         String s3BaseUrl = getS3BaseUrl();
         Map<String, UserSummary> authorMap = buildAuthorMap(posts.getContent());
+
+        Set<String> viewedPostIds = getViewedPostIds(currentUserId, posts.getContent());
 
         // Group stories by authorId, preserving insertion order (most-recent story
         // first per group).
@@ -265,12 +269,75 @@ public class PostServiceImpl implements PostService {
                                     ? postMapper.resolveMediaUrl(user.getAvatar(), s3BaseUrl)
                                     : null)
                             .build();
+
+                    boolean hasUnviewed = entry.getValue().stream()
+                            .anyMatch(story -> !viewedPostIds.contains(story.id()));
+                            
                     return StoryGroupResponse.builder()
                             .authorInfo(authorInfo)
                             .stories(entry.getValue())
+                            .hasUnviewed(hasUnviewed)
                             .build();
                 })
                 .toList();
+    }
+
+    @Override
+    public StoryGroupResponse getStoryPostsByUserId(String userId) {
+        String currentUserId = securityUtil.getCurrentUserId();
+        
+        if ("me".equalsIgnoreCase(userId)) {
+            userId = currentUserId;
+        }
+
+        List<Visibility> allowedVisibilities = new ArrayList<>();
+        allowedVisibilities.add(Visibility.ALL);
+        if (currentUserId.equals(userId)) {
+            allowedVisibilities.add(Visibility.FRIEND);
+            allowedVisibilities.add(Visibility.ONLY_ME);
+        } else {
+            List<String> friends = getFriendIdsAndMe(currentUserId);
+            if (friends.contains(userId)) {
+                allowedVisibilities.add(Visibility.FRIEND);
+            }
+        }
+
+        Pageable pageable = PageRequest.of(0, 100, Sort.by(Sort.Direction.DESC, "uploadedAt"));
+        List<Post> posts = postRepository.findByAuthorIdAndPostTypeAndVisibilityInAndActiveTrueAndIsCurrentTrueAndHiddenFalseOrderByUploadedAtDesc(
+                userId, PostType.STORY, allowedVisibilities, pageable);
+
+        if (posts.isEmpty()) {
+            return null;
+        }
+
+        String s3BaseUrl = getS3BaseUrl();
+        Map<String, UserSummary> authorMap = buildAuthorMap(posts);
+        Set<String> viewedPostIds = getViewedPostIds(currentUserId, posts);
+
+        List<PostResponse> stories = posts.stream()
+                .map(post -> postMapper.toPostResponse(
+                        post, s3BaseUrl,
+                        getCurrentUserReaction(currentUserId, post.getId()),
+                        authorMap.get(post.getAuthorId())))
+                .toList();
+
+        UserSummary user = authorMap.get(userId);
+        AuthorInfo authorInfo = AuthorInfo.builder()
+                .id(userId)
+                .fullName(user != null ? user.getFullName() : null)
+                .avatar(user != null && user.getAvatar() != null
+                        ? postMapper.resolveMediaUrl(user.getAvatar(), s3BaseUrl)
+                        : null)
+                .build();
+
+        boolean hasUnviewed = stories.stream()
+                .anyMatch(story -> !viewedPostIds.contains(story.id()));
+
+        return StoryGroupResponse.builder()
+                .authorInfo(authorInfo)
+                .stories(stories)
+                .hasUnviewed(hasUnviewed)
+                .build();
     }
 
     @Override
@@ -287,8 +354,11 @@ public class PostServiceImpl implements PostService {
 
         String s3BaseUrl = getS3BaseUrl();
         Map<String, UserSummary> authorMap = buildAuthorMap(posts.getContent());
-        return PageResponse.fromPage(posts, post -> postMapper.toPostResponse(post, s3BaseUrl,
-                getCurrentUserReaction(currentUserId, post.getId()), authorMap.get(post.getAuthorId())));
+        Set<String> viewedPostIds = getViewedPostIds(currentUserId, posts.getContent());
+        return PageResponse.fromPage(posts, post -> {
+            return postMapper.toPostResponse(post, s3BaseUrl,
+                getCurrentUserReaction(currentUserId, post.getId()), authorMap.get(post.getAuthorId()));
+        });
     }
 
     @Override
@@ -332,6 +402,8 @@ public class PostServiceImpl implements PostService {
         if (authorIds == null || authorIds.isEmpty()) {
             return List.of();
         }
+        
+        String currentUserId = securityUtil.getCurrentUserId();
 
         Pageable pageable = PageRequest.of(0, limit, Sort.by(Sort.Direction.DESC, "uploadedAt"));
         String s3BaseUrl = getS3BaseUrl();
@@ -346,14 +418,16 @@ public class PostServiceImpl implements PostService {
                 type = null;
             }
             posts = type != null
-                    ? postRepository.findByAuthorIdInAndPostTypeAndActiveTrueAndIsCurrentTrue(authorIds, type, pageable)
-                    : postRepository.findByAuthorIdInAndActiveTrueAndIsCurrentTrue(authorIds, pageable);
+                    ? postRepository.findByAuthorIdInAndPostTypeAndActiveTrueAndIsCurrentTrueAndHiddenFalse(authorIds, type, pageable)
+                    : postRepository.findByAuthorIdInAndActiveTrueAndIsCurrentTrueAndHiddenFalse(authorIds, pageable);
         } else {
-            posts = postRepository.findByAuthorIdInAndActiveTrueAndIsCurrentTrue(authorIds, pageable);
+            posts = postRepository.findByAuthorIdInAndActiveTrueAndIsCurrentTrueAndHiddenFalse(authorIds, pageable);
         }
 
         Map<String, UserSummary> authorMap = buildAuthorMap(posts);
         Map<String, Post> sharedPostMap = buildSharedPostMap(posts);
+
+        Set<String> viewedPostIds = getViewedPostIds(currentUserId, posts);
 
         return posts.stream()
                 .map(post -> {
@@ -370,7 +444,7 @@ public class PostServiceImpl implements PostService {
         }
 
         // Bulk-fetch all posts in a single query (unordered)
-        List<Post> posts = postRepository.findAllByIdInAndActiveTrueAndIsCurrentTrue(postIds);
+        List<Post> posts = postRepository.findAllByIdInAndActiveTrueAndIsCurrentTrueAndHiddenFalse(postIds);
 
         // Build lookup maps for O(1) access
         Map<String, Post> postMap = posts.stream()
@@ -380,6 +454,8 @@ public class PostServiceImpl implements PostService {
         Map<String, Post> sharedPostMap = buildSharedPostMap(posts);
 
         String s3BaseUrl = getS3BaseUrl();
+
+        Set<String> viewedPostIds = getViewedPostIds(currentUserId, posts);
 
         // Re-stream in caller-supplied order to preserve recommendation ranking.
         // IDs not present in postMap (soft-deleted, not found) are silently skipped.
@@ -398,8 +474,25 @@ public class PostServiceImpl implements PostService {
     }
 
     private Post getActivePost(String postId) {
-        return postRepository.findByIdAndActiveTrueAndIsCurrentTrue(postId)
+        Post post = postRepository.findByIdAndActiveTrueAndIsCurrentTrue(postId)
                 .orElseThrow(() -> new AppException(ErrorCode.POST_NOT_FOUND));
+                
+        if (post.isHidden() && !post.getAuthorId().equals(securityUtil.getCurrentUserId())) {
+            throw new AppException(ErrorCode.POST_NOT_FOUND);
+        }
+        
+        return post;
+    }
+
+    private Set<String> getViewedPostIds(String userId, List<Post> posts) {
+        if (posts == null || posts.isEmpty()) {
+            return Set.of();
+        }
+        List<String> postIds = posts.stream().map(Post::getId).toList();
+        return userInteractionRepository.findByUserIdAndPostIdInAndInteractionType(userId, postIds, InteractionType.VIEW)
+                .stream()
+                .map(UserInteraction::getPostId)
+                .collect(Collectors.toSet());
     }
 
     private void validateOwner(Post post, String currentUserId) {
@@ -461,6 +554,11 @@ public class PostServiceImpl implements PostService {
     private void applyTypeSpecificRulesOnCreate(Post post, LocalDateTime now) {
         if (post.getPostType() == PostType.SHARE) {
             Post sharedPost = resolveSharedPost(post.getSharedPostId());
+
+            if (post.getAuthorId().equals(sharedPost.getAuthorId()) || 
+                post.getAuthorId().equals(sharedPost.getOriginalAuthorId())) {
+                throw new AppException(ErrorCode.INVALID_OPERATION);
+            }
 
             if (post.getSharedCaption() == null && post.getContent() != null) {
                 post.setSharedCaption(post.getContent());

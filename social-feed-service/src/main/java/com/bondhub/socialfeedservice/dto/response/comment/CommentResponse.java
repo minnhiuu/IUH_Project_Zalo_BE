@@ -20,6 +20,7 @@ public record CommentResponse(
         int replyCount,
         int reactionCount,
         ReactionType currentUserReaction,
+        List<ReactionType> topReactions,
         boolean isEdited,
         LocalDateTime createdAt,
         LocalDateTime lastModifiedAt

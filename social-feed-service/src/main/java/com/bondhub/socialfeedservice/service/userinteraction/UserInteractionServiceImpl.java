@@ -11,6 +11,9 @@ import com.bondhub.socialfeedservice.publisher.PostDislikeEventPublisher;
 import com.bondhub.socialfeedservice.publisher.PostViewEventPublisher;
 import com.bondhub.socialfeedservice.repository.PostRepository;
 import com.bondhub.socialfeedservice.repository.UserInteractionRepository;
+import com.bondhub.socialfeedservice.repository.ReactionRepository;
+import com.bondhub.socialfeedservice.model.Reaction;
+import com.bondhub.socialfeedservice.model.enums.ReactionTargetType;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
@@ -47,6 +50,7 @@ public class UserInteractionServiceImpl implements UserInteractionService {
     PostDislikeEventPublisher postDislikeEventPublisher;
     SecurityUtil securityUtil;
     UserSummaryRepository userSummaryRepository;
+    ReactionRepository reactionRepository;
 
     @Override
     public PageResponse<List<UserInteractionResponse>> getMyInteractions(int page, int size) {
@@ -75,8 +79,14 @@ public class UserInteractionServiceImpl implements UserInteractionService {
         Map<String, UserSummary> summaryById = userSummaryRepository.findAllById(userIds).stream()
                 .collect(Collectors.toMap(UserSummary::getId, u -> u));
 
+        List<Reaction> activeReactions = reactionRepository.findByTargetIdAndTargetTypeAndActiveTrueOrderByCreatedAtDesc(postId, ReactionTargetType.POST);
+        Map<String, Reaction> reactionByUserId = activeReactions.stream()
+                .filter(r -> userIds.contains(r.getAuthorId()))
+                .collect(Collectors.toMap(Reaction::getAuthorId, r -> r, (existing, replacement) -> existing));
+
         List<ViewerResponse> viewers = interactions.getContent().stream().map(interaction -> {
             UserSummary summary = summaryById.get(interaction.getUserId());
+            Reaction reaction = reactionByUserId.get(interaction.getUserId());
             return ViewerResponse.builder()
                     .id(interaction.getId())
                     .authorInfo(AuthorInfo.builder()
@@ -85,6 +95,7 @@ public class UserInteractionServiceImpl implements UserInteractionService {
                             .avatar(summary != null ? summary.getAvatar() : null)
                             .build())
                     .viewedAt(interaction.getCreatedAt())
+                    .reactionType(reaction != null ? reaction.getType() : null)
                     .build();
         }).toList();
 
@@ -111,7 +122,7 @@ public class UserInteractionServiceImpl implements UserInteractionService {
             return List.of();
         }
 
-        Map<String, Post> postById = postRepository.findAllByIdInAndActiveTrueAndIsCurrentTrue(
+        Map<String, Post> postById = postRepository.findAllByIdInAndActiveTrueAndIsCurrentTrueAndHiddenFalse(
                         interactions.stream()
                                 .map(UserInteraction::getPostId)
                                 .filter(Objects::nonNull)

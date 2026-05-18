@@ -30,7 +30,7 @@ public class SocialFeedInteractionEventPublisher {
             return;
         }
 
-        Post post = postRepository.findByIdAndActiveTrueAndIsCurrentTrue(postId).orElse(null);
+        Post post = postRepository.findByIdAndActiveTrueAndIsCurrentTrueAndHiddenFalse(postId).orElse(null);
         if (post == null || post.getAuthorId() == null || post.getAuthorId().equals(userId)) {
             return;
         }
