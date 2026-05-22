@@ -1,5 +1,6 @@
 package com.bondhub.userservice.model;
 
+import com.bondhub.common.enums.SearchVisibility;
 import com.bondhub.userservice.model.enums.AppLanguage;
 import com.bondhub.userservice.model.enums.AudioQuality;
 import com.bondhub.userservice.model.enums.BackupFrequency;
@@ -12,8 +13,10 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.time.DayOfWeek;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -96,6 +99,8 @@ public class UserSetting {
         private boolean dndEnabled = false;
         private String dndStartTime = "22:00";
         private String dndEndTime = "07:00";
+        private String dndTimezone = "GMT+07:00";
+        private List<DayOfWeek> activeDays = Arrays.asList(DayOfWeek.values());
     }
 
     @Data
@@ -130,6 +135,8 @@ public class UserSetting {
         private boolean blockUnknownUsers = false;
         private boolean friendSourceByPhone = true;
         private boolean friendSourceByQr = true;
+        private SearchVisibility nameSearchVisibility = SearchVisibility.PUBLIC;
+        private SearchVisibility phoneSearchVisibility = SearchVisibility.PUBLIC;
         private List<String> utilityPermissions = new ArrayList<>();
         private List<String> blockedUserIds = new ArrayList<>();
     }

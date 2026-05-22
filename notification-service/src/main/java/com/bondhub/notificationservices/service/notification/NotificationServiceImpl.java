@@ -1,7 +1,10 @@
 package com.bondhub.notificationservices.service.notification;
 
+import com.bondhub.common.dto.client.socketservice.SocketEvent;
+import com.bondhub.common.enums.SocketEventType;
 import com.bondhub.common.utils.LocalizationUtil;
 import com.bondhub.common.utils.SecurityUtil;
+import org.bson.types.ObjectId;
 import com.bondhub.notificationservices.client.UserServiceClient;
 import com.bondhub.notificationservices.dto.response.notification.*;
 import com.bondhub.notificationservices.dto.response.template.NotificationTemplateResponse;
@@ -12,6 +15,7 @@ import com.bondhub.notificationservices.mapper.NotificationMapper;
 import com.bondhub.notificationservices.model.Notification;
 import com.bondhub.notificationservices.model.UserNotificationState;
 import com.bondhub.notificationservices.publisher.RawNotificationPublisher;
+import com.bondhub.notificationservices.publisher.SocketEventPublisher;
 import com.bondhub.notificationservices.repository.UserNotificationStateRepository;
 import com.bondhub.notificationservices.service.template.NotificationTemplateService;
 import com.bondhub.notificationservices.service.user.preference.UserPreferenceService;
@@ -28,10 +32,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.HashMap;
+import java.util.*;
 
 @Service
 @RequiredArgsConstructor
@@ -41,6 +42,7 @@ public class NotificationServiceImpl implements NotificationService {
 
     static final Duration FRESH_WINDOW = Duration.ofHours(2);
 
+    SocketEventPublisher socketEventPublisher;
     RawNotificationPublisher rawPublisher;
     MongoTemplate mongoTemplate;
     NotificationMapper notificationMapper;
@@ -69,8 +71,7 @@ public class NotificationServiceImpl implements NotificationService {
             int limit) {
         String userId = securityUtil.getCurrentUserId();
 
-        Criteria criteria = Criteria.where("userId").is(userId)
-                .and("active").is(true);
+        Criteria criteria = Criteria.where("userId").is(userId);
 
         if (Boolean.TRUE.equals(unreadOnly)) {
             criteria.and("isRead").is(false);
@@ -79,6 +80,9 @@ public class NotificationServiceImpl implements NotificationService {
         if (cursor != null) {
             criteria.and("lastModifiedAt").lt(cursor);
         }
+
+        criteria.and("active").is(true);
+        criteria.and("type").nin(NotificationType.MESSAGE_DIRECT, NotificationType.MESSAGE_GROUP);
 
         Query query = new Query(criteria)
                 .with(Sort.by(Sort.Direction.DESC, "lastModifiedAt"))
@@ -156,20 +160,60 @@ public class NotificationServiceImpl implements NotificationService {
     public UserNotificationStateResponse getNotificationState() {
         String userId = securityUtil.getCurrentUserId();
         UserNotificationState state = userStateRepository.findById(userId)
-                .orElse(UserNotificationState.builder()
-                        .userId(userId)
-                        .unreadCount(0)
-                        .build());
+                .orElse(UserNotificationState.builder().userId(userId).build());
+        
+        // Count new notification-list items since the user last opened the notification panel.
+        long notificationUnreadCount = countNewNotifications(userId, state.getLastCheckedAt());
+        
+        // Count distinct unread chat conversations. Opening the notification panel must not clear this.
+        long chatUnreadConversationCount = countUnreadChatConversations(userId);
+        
+        // Total badge = list/sidebar notifications + one count per unread chat conversation
+        long notificationBadgeCount = notificationUnreadCount + chatUnreadConversationCount;
 
-        return notificationMapper.toStateResponse(state);
+        return UserNotificationStateResponse.builder()
+                .unreadCount(notificationUnreadCount)
+                .notificationUnreadCount(notificationUnreadCount)
+                .chatUnreadConversationCount(chatUnreadConversationCount)
+                .notificationBadgeCount(notificationBadgeCount)
+                .build();
+    }
+
+    private long countNewNotifications(String userId, LocalDateTime lastCheckedAt) {
+        Criteria criteria = Criteria.where("userId").is(userId)
+                .and("type").nin(NotificationType.MESSAGE_DIRECT, NotificationType.MESSAGE_GROUP)
+                .and("isRead").is(false)
+                .and("active").is(true);
+
+        if (lastCheckedAt != null) {
+            criteria = criteria.and("lastModifiedAt").gt(lastCheckedAt);
+        }
+
+        return mongoTemplate.count(new Query(criteria), Notification.class);
+    }
+
+    private long countUnreadChatConversations(String userId) {
+        Query query = new Query(Criteria.where("userId").is(userId)
+                .and("type").in(NotificationType.MESSAGE_DIRECT, NotificationType.MESSAGE_GROUP)
+                .and("isRead").is(false)
+                .and("active").is(true));
+
+        // referenceId is stored as OBJECT_ID in MongoDB, use Object.class to fetch it correctly
+        return mongoTemplate.findDistinct(query, "referenceId", Notification.class, Object.class)
+                .stream()
+                .filter(referenceId -> referenceId != null)
+                .count();
     }
 
     @Override
     public void markHistoryAsChecked() {
         String userId = securityUtil.getCurrentUserId();
         mongoTemplate.upsert(
-                new Query(Criteria.where("userId").is(userId)),
-                new Update().set("lastCheckedAt", LocalDateTime.now()).set("unreadCount", 0L),
+                new Query(Criteria.where("_id").is(userId)),
+                new Update()
+                        .set("lastCheckedAt", LocalDateTime.now())
+                        .set("unreadCount", 0L)
+                        .set("unreadActorIds", Set.of()),
                 UserNotificationState.class
         );
     }
@@ -189,9 +233,37 @@ public class NotificationServiceImpl implements NotificationService {
     }
 
     @Override
+    public void markChatConversationAsRead(String conversationId) {
+        String userId = securityUtil.getCurrentUserId();
+        
+        // referenceId is stored as OBJECT_ID in MongoDB, need to convert if valid ObjectId format
+        Object referenceIdQuery = conversationId;
+        try {
+            if (conversationId != null && conversationId.matches("^[0-9a-fA-F]{24}$")) {
+                referenceIdQuery = new ObjectId(conversationId);
+            }
+        } catch (Exception e) {
+            log.warn("[Notification] Failed to parse conversationId as ObjectId: {}", conversationId, e);
+        }
+        
+        Query query = new Query(Criteria.where("userId").is(userId)
+                .and("referenceId").is(referenceIdQuery)
+                .and("type").in(NotificationType.MESSAGE_DIRECT, NotificationType.MESSAGE_GROUP)
+                .and("isRead").is(false));
+
+        Update update = new Update()
+                .set("isRead", true)
+                .set("readAt", LocalDateTime.now());
+
+        var result = mongoTemplate.updateMulti(query, update, Notification.class);
+        log.info("[Notification] Marked {} chat notifications as read for conversationId={}, userId={}", 
+                result.getModifiedCount(), conversationId, userId);
+    }
+
+    @Override
     public void markAllAsRead() {
         String userId = securityUtil.getCurrentUserId();
-        Query query = new Query((Criteria) Criteria.where("userId").is(userId)
+        Query query = new Query(Criteria.where("userId").is(userId)
                 .and("isRead").is(false));
 
         Update update = new Update()
@@ -203,15 +275,35 @@ public class NotificationServiceImpl implements NotificationService {
 
     @Override
     public void deactivateByReferenceIdAndType(String userId, String referenceId, NotificationType type) {
-        Query query = new Query(Criteria.where("userId").is(userId)
-                .and("referenceId").is(referenceId)
+        Query query = new Query(Criteria.where("userId").is(new ObjectId(userId))
+                .and("referenceId").is(new ObjectId(referenceId))
                 .and("type").is(type)
                 .and("active").is(true));
 
-        Update update = new Update().set("active", false);
-        var result = mongoTemplate.updateMulti(query, update, Notification.class);
-        log.info("[Notification] Deactivated {} notifications for referenceId={}, type={}, userId={}", 
-                result.getModifiedCount(), referenceId, type, userId);
+        Notification existing = mongoTemplate.findOne(query, Notification.class);
+        if (existing != null) {
+            boolean wasUnread = !existing.isRead();
+            
+            // Soft remove
+            Update update = new Update().set("active", false);
+            mongoTemplate.updateFirst(query, update, Notification.class);
+            
+            log.info("[Notification] Soft-removed notification for referenceId={}, type={}, userId={}, wasUnread={}",
+                    referenceId, type, userId, wasUnread);
+
+            if (wasUnread) {
+                decrementUnreadCount(userId);
+            }
+            socketEventPublisher.publishCleanup(userId, referenceId, type);
+        }
+    }
+
+    private void decrementUnreadCount(String userId) {
+        mongoTemplate.upsert(
+                new Query(Criteria.where("userId").is(userId)),
+                new Update().inc("unreadCount", -1L),
+                UserNotificationState.class
+        );
     }
 
     @Override
@@ -219,8 +311,7 @@ public class NotificationServiceImpl implements NotificationService {
         String userId = securityUtil.getCurrentUserId();
         log.info("[FCM] Triggering test notification for userId: {}", userId);
 
-        var prefs = userPreferenceService.getPreferences(userId);
-        String locale = prefs != null ? prefs.getLanguage() : "vi";
+        String locale = userPreferenceService.getLocale(userId);
         String actorName = "BondHub Tester";
         String actorAvatar = "";
 

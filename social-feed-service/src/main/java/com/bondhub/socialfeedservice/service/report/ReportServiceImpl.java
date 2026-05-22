@@ -88,12 +88,12 @@ public class ReportServiceImpl implements ReportService {
     private String validateTargetAndGetAuthorId(String targetId, TargetType targetType) {
         return switch (targetType) {
             case POST -> {
-                Post post = postRepository.findByIdAndActiveTrueAndIsCurrentTrue(targetId)
+                Post post = postRepository.findByIdAndActiveTrueAndIsCurrentTrueAndHiddenFalse(targetId)
                         .orElseThrow(() -> new AppException(ErrorCode.REPORT_TARGET_NOT_FOUND));
                 yield post.getAuthorId();
             }
             case COMMENT -> {
-                Comment comment = commentRepository.findByIdAndActiveTrue(targetId)
+                Comment comment = commentRepository.findByIdAndActiveTrueAndHiddenFalse(targetId)
                         .orElseThrow(() -> new AppException(ErrorCode.REPORT_TARGET_NOT_FOUND));
                 yield comment.getAuthorId();
             }

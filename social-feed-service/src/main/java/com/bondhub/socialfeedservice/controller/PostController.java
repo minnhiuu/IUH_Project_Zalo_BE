@@ -51,6 +51,12 @@ public class PostController {
         return ResponseEntity.ok(ApiResponse.success(postService.getStoryPosts(page, size)));
     }
 
+    @GetMapping("/stories/users/{userId}")
+    @Operation(summary = "Get STORY posts by user ID")
+    public ResponseEntity<ApiResponse<StoryGroupResponse>> getStoryPostsByUserId(@PathVariable String userId) {
+        return ResponseEntity.ok(ApiResponse.success(postService.getStoryPostsByUserId(userId)));
+    }
+
     @GetMapping("/reels")
     @Operation(summary = "Get REEL posts")
     public ResponseEntity<ApiResponse<PageResponse<List<PostResponse>>>> getReelPosts(
@@ -71,6 +77,15 @@ public class PostController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         return ResponseEntity.ok(ApiResponse.success(postService.getMyPosts(page, size)));
+    }
+
+    @GetMapping("/users/{userId}")
+    @Operation(summary = "Get posts by user ID")
+    public ResponseEntity<ApiResponse<PageResponse<List<PostResponse>>>> getPostsByUserId(
+            @PathVariable String userId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(ApiResponse.success(postService.getPostsByUserId(userId, page, size)));
     }
 
     @PutMapping("/{postId}")

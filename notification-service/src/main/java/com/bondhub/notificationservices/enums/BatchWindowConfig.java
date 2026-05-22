@@ -11,10 +11,10 @@ public enum BatchWindowConfig {
     // --- BATCHABLE ---
     DOB             (NotificationType.DOB,             300, false),
     FRIEND_REQUEST  (NotificationType.FRIEND_REQUEST,  0,   true),
-    POST_LIKE       (NotificationType.POST_LIKE,       30,  true),
+    POST_REACTION   (NotificationType.POST_REACTION,   30,  true),
     POST_COMMENT    (NotificationType.POST_COMMENT,    10,  true),
     POST_PUBLISHED  (NotificationType.POST_PUBLISHED,  0,   true),
-    COMMENT_LIKE    (NotificationType.COMMENT_LIKE,    30,  true),
+    COMMENT_REACTION(NotificationType.COMMENT_REACTION,30,  true),
     COMMENT_REPLY   (NotificationType.COMMENT_REPLY,   5,   true),
 
     // --- NON-BATCHABLE HOẶC URGENT ---
@@ -25,9 +25,19 @@ public enum BatchWindowConfig {
 
     // --- KHÔNG ĐƯỢC BATCH ---
     MESSAGE_DIRECT  (NotificationType.MESSAGE_DIRECT,  0,   false),
+    MESSAGE_GROUP   (NotificationType.MESSAGE_GROUP,   0,   false),
     CALL            (NotificationType.CALL,            0,   false),
     SYSTEM          (NotificationType.SYSTEM,          0,   false),
-    DLQ_ALERT       (NotificationType.DLQ_ALERT,       30,  true);
+
+    // --- KIỂM DUYỆT NỘI DUNG ---
+    CONTENT_REMOVED (NotificationType.CONTENT_REMOVED, 0,   false),
+    CONTENT_HIDDEN  (NotificationType.CONTENT_HIDDEN,  0,   false),
+    USER_WARNED     (NotificationType.USER_WARNED,     0,   false),
+
+    // --- BẢO MẬT (SECURITY) ---
+    NEW_DEVICE_LOGIN(NotificationType.NEW_DEVICE_LOGIN,0,   false),
+    DLQ_ALERT       (NotificationType.DLQ_ALERT,       30,  true),
+    DND_SUMMARY     (NotificationType.DND_SUMMARY,     0,   false);
 
     private final NotificationType type;
     private final int windowSeconds;

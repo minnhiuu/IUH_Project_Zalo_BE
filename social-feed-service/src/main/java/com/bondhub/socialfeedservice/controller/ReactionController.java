@@ -58,4 +58,13 @@ public class ReactionController {
             @RequestParam @NotNull(message = "reaction.targetType.required") ReactionTargetType targetType) {
         return ResponseEntity.ok(ApiResponse.success(reactionService.getReactionStats(targetId, targetType)));
     }
+
+    @PostMapping("/test-batch-like")
+    @Operation(summary = "Simulate batch likes for testing notifications")
+    public ResponseEntity<ApiResponse<Void>> simulateBatchLikes(
+            @RequestParam @NotBlank String postId,
+            @RequestParam(defaultValue = "50") int count) {
+        reactionService.simulateBatchLikes(postId, count);
+        return ResponseEntity.ok(ApiResponse.success(null));
+    }
 }

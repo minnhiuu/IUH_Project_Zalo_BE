@@ -5,6 +5,7 @@ import com.bondhub.common.dto.PageResponse;
 import com.bondhub.common.utils.LocalizationUtil;
 import com.bondhub.searchservice.dto.response.*;
 import com.bondhub.searchservice.enums.SearchIndexType;
+import com.bondhub.searchservice.service.interactionfeature.UserInteractionFeatureRebuildService;
 import com.bondhub.searchservice.service.index.core.SearchIndexMonitor;
 import com.bondhub.searchservice.service.index.core.SearchIndexSynchronizer;
 import com.bondhub.searchservice.service.index.admin.SearchIndexOrchestrator;
@@ -26,6 +27,7 @@ public class ElasticsearchAdminController {
 
     private final SearchIndexOrchestrator orchestrator;
     private final ElasticsearchAdminService elasticsearchAdminService;
+    private final UserInteractionFeatureRebuildService userInteractionFeatureRebuildService;
     private final LocalizationUtil localizationUtil;
 
     @PostMapping("/reindex/{type}")
@@ -88,6 +90,14 @@ public class ElasticsearchAdminController {
             "message", localizationUtil.getMessage("search.re-index.user.success"),
             "userId", userId
         )));
+    }
+
+    @PostMapping("/interaction-features/rebuild")
+    public ResponseEntity<ApiResponse<UserInteractionFeatureRebuildResponse>> rebuildInteractionFeatures(
+            @RequestParam(defaultValue = "30") int sinceDays,
+            @RequestParam(defaultValue = "5000") int sourceLimit) {
+        return ResponseEntity.ok(ApiResponse.success(
+                userInteractionFeatureRebuildService.rebuild(sinceDays, sourceLimit)));
     }
 
     @GetMapping("/index/{type}/document/{id}")

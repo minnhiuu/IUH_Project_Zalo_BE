@@ -39,43 +39,49 @@ public class UserMirrorConsumer {
     private final S3UtilV2 s3UtilV2;
 
     @KafkaListener(topics = "${kafka.topics.user-events.updated}", groupId = "${spring.kafka.consumer.group-id:message-service-group}")
-    public void handleUserUpdated(UserProfileUpdatedEvent event, Acknowledgment ack) {
-        log.info("Received USER_UPDATED event for userId: {}", event.userId());
+    public void handleUserUpdated(Object event, Acknowledgment ack) {
+        if (!(event instanceof UserProfileUpdatedEvent profileEvent)) {
+            log.debug("Skipping non-profile update event of type: {}", event.getClass().getName());
+            ack.acknowledge();
+            return;
+        }
+
+        log.info("Received USER_UPDATED event for userId: {}", profileEvent.userId());
         try {
-            chatUserRepository.findById(event.userId()).ifPresentOrElse(user -> {
-                LocalDateTime eventTime = new Timestamp(event.timestamp()).toLocalDateTime();
+            chatUserRepository.findById(profileEvent.userId()).ifPresentOrElse(user -> {
+                LocalDateTime eventTime = new Timestamp(profileEvent.timestamp()).toLocalDateTime();
                 if (user.getLastUpdatedAt() == null || user.getLastUpdatedAt().isBefore(eventTime)) {
-                    if (StringUtils.hasText(event.fullName())) {
-                        user.setFullName(event.fullName());
+                    if (StringUtils.hasText(profileEvent.fullName())) {
+                        user.setFullName(profileEvent.fullName());
                     }
-                    if (StringUtils.hasText(event.avatar())) {
-                        user.setAvatar(s3UtilV2.extractStorageKey(event.avatar()));
+                    if (StringUtils.hasText(profileEvent.avatar())) {
+                        user.setAvatar(s3UtilV2.extractStorageKey(profileEvent.avatar()));
                         log.info("✅ Updated ChatUser mirror with avatar: {}", user.getAvatar());
                     }
                     user.setLastUpdatedAt(eventTime);
                     chatUserRepository.save(user);
-                    log.info("✅ Updated ChatUser mirror for userId: {}", event.userId());
+                    log.info("✅ Updated ChatUser mirror for userId: {}", profileEvent.userId());
                 } else {
-                    log.info("⏩ Skipped outdated USER_UPDATED event for userId: {}", event.userId());
+                    log.info("⏩ Skipped outdated USER_UPDATED event for userId: {}", profileEvent.userId());
                 }
             }, () -> {
                 ChatUser newUser = ChatUser.builder()
-                        .id(event.userId())
-                        .fullName(event.fullName())
-                        .avatar(event.avatar())
-                        .phoneNumber(event.phoneNumber())
-                        .fullName(StringUtils.hasText(event.fullName()) ? event.fullName() : "Người dùng mới")
-                    .avatar(StringUtils.hasText(event.avatar())
-                        ? s3UtilV2.extractStorageKey(event.avatar())
+                        .id(profileEvent.userId())
+                        .fullName(profileEvent.fullName())
+                        .avatar(profileEvent.avatar())
+                        .phoneNumber(profileEvent.phoneNumber())
+                        .fullName(StringUtils.hasText(profileEvent.fullName()) ? profileEvent.fullName() : "Người dùng mới")
+                    .avatar(StringUtils.hasText(profileEvent.avatar())
+                        ? s3UtilV2.extractStorageKey(profileEvent.avatar())
                         : null)
-                        .lastUpdatedAt(new Timestamp(event.timestamp()).toLocalDateTime())
+                        .lastUpdatedAt(new Timestamp(profileEvent.timestamp()).toLocalDateTime())
                         .build();
                 chatUserRepository.save(newUser);
-                log.info("✅ Created new ChatUser mirror for userId: {}", event.userId());
+                log.info("✅ Created new ChatUser mirror for userId: {}", profileEvent.userId());
             });
             ack.acknowledge();
         } catch (Exception e) {
-            log.error("❌ Error processing USER_UPDATED event for userId: {}", event.userId(), e);
+            log.error("❌ Error processing USER_UPDATED event for userId: {}", profileEvent.userId(), e);
         }
     }
 

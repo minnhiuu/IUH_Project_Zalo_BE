@@ -102,6 +102,16 @@ public class UserController {
         return ResponseEntity.ok(ApiResponse.success(userService.updateBio(request)));
     }
 
+    @PostMapping("/me/deactivate")
+    public ResponseEntity<ApiResponse<UserProfileResponse>> deactivateMyAccount() {
+        return ResponseEntity.ok(ApiResponse.success(userService.deactivateMyAccount()));
+    }
+
+    @PostMapping("/me/activate")
+    public ResponseEntity<ApiResponse<UserProfileResponse>> activateMyAccount() {
+        return ResponseEntity.ok(ApiResponse.success(userService.activateMyAccount()));
+    }
+
 
     @DeleteMapping("/{id}")
     public ResponseEntity<ApiResponse<Void>> deleteUser(@PathVariable String id) {

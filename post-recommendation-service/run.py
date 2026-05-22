@@ -13,6 +13,8 @@ if __name__ == "__main__":
     command = [
         "uv",
         "run",
+        "python",
+        "-m",
         "uvicorn",
         "app.main:app",
         "--host",

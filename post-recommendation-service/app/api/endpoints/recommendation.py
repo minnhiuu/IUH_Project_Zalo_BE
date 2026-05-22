@@ -17,6 +17,10 @@ from app.services.rrf_recommendation_engine import PostTypeFlow, RRFRecommendati
 from app.services.feed_candidate_service import FeedCandidateService
 
 from app.services.dynamic_vector_service import compute_global_centroid
+from pydantic import BaseModel, Field
+
+class UserInterestSeedUpdateRequest(BaseModel):
+    initial_interests: list[str] = Field(alias="initialInterests", default_factory=list)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -403,6 +407,239 @@ async def revectorize_user(user_id: str) -> ApiResponse[dict]:
     return ApiResponse.success(result)
 
 
+@router.post(
+    "/internal/recommendations/users/{user_id}/seed",
+    summary="[Internal] Seed initial interests and rebuild baseline vector",
+)
+async def seed_user_interests(user_id: str, request: UserInterestSeedUpdateRequest) -> ApiResponse[dict]:
+    """
+    Called by social-feed-service during data seeding.
+    Updates the user's initial interests in Qdrant, reconstructs the baseline
+    vector using fastembed, and recalculates the dynamic vector.
+    """
+    from app.services.user_vectorizer import UserProfile, build_baseline_user_document
+    from app.services.dynamic_vector_service import update_user_vector
+
+    qdrant = get_qdrant_client()
+    settings = get_settings()
+    user_point_id = _to_qdrant_point_id(user_id)
+
+    try:
+        points = qdrant.retrieve(
+            collection_name=settings.qdrant_user_collection_name,
+            ids=[user_point_id],
+            with_payload=True,
+        )
+    except Exception:
+        logger.exception("[Seed] Failed to retrieve user %s from Qdrant", user_id)
+        return ApiResponse.error("Failed to retrieve user from Qdrant", code="INTERNAL_ERROR")
+
+    if not points:
+        payload = {
+            "user_id": user_id,
+            "initial_interests": request.initial_interests,
+        }
+    else:
+        payload = points[0].payload or {}
+        payload["initial_interests"] = request.initial_interests
+
+    profile = UserProfile(
+        id=user_id,
+        bio=payload.get("bio", ""),
+        initialInterests=request.initial_interests,
+    )
+    semantic_text = build_baseline_user_document(profile)
+
+    try:
+        qdrant.set_model(settings.embedding_model_name)
+        qdrant.add(
+            collection_name=settings.qdrant_user_collection_name,
+            documents=[semantic_text],
+            metadata=[payload],
+            ids=[user_point_id],
+        )
+        logger.info("[Seed] Re-embedded baseline vector for user_id=%s with new interests", user_id)
+    except Exception:
+        logger.exception("[Seed] Failed to upsert new baseline vector for user_id=%s", user_id)
+        return ApiResponse.error("Failed to upsert baseline vector", code="INTERNAL_ERROR")
+
+    await update_user_vector(user_id)
+
+    return ApiResponse.success({"updated": True, "interests_count": len(request.initial_interests)})
+
+
+@router.post(
+    "/internal/recommendations/users/{user_id}/sync",
+    summary="[Internal] Sync user profile from user-service and rebuild baseline",
+)
+async def sync_user_profile(user_id: str) -> ApiResponse[dict]:
+    """
+    Fetches the latest profile from user-service, updates Qdrant,
+    re-embeds the baseline, and recalculates the dynamic vector.
+    """
+    from app.clients.user_service_client import get_user_profile
+    from app.services.user_vectorizer import UserProfile, build_baseline_user_document
+    from app.services.dynamic_vector_service import update_user_vector
+
+    profile_data = await get_user_profile(user_id)
+    if not profile_data:
+        return ApiResponse.error("Failed to fetch user profile from user-service", code="INTERNAL_ERROR")
+
+    qdrant = get_qdrant_client()
+    settings = get_settings()
+    user_point_id = _to_qdrant_point_id(user_id)
+
+    # Initial interests defaults to empty list if not present
+    initial_interests = profile_data.get("initialInterests") or []
+    
+    try:
+        points = qdrant.retrieve(
+            collection_name=settings.qdrant_user_collection_name,
+            ids=[user_point_id],
+            with_payload=True,
+        )
+    except Exception:
+        logger.exception("[Sync] Failed to retrieve user %s from Qdrant", user_id)
+        return ApiResponse.error("Failed to retrieve user from Qdrant", code="INTERNAL_ERROR")
+
+    if not points:
+        payload = {
+            "user_id": user_id,
+            "account_id": profile_data.get("accountId"),
+            "full_name": profile_data.get("fullName"),
+            "bio": profile_data.get("bio", ""),
+            "initial_interests": initial_interests,
+        }
+    else:
+        payload = points[0].payload or {}
+        payload["full_name"] = profile_data.get("fullName")
+        payload["bio"] = profile_data.get("bio", "")
+        payload["initial_interests"] = initial_interests
+
+    profile = UserProfile(
+        id=user_id,
+        fullName=profile_data.get("fullName", ""),
+        bio=payload.get("bio", ""),
+        initialInterests=initial_interests,
+    )
+    semantic_text = build_baseline_user_document(profile)
+
+    try:
+        qdrant.set_model(settings.embedding_model_name)
+        qdrant.add(
+            collection_name=settings.qdrant_user_collection_name,
+            documents=[semantic_text],
+            metadata=[payload],
+            ids=[user_point_id],
+        )
+        logger.info("[Sync] Re-embedded baseline vector for user_id=%s with latest profile", user_id)
+    except Exception:
+        logger.exception("[Sync] Failed to upsert new baseline vector for user_id=%s", user_id)
+        return ApiResponse.error("Failed to upsert baseline vector", code="INTERNAL_ERROR")
+
+    await update_user_vector(user_id)
+
+    return ApiResponse.success({"updated": True, "interests_count": len(initial_interests)})
+
+
+@router.post(
+    "/internal/recommendations/users/sync-all",
+    summary="[Internal] Sync all user profiles from user-service and rebuild vectors",
+)
+async def sync_all_users() -> ApiResponse[dict]:
+    from app.clients.user_service_client import get_users_batch
+    from app.services.user_vectorizer import UserProfile, build_baseline_user_document
+    from app.services.dynamic_vector_service import update_user_vector
+    import asyncio
+
+    qdrant = get_qdrant_client()
+    settings = get_settings()
+    
+    total_synced = 0
+    last_id = None
+    batch_size = 500
+    
+    while True:
+        users = await get_users_batch(last_id=last_id, size=batch_size)
+        if not users:
+            break
+            
+        documents = []
+        payloads = []
+        point_ids = []
+        user_ids = []
+        
+        user_ids_batch = [u["id"] for u in users if u.get("id")]
+        qdrant_ids = [_to_qdrant_point_id(uid) for uid in user_ids_batch]
+        
+        try:
+            existing_points = qdrant.retrieve(
+                collection_name=settings.qdrant_user_collection_name,
+                ids=qdrant_ids,
+                with_payload=True,
+            )
+            existing_payloads = {str(p.id): (p.payload or {}) for p in existing_points}
+        except Exception:
+            logger.exception("[SyncAll] Failed to retrieve batch from Qdrant")
+            existing_payloads = {}
+            
+        for u in users:
+            uid = u.get("id")
+            if not uid:
+                continue
+                
+            qdrant_id = _to_qdrant_point_id(uid)
+            initial_interests = u.get("initialInterests") or []
+            bio = u.get("bio", "")
+            
+            payload = existing_payloads.get(qdrant_id, {})
+            if not payload:
+                payload = {
+                    "user_id": uid,
+                    "account_id": u.get("accountId"),
+                }
+            payload["full_name"] = u.get("fullName")
+            payload["bio"] = bio
+            payload["initial_interests"] = initial_interests
+            
+            profile = UserProfile(
+                id=uid,
+                fullName=u.get("fullName", ""),
+                bio=bio,
+                initialInterests=initial_interests,
+            )
+            
+            documents.append(build_baseline_user_document(profile))
+            payloads.append(payload)
+            point_ids.append(qdrant_id)
+            user_ids.append(uid)
+            
+        if point_ids:
+            try:
+                qdrant.set_model(settings.embedding_model_name)
+                qdrant.add(
+                    collection_name=settings.qdrant_user_collection_name,
+                    documents=documents,
+                    metadata=payloads,
+                    ids=point_ids,
+                )
+            except Exception:
+                logger.exception("[SyncAll] Failed to bulk upsert baseline vectors")
+                
+            tasks = [update_user_vector(uid) for uid in user_ids]
+            await asyncio.gather(*tasks, return_exceptions=True)
+            
+            total_synced += len(point_ids)
+            logger.info("[SyncAll] Synced batch of %d users, total so far: %d", len(point_ids), total_synced)
+            
+        if len(users) < batch_size:
+            break
+            
+        last_id = users[-1].get("id")
+
+    return ApiResponse.success({"updated": True, "total_synced": total_synced})
+
+
 # ── New internal RRF endpoints (called by social-feed-service) ─────────────────
 
 @router.get(
@@ -451,3 +688,57 @@ async def get_rrf_reels(
     post_ids = await _build_rrf_feed(user_id=user_id, flow=PostTypeFlow.REEL, n=n)
     return ApiResponse.success(post_ids)
 
+
+@router.get(
+    "/internal/vector-store/stats",
+    summary="[Internal] Vector store statistics for all Qdrant collections",
+)
+async def get_vector_store_stats() -> ApiResponse[dict]:
+    """
+    Returns key stats for every Qdrant collection:
+    - vectors_count  – total indexed vectors
+    - indexed_vectors_count – vectors in the HNSW index
+    - points_count   – logical points (may differ from vectors for sparse)
+    - segments_count
+    - status         – green / yellow / grey
+    - vector_size
+    - distance metric
+    """
+    qdrant = get_qdrant_client()
+    settings = get_settings()
+
+    collection_names = [
+        settings.qdrant_collection_name,
+        settings.qdrant_user_collection_name,
+    ]
+
+    result: dict[str, dict] = {}
+
+    for name in collection_names:
+        try:
+            info = qdrant.get_collection(name)
+            config = info.config.params.vectors
+            # config can be a dict (named vectors) or a single VectorParams
+            if isinstance(config, dict):
+                # named vectors — pick the first one for size/distance
+                first = next(iter(config.values()))
+                vector_size = first.size
+                distance = first.distance.name if first.distance else "UNKNOWN"
+            else:
+                vector_size = getattr(config, "size", None)
+                distance = config.distance.name if getattr(config, "distance", None) else "UNKNOWN"
+
+            result[name] = {
+                "status": info.status.name if info.status else "UNKNOWN",
+                "vectors_count": info.vectors_count or 0,
+                "indexed_vectors_count": info.indexed_vectors_count or 0,
+                "points_count": info.points_count or 0,
+                "segments_count": info.segments_count or 0,
+                "vector_size": vector_size,
+                "distance": distance,
+            }
+        except Exception:
+            logger.exception("[Stats] Failed to fetch info for collection %s", name)
+            result[name] = {"status": "ERROR", "error": f"Collection '{name}' not found or unreachable"}
+
+    return ApiResponse.success(result)

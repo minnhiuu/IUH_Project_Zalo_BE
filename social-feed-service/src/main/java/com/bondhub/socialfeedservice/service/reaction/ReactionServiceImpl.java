@@ -2,6 +2,7 @@ package com.bondhub.socialfeedservice.service.reaction;
 
 import com.bondhub.common.enums.NotificationType;
 import com.bondhub.common.event.notification.RawNotificationEvent;
+import com.bondhub.common.event.notification.payload.PostReactionPayload;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
 import com.bondhub.common.publisher.RawNotificationEventPublisher;
@@ -218,9 +219,9 @@ public class ReactionServiceImpl implements ReactionService {
 
     private void validateTarget(String targetId, ReactionTargetType targetType) {
         switch (targetType) {
-            case POST -> postRepository.findByIdAndActiveTrueAndIsCurrentTrue(targetId)
+            case POST -> postRepository.findByIdAndActiveTrueAndIsCurrentTrueAndHiddenFalse(targetId)
                     .orElseThrow(() -> new AppException(ErrorCode.POST_NOT_FOUND));
-            case COMMENT -> commentRepository.findByIdAndActiveTrue(targetId)
+            case COMMENT -> commentRepository.findByIdAndActiveTrueAndHiddenFalse(targetId)
                     .orElseThrow(() -> new AppException(ErrorCode.COMMENT_NOT_FOUND));
             default -> throw new AppException(ErrorCode.REACTION_NOT_FOUND);
         }
@@ -231,20 +232,20 @@ public class ReactionServiceImpl implements ReactionService {
             return targetId;
         }
 
-        Comment targetComment = commentRepository.findByIdAndActiveTrue(targetId)
+        Comment targetComment = commentRepository.findByIdAndActiveTrueAndHiddenFalse(targetId)
                 .orElseThrow(() -> new AppException(ErrorCode.COMMENT_NOT_FOUND));
         return targetComment.getPostId();
     }
 
     private String resolveGroupId(String postId) {
-        return postRepository.findByIdAndActiveTrueAndIsCurrentTrue(postId)
+        return postRepository.findByIdAndActiveTrueAndIsCurrentTrueAndHiddenFalse(postId)
                 .map(Post::getGroupId)
                 .orElse(null);
     }
 
     private long getDenormalizedReactionCount(String targetId, ReactionTargetType targetType) {
         if (targetType == ReactionTargetType.POST) {
-            Post post = postRepository.findByIdAndActiveTrueAndIsCurrentTrue(targetId)
+            Post post = postRepository.findByIdAndActiveTrueAndIsCurrentTrueAndHiddenFalse(targetId)
                     .orElseThrow(() -> new AppException(ErrorCode.POST_NOT_FOUND));
 
             if (post.getStats() == null) {
@@ -254,7 +255,7 @@ public class ReactionServiceImpl implements ReactionService {
             return post.getStats().getReactionCount();
         }
 
-        Comment comment = commentRepository.findByIdAndActiveTrue(targetId)
+        Comment comment = commentRepository.findByIdAndActiveTrueAndHiddenFalse(targetId)
                 .orElseThrow(() -> new AppException(ErrorCode.COMMENT_NOT_FOUND));
         return comment.getReactionCount();
     }
@@ -271,7 +272,7 @@ public class ReactionServiceImpl implements ReactionService {
                         return;
                 }
 
-                Post post = postRepository.findByIdAndActiveTrueAndIsCurrentTrue(targetId).orElse(null);
+                Post post = postRepository.findByIdAndActiveTrueAndIsCurrentTrueAndHiddenFalse(targetId).orElse(null);
                 if (post == null || post.getAuthorId() == null || post.getAuthorId().equals(actorId)) {
                         log.debug("[ReactionNotification] Skip publish: post missing or self-reaction, targetId={}, actorId={}, postAuthorId={}",
                                         targetId,
@@ -286,28 +287,89 @@ public class ReactionServiceImpl implements ReactionService {
                                 : "Unknown User";
                 String actorAvatar = actorSummary != null ? actorSummary.getAvatar() : null;
 
+                String actionVi;
+                String actionEn;
+                switch (reactionType) {
+                    case LOVE -> { actionVi = "yêu thích"; actionEn = "loved"; }
+                    case HAHA -> { actionVi = "bày tỏ cảm xúc haha về"; actionEn = "reacted haha to"; }
+                    case WOW -> { actionVi = "bày tỏ cảm xúc wow về"; actionEn = "reacted wow to"; }
+                    case SAD -> { actionVi = "bày tỏ cảm xúc buồn về"; actionEn = "reacted sad to"; }
+                    case ANGRY -> { actionVi = "phẫn nộ về"; actionEn = "reacted angry to"; }
+                    default -> { actionVi = "thích"; actionEn = "liked"; }
+                }
+
                 try {
-                        Map<String, Object> payload = new HashMap<>();
-                        payload.put("postId", post.getId());
-                        payload.put("reactionType", reactionType.name());
+                        Map<String, Object> payload = Map.of(
+                                "postId", post.getId(),
+                                "reactionType", reactionType.name(),
+                                "reactionActionVi", actionVi,
+                                "reactionActionEn", actionEn
+                        );
 
                         RawNotificationEvent notificationEvent = RawNotificationEvent.builder()
                                         .recipientId(post.getAuthorId())
                                         .actorId(actorId)
                                         .actorName(actorName)
                                         .actorAvatar(actorAvatar)
-                                        .type(NotificationType.POST_LIKE)
+                                        .type(NotificationType.POST_REACTION)
                                         .referenceId(post.getId())
                                         .payload(payload)
                                         .occurredAt(LocalDateTime.now())
                                         .build();
 
                         rawNotificationEventPublisher.publish(notificationEvent);
-                        log.info("[ReactionNotification] Published POST_LIKE: actorId={}, recipientId={}, postId={}, reactionType={}",
+                        log.info("[ReactionNotification] Published POST_REACTION: actorId={}, recipientId={}, postId={}, reactionType={}",
                                         actorId, post.getAuthorId(), post.getId(), reactionType);
                 } catch (Exception e) {
                         log.warn("[ReactionNotification] Failed to publish POST_LIKE: actorId={}, targetId={}",
                                         actorId, targetId, e);
                 }
         }
+
+    @Override
+    public void simulateBatchLikes(String postId, int count) {
+        Post post = postRepository.findByIdAndActiveTrueAndIsCurrentTrueAndHiddenFalse(postId)
+                .orElseThrow(() -> new AppException(ErrorCode.POST_NOT_FOUND));
+
+        org.springframework.data.domain.Page<UserSummary> usersPage = userSummaryRepository.findAll(org.springframework.data.domain.PageRequest.of(0, count));
+        List<UserSummary> users = usersPage.getContent();
+
+        for (int i = 0; i < count; i++) {
+            String actorId;
+            String actorName;
+            String actorAvatar;
+
+            if (i < users.size()) {
+                UserSummary user = users.get(i);
+                actorId = user.getId();
+                actorName = user.getFullName() != null && !user.getFullName().isBlank() ? user.getFullName() : "Batch User " + i;
+                actorAvatar = user.getAvatar();
+            } else {
+                actorId = "dummy-batch-actor-" + i;
+                actorName = "Batch User " + i;
+                actorAvatar = null;
+            }
+
+            Map<String, Object> payload = Map.of(
+                    "postId", post.getId(),
+                    "reactionType", ReactionType.LIKE.name(),
+                    "reactionActionVi", "thích",
+                    "reactionActionEn", "liked"
+            );
+
+            RawNotificationEvent notificationEvent = RawNotificationEvent.builder()
+                    .recipientId(post.getAuthorId())
+                    .actorId(actorId)
+                    .actorName(actorName)
+                    .actorAvatar(actorAvatar)
+                    .type(NotificationType.POST_REACTION)
+                    .referenceId(post.getId())
+                    .payload(payload)
+                    .occurredAt(LocalDateTime.now())
+                    .build();
+
+            rawNotificationEventPublisher.publish(notificationEvent);
+        }
+        log.info("[ReactionNotification] Published {} simulated batch POST_REACTION events for postId={}", count, postId);
+    }
 }

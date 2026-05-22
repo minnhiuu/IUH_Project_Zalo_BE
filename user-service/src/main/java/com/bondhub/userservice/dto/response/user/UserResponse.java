@@ -11,6 +11,7 @@ public record UserResponse(
     LocalDate dob,
     String bio,
     Gender gender,
+    Boolean active,
     AccountResponse accountInfo,
     String avatar,
     String background,

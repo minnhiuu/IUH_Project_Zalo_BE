@@ -30,7 +30,7 @@ public class DataSeederController {
 
     SocialFeedSeederService seederService;
 
-    @PostMapping(value = {"/seed/all", ""})
+    @PostMapping("/seed/all")
     @Operation(summary = "Full pipeline: fetch users → seed interests → seed Posts/Comments/Reactions")
     public ResponseEntity<ApiResponse<Map<String, Object>>> seedEverything() {
         return ResponseEntity.ok(ApiResponse.success(seederService.seedEverything()));

@@ -64,8 +64,7 @@ public class BatchFlushServiceImpl implements BatchFlushService {
 
         int actorCount = actorIds.size();
         int othersCount = actorCount - 1;
-        var prefs = userPreferenceService.getPreferences(last.getRecipientId());
-        String locale = prefs != null ? prefs.getLanguage() : "vi";
+        String locale = userPreferenceService.getLocale(last.getRecipientId());
 
         List<Map<String, Object>> rawPayloads = events.stream()
                 .map(e -> {

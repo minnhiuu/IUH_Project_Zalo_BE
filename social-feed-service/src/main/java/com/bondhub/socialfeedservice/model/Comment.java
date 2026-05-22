@@ -13,8 +13,10 @@ import lombok.experimental.SuperBuilder;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.FieldType;
+import com.bondhub.socialfeedservice.model.enums.ReactionType;
 import org.springframework.data.mongodb.core.mapping.MongoId;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @Data
@@ -50,6 +52,9 @@ public class Comment extends BaseModel {
 
     @Builder.Default
     int reactionCount = 0;
+
+    @Builder.Default
+    List<ReactionType> topReactions = new ArrayList<>();
 
     @Builder.Default
     boolean isEdited = false;

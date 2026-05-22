@@ -55,12 +55,12 @@ public class PostCommentCountProjectionRequestedListener {
                 topic, partition, offset, event.postId(), event.commentId(), event.action(), event.actorId());
 
         try {
-            Post post = postRepository.findByIdAndActiveTrueAndIsCurrentTrue(event.postId())
+            Post post = postRepository.findByIdAndActiveTrueAndIsCurrentTrueAndHiddenFalse(event.postId())
                     .orElseThrow(() -> new AppException(ErrorCode.POST_NOT_FOUND));
 
             publishCommentNotifications(post, event);
 
-            long totalActiveComments = commentRepository.countByPostIdAndActiveTrue(event.postId());
+            long totalActiveComments = commentRepository.countByPostIdAndActiveTrueAndHiddenFalse(event.postId());
 
             PostStats stats = post.getStats();
             if (stats == null) {
@@ -90,7 +90,7 @@ public class PostCommentCountProjectionRequestedListener {
             return;
         }
 
-        Comment createdComment = commentRepository.findByIdAndActiveTrue(event.commentId()).orElse(null);
+        Comment createdComment = commentRepository.findByIdAndActiveTrueAndHiddenFalse(event.commentId()).orElse(null);
         if (createdComment == null) {
             log.warn("Skipping comment notification because comment is not active: commentId={}", event.commentId());
             return;
@@ -151,7 +151,7 @@ public class PostCommentCountProjectionRequestedListener {
             return;
         }
 
-        Comment parentComment = commentRepository.findByIdAndActiveTrue(createdComment.getParentId()).orElse(null);
+        Comment parentComment = commentRepository.findByIdAndActiveTrueAndHiddenFalse(createdComment.getParentId()).orElse(null);
         if (parentComment == null || parentComment.getAuthorId() == null || parentComment.getAuthorId().equals(actorId)) {
             return;
         }

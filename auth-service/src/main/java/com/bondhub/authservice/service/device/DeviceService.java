@@ -124,4 +124,14 @@ public interface DeviceService {
      * @return a grouped list of active and inactive devices
      */
     DeviceListResponse getGroupedActiveDevicesWithSessions(String accountId, String currentSessionId);
+
+    /**
+     * Returns the {@code deviceId} of the account's root mobile device, or empty
+     * if no root device has been designated yet (i.e. the user has never logged in
+     * from a MOBILE device).
+     *
+     * @param accountId the auth-service account ID
+     * @return optional deviceId string
+     */
+    java.util.Optional<String> getRootMobileDeviceId(String accountId);
 }

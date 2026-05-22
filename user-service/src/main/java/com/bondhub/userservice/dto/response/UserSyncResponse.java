@@ -7,5 +7,7 @@ public record UserSyncResponse(
     String id,
     String fullName,
     String avatar,
-    String accountId
+    String accountId,
+    String bio,
+    java.util.Set<String> initialInterests
 ) {}

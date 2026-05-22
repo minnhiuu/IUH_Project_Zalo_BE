@@ -12,11 +12,13 @@ public interface CommentRepository extends MongoRepository<Comment, String> {
 
     Optional<Comment> findByIdAndActiveTrue(String id);
 
-    Page<Comment> findByPostIdAndParentIdIsNullAndActiveTrueOrderByCreatedAtAsc(String postId, Pageable pageable);
+    Optional<Comment> findByIdAndActiveTrueAndHiddenFalse(String id);
 
-    Page<Comment> findByPostIdAndParentIdIsNullAndActiveTrueOrderByReactionCountDescCreatedAtDesc(String postId, Pageable pageable);
+    Page<Comment> findByPostIdAndParentIdIsNullAndActiveTrueAndHiddenFalseOrderByCreatedAtAsc(String postId, Pageable pageable);
 
-    List<Comment> findByParentIdAndActiveTrueOrderByCreatedAtAsc(String parentId);
+    Page<Comment> findByPostIdAndParentIdIsNullAndActiveTrueAndHiddenFalseOrderByReactionCountDescCreatedAtDesc(String postId, Pageable pageable);
 
-    long countByPostIdAndActiveTrue(String postId);
+    List<Comment> findByParentIdAndActiveTrueAndHiddenFalseOrderByCreatedAtAsc(String parentId);
+
+    long countByPostIdAndActiveTrueAndHiddenFalse(String postId);
 }

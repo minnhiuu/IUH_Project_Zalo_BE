@@ -19,4 +19,10 @@ public interface DeviceRepository extends MongoRepository<Device, String> {
     boolean existsBySessionId(String sessionId);
 
     void deleteByAccountId(String accountId);
+
+    /** Check whether this account already has a designated root mobile device. */
+    boolean existsByAccountIdAndIsRootDeviceTrue(String accountId);
+
+    /** Retrieve the root mobile device for an account (to obtain its deviceId for notifications). */
+    Optional<Device> findFirstByAccountIdAndIsRootDeviceTrue(String accountId);
 }

@@ -68,6 +68,7 @@ public class KafkaTopicProperties {
         private String raw = "noti.raw";
         private String cleanup = "noti.cleanup";
         private String system = "noti.system";
+        private String email = "email-notifications";
     }
 
     @Getter
@@ -86,6 +87,8 @@ public class KafkaTopicProperties {
     @Setter
     public static class InteractionEvents {
         private String userInteraction = "user.interaction";
+        private String chatInteractionOccurred = "search.chat-interaction.occurred";
+        private String socialFeedInteractionOccurred = "search.social-feed-interaction.occurred";
     }
 
     @Getter

@@ -106,14 +106,18 @@ public class SocialFeedSeederServiceImpl implements SocialFeedSeederService {
     };
 
     static final String[] VIDEO_URLS = {
-            "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
-            "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
-            "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4",
-            "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4",
-            "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerMeltdowns.mp4",
-            "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/SubaruOutbackOnStreetAndDirt.mp4",
-            "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/WeAreGoingOnBullrun.mp4",
-            "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/VolkswagenGTIReview.mp4",
+            "https://raw.githubusercontent.com/intel-iot-devkit/sample-videos/master/person-bicycle-car-detection.mp4",
+            "https://raw.githubusercontent.com/intel-iot-devkit/sample-videos/master/bottle-detection.mp4",
+            "https://raw.githubusercontent.com/intel-iot-devkit/sample-videos/master/car-detection.mp4",
+            "https://raw.githubusercontent.com/intel-iot-devkit/sample-videos/master/head-pose-face-detection-female-and-male.mp4",
+            "https://raw.githubusercontent.com/intel-iot-devkit/sample-videos/master/face-demographics-walking-and-pause.mp4",
+            "https://raw.githubusercontent.com/intel-iot-devkit/sample-videos/master/classroom.mp4",
+            "https://www.w3schools.com/html/mov_bbb.mp4",
+            "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
+            "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/friday.mp4",
+            "https://raw.githubusercontent.com/intel-iot-devkit/sample-videos/master/person-bicycle-car-detection.mp4",
+            "https://raw.githubusercontent.com/intel-iot-devkit/sample-videos/master/bottle-detection.mp4",
+            "https://raw.githubusercontent.com/intel-iot-devkit/sample-videos/master/car-detection.mp4",
     };
 
     // ── Comment pool ─────────────────────────────────────────────────────────
@@ -493,6 +497,8 @@ public class SocialFeedSeederServiceImpl implements SocialFeedSeederService {
             return buildSummary(0, 0, 0, 0, 0, "No user IDs available in user-service");
         }
 
+        purgeSocialFeedData();
+
         Random random = new Random();
         ReactionType[] reactionTypes = ReactionType.values();
 
@@ -528,6 +534,34 @@ public class SocialFeedSeederServiceImpl implements SocialFeedSeederService {
         return buildSummary(allSavedPosts.size(), engagementCounts[0], engagementCounts[1], engagementCounts[2], interestsPublished, message);
     }
 
+    private void purgeSocialFeedData() {
+        long postCount = postRepository.count();
+        long commentCount = commentRepository.count();
+        long reactionCount = reactionRepository.count();
+        long interactionCount = userInteractionRepository.count();
+        long hashtagCount = hashtagRepository.count();
+
+        long total = postCount + commentCount + reactionCount + interactionCount + hashtagCount;
+        if (total == 0) {
+            log.info("🧹 No existing social-feed data found. Starting clean seed.");
+            return;
+        }
+
+        log.info(
+                "🧹 Clearing social-feed data before reseed: posts={}, comments={}, reactions={}, interactions={}, hashtags={}",
+                postCount, commentCount, reactionCount, interactionCount, hashtagCount
+        );
+
+        // Delete child collections first, then posts.
+        userInteractionRepository.deleteAll();
+        reactionRepository.deleteAll();
+        commentRepository.deleteAll();
+        hashtagRepository.deleteAll();
+        postRepository.deleteAll();
+
+        log.info("✅ Social-feed data cleared. Proceeding with reseed.");
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // Step helpers
     // ─────────────────────────────────────────────────────────────────────────
@@ -545,7 +579,7 @@ public class SocialFeedSeederServiceImpl implements SocialFeedSeederService {
                 String userId = accountIdToUserId.get(account.id());
                 if (userId != null && !userId.isBlank()) {
                     try {
-                        postRecommendationClient.revectorizeUser(userId);
+                        postRecommendationClient.seedUserInterests(userId, new UserInterestSeedUpdateRequest(interests));
                     } catch (Exception ex) {
                         log.warn("⚠️  Re-vectorization failed for userId={}: {}", userId, ex.getMessage());
                     }
@@ -650,12 +684,32 @@ public class SocialFeedSeederServiceImpl implements SocialFeedSeederService {
         // Save in chunks
         List<Comment> savedComments = saveBatched(comments, BATCH_SIZE * 5,
                 chunk -> commentRepository.saveAll(chunk));
+
+        // Generate reactions for comments
+        List<Reaction> commentReactions = new ArrayList<>();
+        for (Comment comment : savedComments) {
+            boolean trending = random.nextDouble() < 0.1; // 10% of comments trending
+            int commentReactionCount = trending ? 10 : random.nextInt(3);
+
+            List<String> shuffled = new ArrayList<>(userIds);
+            Collections.shuffle(shuffled, random);
+            for (String reactorId : shuffled.subList(0, Math.min(commentReactionCount, shuffled.size()))) {
+                commentReactions.add(Reaction.builder()
+                        .authorId(reactorId)
+                        .targetId(comment.getId())
+                        .targetType(ReactionTargetType.COMMENT)
+                        .type(reactionTypes[random.nextInt(reactionTypes.length)])
+                        .build());
+            }
+        }
+        reactions.addAll(commentReactions);
+
         List<Reaction> savedReactions = saveBatched(reactions, BATCH_SIZE * 5,
                 chunk -> reactionRepository.saveAll(chunk));
         saveBatched(interactions, BATCH_SIZE * 5,
                 chunk -> userInteractionRepository.saveAll(chunk));
 
-        applySeedReactionStats(posts, savedReactions);
+        applySeedReactionStats(posts, savedComments, savedReactions);
         return new int[]{ savedComments.size(), savedReactions.size(), interactions.size() };
     }
 
@@ -669,9 +723,13 @@ public class SocialFeedSeederServiceImpl implements SocialFeedSeederService {
         String authorId = userIds.get(random.nextInt(userIds.size()));
         String caption  = theme.captions().get(random.nextInt(theme.captions().size()));
 
-        // Spread over last RECENCY_SPREAD_DAYS days
-        LocalDateTime uploadedAt = LocalDateTime.now()
-                .minusSeconds(random.nextInt(RECENCY_SPREAD_DAYS * 24 * 3600));
+        // Spread over last RECENCY_SPREAD_DAYS days (or now for STORY)
+        LocalDateTime uploadedAt;
+        if (type == PostType.STORY) {
+            uploadedAt = LocalDateTime.now();
+        } else {
+            uploadedAt = LocalDateTime.now().minusSeconds(random.nextInt(RECENCY_SPREAD_DAYS * 24 * 3600));
+        }
 
         int baseReactions = trending
                 ? REACTIONS_PER_POST * TRENDING_REACTION_MULTIPLIER
@@ -863,20 +921,28 @@ public class SocialFeedSeederServiceImpl implements SocialFeedSeederService {
     // Reaction stats
     // ─────────────────────────────────────────────────────────────────────────
 
-    private void applySeedReactionStats(List<Post> posts, List<Reaction> reactions) {
-        Map<String, Map<ReactionType, Long>> countsByPost = new HashMap<>();
+    private void applySeedReactionStats(List<Post> posts, List<Comment> comments, List<Reaction> reactions) {
+        Map<String, Map<ReactionType, Long>> postCounts = new HashMap<>();
+        Map<String, Map<ReactionType, Long>> commentCounts = new HashMap<>();
+
         for (Reaction r : reactions) {
-            if (r.getTargetType() != ReactionTargetType.POST || !r.isActive()) continue;
-            countsByPost.computeIfAbsent(r.getTargetId(), k -> new EnumMap<>(ReactionType.class))
-                        .merge(r.getType(), 1L, Long::sum);
+            if (!r.isActive()) continue;
+            if (r.getTargetType() == ReactionTargetType.POST) {
+                postCounts.computeIfAbsent(r.getTargetId(), k -> new EnumMap<>(ReactionType.class))
+                          .merge(r.getType(), 1L, Long::sum);
+            } else if (r.getTargetType() == ReactionTargetType.COMMENT) {
+                commentCounts.computeIfAbsent(r.getTargetId(), k -> new EnumMap<>(ReactionType.class))
+                             .merge(r.getType(), 1L, Long::sum);
+            }
         }
 
-        List<Post> toUpdate = new ArrayList<>(BATCH_SIZE);
+        List<Post> postsToUpdate = new ArrayList<>(BATCH_SIZE);
         for (Post post : posts) {
-            Map<ReactionType, Long> counts = countsByPost.getOrDefault(post.getId(), Map.of());
+            Map<ReactionType, Long> counts = postCounts.getOrDefault(post.getId(), Map.of());
             int total = counts.values().stream().mapToInt(Long::intValue).sum();
             List<ReactionType> topReactions = counts.entrySet().stream()
-                    .sorted(Comparator.<Map.Entry<ReactionType, Long>, Long>comparing(Map.Entry::getValue).reversed())
+                    .sorted(Comparator.<Map.Entry<ReactionType, Long>, Long>comparing(Map.Entry::getValue).reversed()
+                                      .thenComparing(entry -> entry.getKey().name()))
                     .limit(3).map(Map.Entry::getKey).toList();
 
             PostStats stats = post.getStats() == null ? PostStats.builder().build() : post.getStats();
@@ -884,15 +950,38 @@ public class SocialFeedSeederServiceImpl implements SocialFeedSeederService {
             stats.setTopReactions(topReactions);
             post.setStats(stats);
             post.setUpdatedAt(LocalDateTime.now());
-            toUpdate.add(post);
+            postsToUpdate.add(post);
 
-            if (toUpdate.size() == BATCH_SIZE) {
-                postRepository.saveAll(toUpdate);
-                toUpdate.clear();
+            if (postsToUpdate.size() == BATCH_SIZE) {
+                postRepository.saveAll(postsToUpdate);
+                postsToUpdate.clear();
             }
         }
-        if (!toUpdate.isEmpty()) {
-            postRepository.saveAll(toUpdate);
+        if (!postsToUpdate.isEmpty()) {
+            postRepository.saveAll(postsToUpdate);
+        }
+
+        List<Comment> commentsToUpdate = new ArrayList<>(BATCH_SIZE);
+        for (Comment comment : comments) {
+            Map<ReactionType, Long> counts = commentCounts.getOrDefault(comment.getId(), Map.of());
+            int total = counts.values().stream().mapToInt(Long::intValue).sum();
+            List<ReactionType> topReactions = counts.entrySet().stream()
+                    .sorted(Comparator.<Map.Entry<ReactionType, Long>, Long>comparing(Map.Entry::getValue).reversed()
+                                      .thenComparing(entry -> entry.getKey().name()))
+                    .limit(3).map(Map.Entry::getKey).toList();
+
+            comment.setReactionCount(total);
+            comment.setTopReactions(topReactions);
+            comment.setLastModifiedAt(LocalDateTime.now());
+            commentsToUpdate.add(comment);
+
+            if (commentsToUpdate.size() == BATCH_SIZE) {
+                commentRepository.saveAll(commentsToUpdate);
+                commentsToUpdate.clear();
+            }
+        }
+        if (!commentsToUpdate.isEmpty()) {
+            commentRepository.saveAll(commentsToUpdate);
         }
     }
 

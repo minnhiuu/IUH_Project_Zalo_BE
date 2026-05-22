@@ -46,7 +46,7 @@ public class PostViewRecordedListener {
             return;
         }
 
-        postRepository.findByIdAndActiveTrueAndIsCurrentTrue(event.postId()).ifPresentOrElse(
+        postRepository.findByIdAndActiveTrueAndIsCurrentTrueAndHiddenFalse(event.postId()).ifPresentOrElse(
                 post -> {
                     incrementViewCount(post);
                     acknowledgment.acknowledge();

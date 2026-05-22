@@ -2,6 +2,7 @@ package com.bondhub.friendservice.controller;
 
 import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.common.dto.PageResponse;
+import com.bondhub.common.dto.client.userservice.user.response.UserSummaryResponse;
 import com.bondhub.friendservice.dto.request.FriendRequestSendRequest;
 import com.bondhub.friendservice.dto.response.*;
 import com.bondhub.friendservice.service.friendship.FriendshipService;
@@ -87,6 +88,15 @@ public class FriendshipController {
             @RequestParam(defaultValue = "20") int size) {
         Pageable pageable = PageRequest.of(page, size);
         return ResponseEntity.ok(ApiResponse.success(friendshipService.getMyFriends(pageable)));
+    }
+
+    @GetMapping("/online")
+    @Operation(summary = "Get online friends", description = "Get list of friends who are currently online (paginated)")
+    public ResponseEntity<ApiResponse<PageResponse<List<UserSummaryResponse>>>> getOnlineFriends(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        Pageable pageable = PageRequest.of(page, size);
+        return ResponseEntity.ok(ApiResponse.success(friendshipService.getOnlineFriends(pageable)));
     }
 
     @GetMapping("/status/{userId}")

@@ -2,6 +2,7 @@ package com.bondhub.messageservice.controller;
 
 import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.common.dto.PageResponse;
+import com.bondhub.common.dto.client.userservice.user.response.UserSummaryResponse;
 import com.bondhub.messageservice.dto.request.AddMembersRequest;
 import com.bondhub.messageservice.dto.request.GroupConversationCreateRequest;
 import com.bondhub.messageservice.dto.request.JoinByLinkRequest;
@@ -48,6 +49,14 @@ public class ConversationController {
             @RequestParam(defaultValue = "20") int size) {
         return ResponseEntity.ok(ApiResponse.success(
                 conversationService.getUserConversations(page, size)));
+    }
+
+    @GetMapping("/quick")
+    @Operation(summary = "Get 3 most recent conversations for quick access")
+    public ResponseEntity<ApiResponse<List<UserSummaryResponse>>> getQuickConversations(
+            @RequestParam(defaultValue = "3") int size) {
+        return ResponseEntity.ok(ApiResponse.success(
+                conversationService.getQuickConversations(size)));
     }
 
     @GetMapping("/groups/mine")

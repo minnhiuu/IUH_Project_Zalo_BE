@@ -1,10 +1,13 @@
 package com.bondhub.friendservice.controller;
 
 import com.bondhub.common.dto.ApiResponse;
+import com.bondhub.common.dto.client.friendservice.UserSearchContextRequest;
+import com.bondhub.common.dto.client.friendservice.UserSearchContextResponse;
 import com.bondhub.friendservice.graph.service.GraphFriendService;
 import com.bondhub.friendservice.model.FriendShip;
 import com.bondhub.friendservice.model.enums.FriendStatus;
 import com.bondhub.friendservice.repository.FriendShipRepository;
+import com.bondhub.friendservice.service.internal.FriendInternalService;
 import com.bondhub.friendservice.service.friendship.FriendshipService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -25,6 +28,7 @@ import java.util.Set;
 public class FriendInternalController {
 
     private final FriendshipService friendshipService;
+    private final FriendInternalService friendInternalService;
     private final FriendShipRepository friendShipRepository;
     private final GraphFriendService graphFriendService;
 
@@ -33,6 +37,14 @@ public class FriendInternalController {
     public ResponseEntity<ApiResponse<Set<String>>> getFriendIdsInternal(
             @PathVariable String userId) {
         return ResponseEntity.ok(ApiResponse.success(friendshipService.getFriendIds(userId)));
+    }
+
+    @PostMapping("/search-context")
+    @Operation(summary = "Get user search relationship context (Internal)",
+            description = "Internal API to fetch friendship and block context for user search ranking")
+    public ResponseEntity<ApiResponse<List<UserSearchContextResponse>>> getUserSearchContext(
+            @RequestBody UserSearchContextRequest request) {
+        return ResponseEntity.ok(ApiResponse.success(friendInternalService.getUserSearchContext(request)));
     }
 
     @PostMapping("/sync-neo4j")

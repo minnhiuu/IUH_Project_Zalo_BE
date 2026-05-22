@@ -12,7 +12,6 @@ public record CreateCommentRequest(
         @NotBlank(message = "comment.postId.required")
         String postId,
         String parentId,
-        @NotBlank(message = "comment.content.required")
         String content,
         @Valid
         List<PostMediaRequest> media
