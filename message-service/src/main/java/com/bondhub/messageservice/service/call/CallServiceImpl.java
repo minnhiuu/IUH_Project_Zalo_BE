@@ -166,6 +166,13 @@ public class CallServiceImpl implements CallService {
         String userId = securityUtil.getCurrentUserId();
         CallSession session = getSession(sessionId);
 
+        if (session.getStatus() == CallSession.CallStatus.REJECTED
+                || session.getStatus() == CallSession.CallStatus.MISSED
+                || session.getStatus() == CallSession.CallStatus.ENDED) {
+            log.info("Reject ignored: session already terminal {}", sessionId);
+            return;
+        }
+
         session.setStatus(CallSession.CallStatus.REJECTED);
         session.setEndTime(LocalDateTime.now());
         callSessionRepository.save(session);
@@ -185,6 +192,13 @@ public class CallServiceImpl implements CallService {
     public void endCall(String sessionId) {
         String userId = securityUtil.getCurrentUserId();
         CallSession session = getSession(sessionId);
+
+        if (session.getStatus() == CallSession.CallStatus.ENDED
+                || session.getStatus() == CallSession.CallStatus.MISSED
+                || session.getStatus() == CallSession.CallStatus.REJECTED) {
+            log.info("End ignored: session already terminal {}", sessionId);
+            return;
+        }
 
         session.setStatus(CallSession.CallStatus.ENDED);
         session.setEndTime(LocalDateTime.now());
@@ -206,6 +220,13 @@ public class CallServiceImpl implements CallService {
     public void cancelCall(String sessionId) {
         String userId = securityUtil.getCurrentUserId();
         CallSession session = getSession(sessionId);
+
+        if (session.getStatus() == CallSession.CallStatus.MISSED
+                || session.getStatus() == CallSession.CallStatus.REJECTED
+                || session.getStatus() == CallSession.CallStatus.ENDED) {
+            log.info("Cancel ignored: session already terminal {}", sessionId);
+            return;
+        }
 
         // Caller cancels or ringing timed out → MISSED
         session.setStatus(CallSession.CallStatus.MISSED);
