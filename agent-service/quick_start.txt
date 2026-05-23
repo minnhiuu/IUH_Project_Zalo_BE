@@ -1,14 +1,51 @@
-# Tạo venv với Python 3.10
-python3.10 -m venv venv
 
-# Kích hoạt venv
-.\venv\Scripts\activate
+- CRA, Vite, RsPack (build tools)
+	CRA : npx create-react-app my-app
+	vite : npm create vite@latest
+	RsPack : new tool (dev by Tiktok)
 
-# Cập nhật pip, setuptools, wheel (quan trọng)
-python -m pip install --upgrade pip setuptools wheel
+- npm, yarn, pnpm (package managers)
 
-# Cài dependencies
-pip install -r requirements.txt
+- React : lib Javascript dùng để xây dựng UI => Web Frontend
+	tổng quan về react.
+	tư duy component-based => linh hồn của react
+	jsx (html + javascript)
+	virtual dom
+	state & props
+	react hook ( hơi sâu )
+	
+- MUI : MUI CSS => lib UI components (components-based) lấy dữ components từ Material Design về dùng.
 
-# Chạy app
-uvicorn app.main:app --host 0.0.0.0 --port 8082 --reload
+- React-router : routing app dđiều hướng ứng dụng
+	4 thành phần : browser router, routes, route
+	link/ navigate
+	dynamic routing (url params) => user/123 => trang chi tiet cua user co id 123
+	useNavigate : hooks
+
+- yup, zod : lib for validation => support define schema
+	yup : phèn, dỏm, phổ biến cho react + thư viện Formik. => ko support typescript
+	zod : vip pro max freefire, nhà vua. (typescript-first).
+		=> react hook form, nextjs, backend 
+	Thay vi valid thu công ( username là chữ, tối thiểu 3 chữ, phải code if else)
+	=> yup, zod => user = z.object({
+			username: z.string().min(3,"Ten phai it nhat 3 ky tu),
+			age: z.number().min(18).optional(),
+		});
+	
+- prettier, biome 
+	=> code formatter
+	biome ra sau đang phát triển vip pro, viết = RUST
+// giới thiệu nhanh, nêu lên bài toán thực tế cần dùng đến
+- React-query : lib quản lý server state => fetch data, sync BE và
+ Frontend
+	@tanstack/react-query
+	thay vì userEffect => fetch data khi vào trang => call api liên tục, latency, lag
+	=> react-query cache dữ liệu, auto re-fetch, support pagination & infinite scroll
+- React-hook-form 
+	lib hàng đầu quản lý form react => tối ưu performance, giảm code
+	thay vì mỗi ô trong table là 1 state => thay đổi input => re-render liên tục => giảm performance
+	=> react-hook-form ra đời
+	register, formState, handleSubmit => thành phần nó mà tui chưa có làm nên ko nhớ làm sao =)))
+// giới thiệu nhanh các thành phần
+Tìm hiểu cấu trúc source FE
+	=> bữa khác nói làm Slide trước đi source tính sau nha <3

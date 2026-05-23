@@ -9,6 +9,10 @@ public record ConversationMemberResponse(
         String fullName,
         String avatar,
         String lastReadMessageId,
-        MemberRole role
+        MemberRole role,
+        Boolean pinned,
+        Boolean muted,
+        Boolean hidden,
+        Boolean manuallyMarkedUnread
 ) {
 }

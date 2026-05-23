@@ -89,6 +89,55 @@ public class ConversationController {
         return ResponseEntity.ok(ApiResponse.success(null));
     }
 
+    @PutMapping("/{conversationId}/unread")
+    @Operation(summary = "Mark a conversation as unread manually")
+    public ResponseEntity<ApiResponse<Void>> markAsUnread(@PathVariable String conversationId) {
+        conversationService.markAsUnread(conversationId);
+        return ResponseEntity.ok(ApiResponse.success(null));
+    }
+
+    @PostMapping("/{conversationId}/pin")
+    @Operation(summary = "Pin a conversation for current user")
+    public ResponseEntity<ApiResponse<Void>> pinConversation(@PathVariable String conversationId) {
+        conversationService.togglePin(conversationId, true);
+        return ResponseEntity.ok(ApiResponse.success(null));
+    }
+
+    @DeleteMapping("/{conversationId}/pin")
+    @Operation(summary = "Unpin a conversation for current user")
+    public ResponseEntity<ApiResponse<Void>> unpinConversation(@PathVariable String conversationId) {
+        conversationService.togglePin(conversationId, false);
+        return ResponseEntity.ok(ApiResponse.success(null));
+    }
+
+    @PostMapping("/{conversationId}/mute")
+    @Operation(summary = "Mute notifications for a conversation")
+    public ResponseEntity<ApiResponse<Void>> muteConversation(@PathVariable String conversationId) {
+        conversationService.toggleMute(conversationId, true);
+        return ResponseEntity.ok(ApiResponse.success(null));
+    }
+
+    @DeleteMapping("/{conversationId}/mute")
+    @Operation(summary = "Unmute notifications for a conversation")
+    public ResponseEntity<ApiResponse<Void>> unmuteConversation(@PathVariable String conversationId) {
+        conversationService.toggleMute(conversationId, false);
+        return ResponseEntity.ok(ApiResponse.success(null));
+    }
+
+    @PostMapping("/{conversationId}/hide")
+    @Operation(summary = "Hide a conversation from the main list")
+    public ResponseEntity<ApiResponse<Void>> hideConversation(@PathVariable String conversationId) {
+        conversationService.toggleHide(conversationId, true);
+        return ResponseEntity.ok(ApiResponse.success(null));
+    }
+
+    @DeleteMapping("/{conversationId}/hide")
+    @Operation(summary = "Unhide a conversation")
+    public ResponseEntity<ApiResponse<Void>> unhideConversation(@PathVariable String conversationId) {
+        conversationService.toggleHide(conversationId, false);
+        return ResponseEntity.ok(ApiResponse.success(null));
+    }
+
     @GetMapping("/{conversationId}/unread-anchor")
     @Operation(summary = "Get first unread message ID and unread count")
     public ResponseEntity<ApiResponse<UnreadAnchorResponse>> getUnreadAnchor(
@@ -146,6 +195,13 @@ public class ConversationController {
     public ResponseEntity<ApiResponse<Void>> deleteConversation(@PathVariable String conversationId) {
         conversationService.deleteConversationForMe(conversationId);
         return ResponseEntity.ok(ApiResponse.success(null));
+    }
+
+    @PatchMapping("/{conversationId}/clear-history")
+    @Operation(summary = "Clear chat history for current user (1:1 or group)")
+    public ResponseEntity<ApiResponse<Void>> clearChatHistory(@PathVariable String conversationId) {
+                conversationService.clearChatHistory(conversationId);
+                return ResponseEntity.ok(ApiResponse.success(null));
     }
 
     @DeleteMapping("/{conversationId}/groups")
@@ -409,4 +465,5 @@ public class ConversationController {
         pinService.unpinMessage(conversationId, messageId);
         return ResponseEntity.ok(ApiResponse.success(null));
     }
+
 }

@@ -30,6 +30,10 @@ import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
+import org.springframework.data.mongodb.core.aggregation.Aggregation;
+import org.springframework.data.mongodb.core.aggregation.ArrayOperators;
+import org.springframework.data.mongodb.core.aggregation.ComparisonOperators;
+import org.springframework.data.mongodb.core.aggregation.ConditionalOperators;
 import com.mongodb.client.result.UpdateResult;
 
 import java.time.LocalDateTime;
@@ -115,13 +119,54 @@ public class ConversationServiceImpl implements ConversationService {
     @Override
     public PageResponse<List<ConversationResponse>> getUserConversations(int page, int size) {
         String currentUserId = securityUtil.getCurrentUserId();
-        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "lastMessage.timestamp"));
-        Page<Conversation> roomsPage = conversationRepository.findAllByMembersUserId(currentUserId, pageable);
-        log.info("[Conversation] Fetched page {} of conversations for user {} with {} rooms",
-                page, currentUserId, roomsPage.getTotalElements());
-        if (roomsPage.isEmpty()) {
+
+        // 1. Build the base criteria (same as ConversationRepository.findAllByMembersUserId)
+        Criteria memberCriteria = new Criteria().orOperator(
+            Criteria.where("members").elemMatch(Criteria.where("userId").is(currentUserId).and("active").ne(false)),
+            new Criteria().andOperator(
+                Criteria.where("isGroup").is(true),
+                Criteria.where("members").elemMatch(Criteria.where("userId").is(currentUserId).and("active").is(false)),
+                Criteria.where("deletedBefore." + currentUserId).exists(false)
+            )
+        );
+
+        // 2. Build Aggregation
+        Aggregation agg = Aggregation.newAggregation(
+            Aggregation.match(memberCriteria),
+            // Extract the current user's member object to get the pinned flag
+            Aggregation.addFields()
+                .addField("currentUserMember")
+                .withValue(ArrayOperators.Filter.filter("members")
+                    .as("m")
+                    .by(ComparisonOperators.Eq.valueOf("m.userId").equalToValue(currentUserId)))
+                .build(),
+            Aggregation.addFields()
+                .addField("isPinned")
+                .withValue(ConditionalOperators.ifNull(
+                    ArrayOperators.ArrayElemAt.arrayOf("currentUserMember.pinned").elementAt(0)
+                ).then(false))
+                .build(),
+            Aggregation.addFields()
+                .addField("pinPriority")
+                .withValue(ConditionalOperators.when(ComparisonOperators.Eq.valueOf("isPinned").equalToValue(true))
+                    .then(1).otherwise(0))
+                .build(),
+            Aggregation.sort(Sort.Direction.DESC, "pinPriority", "lastMessage.timestamp"),
+            Aggregation.skip((long) page * size),
+            Aggregation.limit(size)
+        );
+
+        List<Conversation> rooms = mongoTemplate.aggregate(agg, "conversations", Conversation.class).getMappedResults();
+        long total = mongoTemplate.count(new Query(memberCriteria), "conversations");
+
+        Pageable pageable = PageRequest.of(page, size);
+        log.info("[Conversation] Fetched {} rooms (total {}) for user {}", rooms.size(), total, currentUserId);
+
+        if (rooms.isEmpty()) {
             return PageResponse.empty(pageable);
         }
+
+        Page<Conversation> roomsPage = new PageImpl<>(rooms, pageable, total);
 
         Set<String> allUserIds = new HashSet<>();
         allUserIds.add(currentUserId);
@@ -243,7 +288,8 @@ public class ConversationServiceImpl implements ConversationService {
 
         Query query = new Query(Criteria.where("id").is(conversationId)
                 .and("members.userId").is(currentUserId));
-        Update update = new Update().set("unreadCounts." + currentUserId, 0);
+        Update update = new Update().set("unreadCounts." + currentUserId, 0)
+                .set("members.$.manuallyMarkedUnread", false);
         if (finalReadId != null) {
             update.set("members.$.lastReadMessageId", finalReadId);
         }
@@ -384,6 +430,38 @@ public class ConversationServiceImpl implements ConversationService {
         log.info("[Conversation] User {} deleted conversation {}", currentUserId, conversationId);
     }
 
+    @Override
+    public void clearChatHistory(String conversationId) {
+        String currentUserId = securityUtil.getCurrentUserId();
+
+        Conversation conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
+
+        ConversationMember member = conversation.getMembers().stream()
+                .filter(m -> m.getUserId().equals(currentUserId))
+                .findFirst()
+                .orElseThrow(() -> new AppException(ErrorCode.CHAT_MEMBER_NOT_FOUND));
+
+        // User can clear history whether active or inactive, as long as they belong to this conversation.
+        LocalDateTime now = LocalDateTime.now();
+
+        if (conversation.getDeletedBefore() == null) {
+            conversation.setDeletedBefore(new HashMap<>());
+        }
+        conversation.getDeletedBefore().put(currentUserId, now);
+
+        if (conversation.getUnreadCounts() != null) {
+            conversation.getUnreadCounts().put(currentUserId, 0);
+        }
+
+        if (conversation.getLastMessage() != null) {
+            member.setLastReadMessageId(conversation.getLastMessage().getMessageId());
+        }
+
+        conversationRepository.save(conversation);
+        log.info("[Conversation] User {} cleared chat history in conversation {}", currentUserId, conversationId);
+    }
+
     // ─────────────────────────── Private helpers ───────────────────────────
 
     private void broadcastReadReceipt(Conversation room, String currentUserId, String lastReadMessageId) {
@@ -429,7 +507,7 @@ public class ConversationServiceImpl implements ConversationService {
     public PageResponse<List<ConversationParticipantResponse>> getConversationParticipants(
             String conversationId, String query, int page, int size) {
         String currentUserId = securityUtil.getCurrentUserId();
-        log.info("[Conversation] User {} is fetching participants for sidebar dropdown in conversation {} with query: '{}'", 
+        log.info("[Conversation] User {} is fetching participants for sidebar dropdown in conversation {} with query: '{}'",
                 currentUserId, conversationId, query);
 
         Conversation conversation = conversationRepository.findById(conversationId)
@@ -481,11 +559,11 @@ public class ConversationServiceImpl implements ConversationService {
         int total = allParticipants.size();
         int start = page * size;
         int end = Math.min(start + size, total);
-        List<ConversationParticipantResponse> pagedList = (start < total) 
-                ? allParticipants.subList(start, end) 
+        List<ConversationParticipantResponse> pagedList = (start < total)
+                ? allParticipants.subList(start, end)
                 : Collections.emptyList();
 
-        log.debug("[Conversation] Dropdown fetch: found {} participants, returning {} for page {}", 
+        log.debug("[Conversation] Dropdown fetch: found {} participants, returning {} for page {}",
                 total, pagedList.size(), page);
 
         return PageResponse.fromPage(
@@ -493,6 +571,41 @@ public class ConversationServiceImpl implements ConversationService {
                         PageRequest.of(page, size), total),
                 r -> r
         );
+    }
+    @Override
+    public void markAsUnread(String conversationId) {
+        String currentUserId = securityUtil.getCurrentUserId();
+        Query query = new Query(Criteria.where("id").is(conversationId)
+                .and("members.userId").is(currentUserId));
+        Update update = new Update().set("members.$.manuallyMarkedUnread", true);
+        mongoTemplate.updateFirst(query, update, Conversation.class);
+    }
+
+    @Override
+    public void togglePin(String conversationId, boolean pin) {
+        String currentUserId = securityUtil.getCurrentUserId();
+        Query query = new Query(Criteria.where("id").is(conversationId)
+                .and("members.userId").is(currentUserId));
+        Update update = new Update().set("members.$.pinned", pin);
+        mongoTemplate.updateFirst(query, update, Conversation.class);
+    }
+
+    @Override
+    public void toggleMute(String conversationId, boolean mute) {
+        String currentUserId = securityUtil.getCurrentUserId();
+        Query query = new Query(Criteria.where("id").is(conversationId)
+                .and("members.userId").is(currentUserId));
+        Update update = new Update().set("members.$.muted", mute);
+        mongoTemplate.updateFirst(query, update, Conversation.class);
+    }
+
+    @Override
+    public void toggleHide(String conversationId, boolean hide) {
+        String currentUserId = securityUtil.getCurrentUserId();
+        Query query = new Query(Criteria.where("id").is(conversationId)
+                .and("members.userId").is(currentUserId));
+        Update update = new Update().set("members.$.hidden", hide);
+        mongoTemplate.updateFirst(query, update, Conversation.class);
     }
 }
 

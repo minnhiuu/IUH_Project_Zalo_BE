@@ -24,10 +24,20 @@ public interface ConversationService {
 
     UnreadAnchorResponse getUnreadAnchor(String conversationId);
 
+    void clearChatHistory(String conversationId);
+
     void deleteConversationForMe(String conversationId);
 
     Set<String> getConversationMemberIds(String conversationId);
 
     PageResponse<List<ConversationParticipantResponse>> getConversationParticipants(
             String conversationId, String query, int page, int size);
+
+    void markAsUnread(String conversationId);
+
+    void togglePin(String conversationId, boolean pin);
+
+    void toggleMute(String conversationId, boolean mute);
+
+    void toggleHide(String conversationId, boolean hide);
 }
