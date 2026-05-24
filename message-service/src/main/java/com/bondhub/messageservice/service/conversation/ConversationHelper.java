@@ -186,6 +186,11 @@ public class ConversationHelper {
                 && !last.getTimestamp().isAfter(deletedBefore)) {
             last = findFallbackLastMessage(room.getId(), currentUserId, deletedBefore);
         }
+        if (last != null && room.getMessageExpirationDays() != null && room.getMessageExpirationDays() > 0
+                && last.getTimestamp() != null
+                && last.getTimestamp().isBefore(LocalDateTime.now().minusDays(room.getMessageExpirationDays()))) {
+            last = findFallbackLastMessage(room.getId(), currentUserId, deletedBefore);
+        }
         List<ConversationMemberResponse> members = buildMembersWithCache(
                 room, currentUserId, userCache, baseUrl, viewerCanSee);
 
@@ -246,6 +251,7 @@ public class ConversationHelper {
                 .isHidden(isHidden)
                 .manuallyMarkedUnread(manuallyMarkedUnread)
                 .unreadCount(unreadCount)
+                .messageExpirationDays(room.getMessageExpirationDays())
                 .lastMessage(last != null ? LastMessageResponse.builder()
                         .id(last.getMessageId())
                         .senderId(last.getSenderId())
@@ -431,6 +437,12 @@ public class ConversationHelper {
         if (deletedBefore != null) {
             criteriaList.add(Criteria.where("createdAt").gt(deletedBefore));
         }
+
+        criteriaList.add(new Criteria().orOperator(
+                Criteria.where("expiredAt").exists(false),
+                Criteria.where("expiredAt").is(null),
+                Criteria.where("expiredAt").gt(LocalDateTime.now())
+        ));
 
         Criteria criteria = new Criteria().andOperator(
             criteriaList.toArray(new Criteria[0])

@@ -32,6 +32,7 @@ public interface MessageMapper {
     @Mapping(target = "attachments", source = "msg.attachments")
     @Mapping(target = "linkPreview", source = "msg.linkPreview")
     @Mapping(target = "reactions", source = "msg.reactions")
+    @Mapping(target = "expiredAt", source = "msg.expiredAt")
     MessageResponse mapToMessageResponse(Message msg, String baseUrl);
 
     @Mapping(target = "senderAvatar", expression = "java(msg.getSenderAvatar() != null ? baseUrl + msg.getSenderAvatar() : null)")
@@ -42,6 +43,7 @@ public interface MessageMapper {
     @Mapping(target = "attachments", source = "msg.attachments")
     @Mapping(target = "linkPreview", source = "msg.linkPreview")
     @Mapping(target = "reactions", source = "msg.reactions")
+    @Mapping(target = "expiredAt", source = "msg.expiredAt")
     ChatNotification mapToChatNotification(Message msg, String baseUrl, Integer unreadCount);
 
     ReplyMetadataResponse mapToReplyMetadataResponse(ReplyMetadata metadata);
