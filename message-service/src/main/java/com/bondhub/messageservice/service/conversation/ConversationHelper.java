@@ -174,16 +174,24 @@ public class ConversationHelper {
             String friendshipStatus, Long pendingJoinRequestCount) {
 
         LastMessageInfo last = room.getLastMessage();
+        LocalDateTime deletedBefore = room.getDeletedBefore() != null
+                ? room.getDeletedBefore().get(currentUserId)
+                : null;
         if (last != null && last.getVisibleTo() != null && !last.getVisibleTo().isEmpty()
                 && !last.getVisibleTo().contains(currentUserId)) {
-            last = findFallbackLastMessage(room.getId(), currentUserId);
+            last = findFallbackLastMessage(room.getId(), currentUserId, deletedBefore);
+        }
+        if (last != null && deletedBefore != null
+                && last.getTimestamp() != null
+                && !last.getTimestamp().isAfter(deletedBefore)) {
+            last = findFallbackLastMessage(room.getId(), currentUserId, deletedBefore);
         }
         List<ConversationMemberResponse> members = buildMembersWithCache(
                 room, currentUserId, userCache, baseUrl, viewerCanSee);
 
         String partnerDisplayName = safeDisplayName(partner != null ? partner.getFullName() : null);
         String displayName = room.getName();
-        if (room.isGroup() && (displayName == null || displayName.isBlank())) {
+        if (room.isGroup() && (displayName == null || displayName.isBlank() || "Nhóm mới".equalsIgnoreCase(displayName))) {
             displayName = getDynamicGroupName(room, currentUserId, userCache);
         } else if (!room.isGroup()) {
             displayName = partnerDisplayName;
@@ -196,6 +204,19 @@ public class ConversationHelper {
                 : (partner != null && partner.getAvatar() != null ? baseUrl + partner.getAvatar() : null);
 
         boolean isFriend = !room.isGroup() && "ACCEPTED".equals(friendshipStatus);
+
+        ConversationMember currentMember = room.getMembers().stream()
+                .filter(m -> m.getUserId().equals(currentUserId))
+                .findFirst()
+                .orElse(null);
+
+        boolean isPinned = currentMember != null && Boolean.TRUE.equals(currentMember.getPinned());
+        boolean isMuted = currentMember != null && Boolean.TRUE.equals(currentMember.getMuted());
+        boolean isHidden = currentMember != null && Boolean.TRUE.equals(currentMember.getHidden());
+        boolean manuallyMarkedUnread = currentMember != null && Boolean.TRUE.equals(currentMember.getManuallyMarkedUnread());
+
+        int unreadCount = room.getUnreadCounts() != null
+                ? room.getUnreadCounts().getOrDefault(currentUserId, 0) : 0;
 
         Status displayStatus = room.isGroup()
                 ? (room.getMembers().stream()
@@ -220,8 +241,11 @@ public class ConversationHelper {
                 .friendshipStatus(friendshipStatus)
                 .isGroup(room.isGroup())
                 .isDisbanded(room.isDisbanded())
-                .unreadCount(room.getUnreadCounts() != null
-                        ? room.getUnreadCounts().getOrDefault(currentUserId, 0) : 0)
+                .isPinned(isPinned)
+                .isMuted(isMuted)
+                .isHidden(isHidden)
+                .manuallyMarkedUnread(manuallyMarkedUnread)
+                .unreadCount(unreadCount)
                 .lastMessage(last != null ? LastMessageResponse.builder()
                         .id(last.getMessageId())
                         .senderId(last.getSenderId())
@@ -369,6 +393,10 @@ public class ConversationHelper {
                                     ? baseUrl + memberInfo.getAvatar() : null)
                             .lastReadMessageId(canSeeStatus ? m.getLastReadMessageId() : null)
                             .role(m.getRole() != null ? m.getRole() : null)
+                            .pinned(m.getPinned())
+                            .muted(m.getMuted())
+                            .hidden(m.getHidden())
+                            .manuallyMarkedUnread(m.getManuallyMarkedUnread())
                             .build();
                 })
                 .collect(Collectors.toList());
@@ -390,17 +418,24 @@ public class ConversationHelper {
         return PhoneUtil.isValidVnPhone(query);
     }
 
-    private LastMessageInfo findFallbackLastMessage(String conversationId, String currentUserId) {
+        private LastMessageInfo findFallbackLastMessage(String conversationId, String currentUserId, LocalDateTime deletedBefore) {
+        List<Criteria> criteriaList = new ArrayList<>();
+        criteriaList.add(Criteria.where("conversationId").is(conversationId));
+        criteriaList.add(Criteria.where("deletedBy").ne(currentUserId));
+        criteriaList.add(new Criteria().orOperator(
+            Criteria.where("visibleTo").exists(false),
+            Criteria.where("visibleTo").is(null),
+            Criteria.where("visibleTo").size(0),
+            Criteria.where("visibleTo").is(currentUserId)
+        ));
+        if (deletedBefore != null) {
+            criteriaList.add(Criteria.where("createdAt").gt(deletedBefore));
+        }
+
         Criteria criteria = new Criteria().andOperator(
-                Criteria.where("conversationId").is(conversationId),
-                Criteria.where("deletedBy").ne(currentUserId),
-                new Criteria().orOperator(
-                        Criteria.where("visibleTo").exists(false),
-                        Criteria.where("visibleTo").is(null),
-                        Criteria.where("visibleTo").size(0),
-                        Criteria.where("visibleTo").is(currentUserId)
-                )
+            criteriaList.toArray(new Criteria[0])
         );
+
         Query query = new Query(criteria)
                 .with(Sort.by(Sort.Direction.DESC, "createdAt"))
                 .limit(1);

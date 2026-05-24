@@ -20,6 +20,10 @@ public record ConversationResponse(
         String friendshipStatus,          // null | PENDING | ACCEPTED | DECLINED | CANCELLED
         boolean isGroup,
         boolean isDisbanded,
+        boolean isPinned,
+        boolean isMuted,
+        boolean isHidden,
+        boolean manuallyMarkedUnread,
         Integer unreadCount,
         LastMessageResponse lastMessage,
         List<ConversationMemberResponse> members,

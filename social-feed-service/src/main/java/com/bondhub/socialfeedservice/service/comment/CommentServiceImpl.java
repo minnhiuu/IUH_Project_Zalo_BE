@@ -3,6 +3,7 @@ package com.bondhub.socialfeedservice.service.comment;
 import com.bondhub.common.dto.PageResponse;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
+import com.bondhub.common.utils.S3UtilV2;
 import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.socialfeedservice.dto.request.comment.CreateCommentRequest;
 import com.bondhub.socialfeedservice.dto.request.comment.UpdateCommentRequest;
@@ -47,6 +48,7 @@ public class CommentServiceImpl implements CommentService {
     CommentEventPublisher commentEventPublisher;
     ReactionRepository reactionRepository;
     UserSummaryRepository userSummaryRepository;
+    S3UtilV2 s3UtilV2;
 
     @Override
     @Transactional
@@ -81,7 +83,7 @@ public class CommentServiceImpl implements CommentService {
                 post.getGroupId());
 
         UserSummary author = userSummaryRepository.findById(currentUserId).orElse(null);
-        return commentMapper.toCommentResponse(savedComment, null, author);
+        return commentMapper.toCommentResponse(savedComment, null, author, s3UtilV2.getS3BaseUrl());
     }
 
     @Override
@@ -97,7 +99,7 @@ public class CommentServiceImpl implements CommentService {
 
         Comment updatedComment = commentRepository.save(comment);
         UserSummary author = userSummaryRepository.findById(currentUserId).orElse(null);
-        return commentMapper.toCommentResponse(updatedComment, null, author);
+        return commentMapper.toCommentResponse(updatedComment, null, author, s3UtilV2.getS3BaseUrl());
     }
 
     @Override
@@ -126,8 +128,8 @@ public class CommentServiceImpl implements CommentService {
         Pageable pageable = PageRequest.of(page, size);
 
         Page<Comment> comments = "MOST_REACTED".equalsIgnoreCase(sortBy)
-                ? commentRepository.findByPostIdAndParentIdIsNullAndActiveTrueOrderByReactionCountDescCreatedAtDesc(postId, pageable)
-                : commentRepository.findByPostIdAndParentIdIsNullAndActiveTrueOrderByCreatedAtAsc(postId, pageable);
+                ? commentRepository.findByPostIdAndParentIdIsNullAndActiveTrueAndHiddenFalseOrderByReactionCountDescCreatedAtDesc(postId, pageable)
+                : commentRepository.findByPostIdAndParentIdIsNullAndActiveTrueAndHiddenFalseOrderByCreatedAtAsc(postId, pageable);
 
         Map<String, UserSummary> authorById = loadAuthorSummaries(
                 comments.stream().map(Comment::getAuthorId).collect(Collectors.toSet()));
@@ -136,7 +138,8 @@ public class CommentServiceImpl implements CommentService {
                 commentMapper.toCommentResponse(
                         comment,
                         getCurrentUserReaction(currentUserId, comment.getId()),
-                        authorById.get(comment.getAuthorId())));
+                        authorById.get(comment.getAuthorId()),
+                        s3UtilV2.getS3BaseUrl()));
     }
 
     @Override
@@ -144,7 +147,7 @@ public class CommentServiceImpl implements CommentService {
         String currentUserId = securityUtil.getCurrentUserId();
         getActiveComment(commentId);
 
-        List<Comment> replies = commentRepository.findByParentIdAndActiveTrueOrderByCreatedAtAsc(commentId);
+        List<Comment> replies = commentRepository.findByParentIdAndActiveTrueAndHiddenFalseOrderByCreatedAtAsc(commentId);
 
         Map<String, UserSummary> authorById = loadAuthorSummaries(
                 replies.stream().map(Comment::getAuthorId).collect(Collectors.toSet()));
@@ -153,7 +156,8 @@ public class CommentServiceImpl implements CommentService {
                 .map(comment -> commentMapper.toCommentResponse(
                         comment,
                         getCurrentUserReaction(currentUserId, comment.getId()),
-                        authorById.get(comment.getAuthorId())))
+                        authorById.get(comment.getAuthorId()),
+                        s3UtilV2.getS3BaseUrl()))
                 .toList();
     }
 
@@ -163,13 +167,19 @@ public class CommentServiceImpl implements CommentService {
     }
 
     private Post getActivePost(String postId) {
-        return postRepository.findByIdAndActiveTrueAndIsCurrentTrue(postId)
+        return postRepository.findByIdAndActiveTrueAndIsCurrentTrueAndHiddenFalse(postId)
                 .orElseThrow(() -> new AppException(ErrorCode.POST_NOT_FOUND));
     }
 
     private Comment getActiveComment(String commentId) {
-        return commentRepository.findByIdAndActiveTrue(commentId)
+        Comment comment = commentRepository.findByIdAndActiveTrue(commentId)
                 .orElseThrow(() -> new AppException(ErrorCode.COMMENT_NOT_FOUND));
+                
+        if (comment.isHidden() && !comment.getAuthorId().equals(securityUtil.getCurrentUserId())) {
+            throw new AppException(ErrorCode.COMMENT_NOT_FOUND);
+        }
+        
+        return comment;
     }
 
     private void validateOwner(String ownerId, String currentUserId) {

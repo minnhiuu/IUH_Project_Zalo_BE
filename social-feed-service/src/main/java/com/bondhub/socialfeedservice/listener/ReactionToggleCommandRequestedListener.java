@@ -62,8 +62,22 @@ public class ReactionToggleCommandRequestedListener {
                     targetType);
                         long totalReactions = activeReactions.size();
 
+            Map<ReactionType, Long> reactionCounts = new EnumMap<>(ReactionType.class);
+            for (Reaction reaction : activeReactions) {
+                ReactionType reactionType = reaction.getType();
+                reactionCounts.put(reactionType, reactionCounts.getOrDefault(reactionType, 0L) + 1);
+            }
+
+            List<ReactionType> topReactions = reactionCounts.entrySet().stream()
+                    .sorted(Comparator
+                            .comparing(Map.Entry<ReactionType, Long>::getValue, Comparator.reverseOrder())
+                            .thenComparing(entry -> entry.getKey().name()))
+                    .limit(3)
+                    .map(Map.Entry::getKey)
+                    .toList();
+
             if (targetType == ReactionTargetType.POST) {
-                Post post = postRepository.findByIdAndActiveTrueAndIsCurrentTrue(event.targetId())
+                Post post = postRepository.findByIdAndActiveTrueAndIsCurrentTrueAndHiddenFalse(event.targetId())
                         .orElseThrow(() -> new AppException(ErrorCode.POST_NOT_FOUND));
 
                 PostStats stats = post.getStats();
@@ -71,30 +85,17 @@ public class ReactionToggleCommandRequestedListener {
                     stats = PostStats.builder().reactionCount(0).commentCount(0).shareCount(0).build();
                 }
 
-                                Map<ReactionType, Long> reactionCounts = new EnumMap<>(ReactionType.class);
-                                for (Reaction reaction : activeReactions) {
-                                        ReactionType reactionType = reaction.getType();
-                                        reactionCounts.put(reactionType, reactionCounts.getOrDefault(reactionType, 0L) + 1);
-                                }
-
-                                List<ReactionType> topReactions = reactionCounts.entrySet().stream()
-                                                .sorted(Comparator
-                                                                .comparing(Map.Entry<ReactionType, Long>::getValue, Comparator.reverseOrder())
-                                                                .thenComparing(entry -> entry.getKey().name()))
-                                                .limit(3)
-                                                .map(Map.Entry::getKey)
-                                                .toList();
-
                 stats.setReactionCount((int) totalReactions);
-                                stats.setTopReactions(topReactions);
+                stats.setTopReactions(topReactions);
                 post.setStats(stats);
                 post.setUpdatedAt(LocalDateTime.now());
                 postRepository.save(post);
             } else {
-                Comment comment = commentRepository.findByIdAndActiveTrue(event.targetId())
+                Comment comment = commentRepository.findByIdAndActiveTrueAndHiddenFalse(event.targetId())
                         .orElseThrow(() -> new AppException(ErrorCode.COMMENT_NOT_FOUND));
 
                 comment.setReactionCount((int) totalReactions);
+                comment.setTopReactions(topReactions);
                 comment.setLastModifiedAt(LocalDateTime.now());
                 commentRepository.save(comment);
             }

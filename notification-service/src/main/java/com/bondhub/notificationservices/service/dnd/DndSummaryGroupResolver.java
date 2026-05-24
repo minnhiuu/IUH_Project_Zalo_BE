@@ -73,8 +73,8 @@ public class DndSummaryGroupResolver {
 
     public boolean isPostRelated(NotificationType type) {
         return switch (type) {
-            case POST_LIKE, POST_COMMENT, POST_PUBLISHED,
-                 COMMENT_LIKE, COMMENT_REPLY,
+            case POST_REACTION, POST_COMMENT, POST_PUBLISHED,
+                 COMMENT_REACTION, COMMENT_REPLY,
                  POST_TAG, POST_MENTION, COMMENT_MENTION -> true;
             default -> false;
         };

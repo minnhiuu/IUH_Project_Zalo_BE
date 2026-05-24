@@ -78,9 +78,17 @@ public interface PostMapper {
 
 
     default String resolveMediaUrl(String url, String s3BaseUrl) {
-        if (url == null || url.isBlank()) {
-            return null;
+        if (url == null || url.isBlank() || s3BaseUrl == null) {
+            return url;
         }
+
+        // Clean up legacy localhost URLs if present
+        if (url.contains("/api/files/download/")) {
+            String key = url.substring(url.lastIndexOf("/api/files/download/") + "/api/files/download/".length());
+            key = key.replace("%2F", "/").replace("%2f", "/");
+            return s3BaseUrl + key;
+        }
+
         if (url.startsWith("http://") || url.startsWith("https://")) {
             return url;
         }

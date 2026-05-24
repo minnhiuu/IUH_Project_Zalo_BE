@@ -11,10 +11,10 @@ public enum NotificationType {
     CALL,
     REMINDER,
 
-    POST_LIKE,
+    POST_REACTION,
     POST_COMMENT,
     POST_PUBLISHED,
-    COMMENT_LIKE,
+    COMMENT_REACTION,
     COMMENT_REPLY,
 
     POST_TAG,
