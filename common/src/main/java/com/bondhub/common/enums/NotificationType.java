@@ -9,6 +9,7 @@ public enum NotificationType {
     MESSAGE_DIRECT,
     MESSAGE_GROUP,
     CALL,
+    REMINDER,
 
     POST_LIKE,
     POST_COMMENT,
