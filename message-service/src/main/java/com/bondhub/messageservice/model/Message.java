@@ -49,6 +49,8 @@ public class Message extends BaseModel {
 
     Map<String, List<String>> reactions; // emoji → list of userIds (allows multiple reactions per user)
 
+    java.time.LocalDateTime expiredAt;
+
     @Builder.Default
     Set<String> deletedBy = new HashSet<>();
 

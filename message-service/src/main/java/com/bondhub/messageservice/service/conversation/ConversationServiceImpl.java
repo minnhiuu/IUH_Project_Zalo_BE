@@ -6,6 +6,7 @@ import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
 import com.bondhub.common.dto.client.userservice.user.response.UserSummaryResponse;
 import com.bondhub.messageservice.dto.response.*;
+import com.bondhub.messageservice.service.message.SystemMessageService;
 import com.bondhub.messageservice.event.UserSyncEvent;
 import com.bondhub.messageservice.model.ChatUser;
 import com.bondhub.messageservice.model.Conversation;
@@ -18,6 +19,7 @@ import com.bondhub.messageservice.client.FriendServiceClient;
 import com.bondhub.messageservice.model.enums.MemberRole;
 import com.bondhub.common.dto.client.socketservice.SocketEvent;
 import com.bondhub.common.enums.SocketEventType;
+import com.bondhub.common.enums.SystemActionType;
 import com.bondhub.common.dto.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -52,6 +54,7 @@ public class ConversationServiceImpl implements ConversationService {
     private final MongoTemplate mongoTemplate;
     private final FriendServiceClient friendServiceClient;
     private final ConversationHelper helper;
+    private final SystemMessageService systemMessageService;
     private final S3UtilV2 s3UtilV2;
 
     // ─────────────────────────── Core: Tạo / Lấy phòng chat ───────────────────────────
@@ -396,6 +399,11 @@ public class ConversationServiceImpl implements ConversationService {
                         Criteria.where("visibleTo").is(userId)
                 ),
                 new Criteria().orOperator(
+                        Criteria.where("expiredAt").exists(false),
+                        Criteria.where("expiredAt").is(null),
+                        Criteria.where("expiredAt").gt(LocalDateTime.now())
+                ),
+                new Criteria().orOperator(
                         Criteria.where("type").ne("SYSTEM"),
                         Criteria.where("createdAt").gte(memberJoinedAt)
                 )
@@ -413,8 +421,10 @@ public class ConversationServiceImpl implements ConversationService {
                 .filter(m -> m.getUserId().equals(currentUserId))
                 .findFirst()
                 .ifPresent(member -> {
-                    member.setActive(false);
-                    member.setRemovedAt(LocalDateTime.now());
+                    if (conversation.isGroup()) {
+                        member.setActive(false);
+                        member.setRemovedAt(LocalDateTime.now());
+                    }
                 });
 
         if (conversation.getDeletedBefore() == null) {
@@ -606,6 +616,29 @@ public class ConversationServiceImpl implements ConversationService {
                 .and("members.userId").is(currentUserId));
         Update update = new Update().set("members.$.hidden", hide);
         mongoTemplate.updateFirst(query, update, Conversation.class);
+    }
+
+    @Override
+    public ConversationResponse updateMessageExpiration(String conversationId, Integer days) {
+        String currentUserId = securityUtil.getCurrentUserId();
+        Conversation conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
+
+        helper.assertMember(conversation, currentUserId);
+
+        Integer newDays = (days != null && days > 0) ? days : null;
+        conversation.setMessageExpirationDays(newDays);
+        conversationRepository.save(conversation);
+
+        // System message for all members
+        Map<String, Object> metadata = new HashMap<>();
+        metadata.put("action", "UPDATE_EXPIRATION");
+        metadata.put("days", newDays != null ? newDays : 0);
+        
+        var actorInfo = helper.fetchActorInfo(currentUserId);
+        systemMessageService.sendSystemMessage(conversationId, currentUserId, actorInfo.name(), actorInfo.avatar(), SystemActionType.UPDATE_EXPIRATION, metadata);
+
+        return helper.buildConversationResponseForCurrentUser(conversation, currentUserId);
     }
 }
 

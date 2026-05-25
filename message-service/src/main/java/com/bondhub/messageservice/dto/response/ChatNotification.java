@@ -29,6 +29,8 @@ public record ChatNotification(
                 String clientMessageId,
                 @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss.SSSXXX", timezone = "GMT+7")
                 OffsetDateTime timestamp,
+                @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss.SSSXXX", timezone = "GMT+7")
+                OffsetDateTime expiredAt,
                 Integer unreadCount,
                 ReplyMetadataResponse replyTo,
                 boolean isForwarded,
