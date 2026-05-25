@@ -1,0 +1,20 @@
+{
+  "index": {
+    "number_of_shards": 1,
+    "number_of_replicas": 0
+  },
+  "analysis": {
+    "analyzer": {
+      "searchable_text_index_analyzer": {
+        "type": "custom",
+        "tokenizer": "icu_tokenizer",
+        "filter": ["icu_folding", "lowercase"]
+      },
+      "searchable_text_search_analyzer": {
+        "type": "custom",
+        "tokenizer": "icu_tokenizer",
+        "filter": ["icu_folding", "lowercase"]
+      }
+    }
+  }
+}

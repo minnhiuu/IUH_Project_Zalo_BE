@@ -4,8 +4,7 @@ import com.bondhub.common.utils.S3Util;
 import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
-import com.bondhub.messageservice.dto.response.ChatNotification;
-import com.bondhub.messageservice.dto.response.ReplyMetadataResponse;
+import com.bondhub.messageservice.dto.response.*;
 import com.bondhub.messageservice.model.Conversation;
 import com.bondhub.messageservice.model.ConversationMember;
 import com.bondhub.messageservice.model.LastMessageInfo;
@@ -18,11 +17,11 @@ import com.bondhub.messageservice.repository.ConversationRepository;
 import com.bondhub.messageservice.repository.MessageRepository;
 import com.bondhub.messageservice.repository.ChatUserRepository;
 import com.bondhub.messageservice.service.conversation.ConversationService;
-import com.bondhub.common.dto.client.messageservice.AttachmentRequest;
 import com.bondhub.common.dto.client.messageservice.MessageSendRequest;
 import com.bondhub.common.event.ai.AiMessageSaveEvent;
 import com.bondhub.common.dto.client.socketservice.SocketEvent;
 import com.bondhub.common.enums.SocketEventType;
+import com.bondhub.messageservice.publisher.MessageIndexEventPublisher;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -31,7 +30,6 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import com.bondhub.common.dto.PageResponse;
-import com.bondhub.messageservice.dto.response.MessageResponse;
 import com.bondhub.messageservice.mapper.MessageMapper;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
@@ -43,6 +41,7 @@ import org.springframework.data.mongodb.core.FindAndModifyOptions;
 
 import com.bondhub.messageservice.model.GroupSettings;
 import com.bondhub.messageservice.model.LinkPreview;
+import com.bondhub.messageservice.model.enums.MemberRole;
 import com.bondhub.messageservice.service.conversation.ConversationHelper;
 
 import java.time.LocalDateTime;
@@ -67,6 +66,7 @@ public class MessageServiceImpl implements MessageService {
     private final MessageMapper messageMapper;
     private final ConversationService conversationService;
     private final ConversationHelper conversationHelper;
+    private final MessageIndexEventPublisher messageIndexEventPublisher;
 
     @Value("${aws.s3.bucket.name}")
     private String bucketName;
@@ -270,6 +270,8 @@ public class MessageServiceImpl implements MessageService {
                 .chatId(room.getId())
                 .content(message.getContent())
                 .build());
+
+        messageIndexEventPublisher.publishIndexRequest(message);
     }
 
     // ─────────────────────────── Thu hồi / Xóa ───────────────────────────
@@ -284,13 +286,26 @@ public class MessageServiceImpl implements MessageService {
             throw new AppException(ErrorCode.CHAT_NOT_SENDER);
         }
 
+        if (message.getCreatedAt().isBefore(LocalDateTime.now().minusHours(24))) {
+            throw new AppException(ErrorCode.MESSAGE_REVOKE_TIME_EXCEEDED);
+        }
+
         message.setStatus(MessageStatus.REVOKED);
         message.setContent(null);
         message.setReplyTo(null);
         messageRepository.save(message);
 
-        updateLastMessageIfRevoked(message);
+        // Update all messages that reply to this message
+        Query replyQuery = new Query(Criteria.where("replyTo.messageId").is(messageId));
+        Update replyUpdate = new Update()
+                .set("replyTo.content", null)
+                .set("replyTo.type", MessageType.CHAT);
+        mongoTemplate.updateMulti(replyQuery, replyUpdate, Message.class);
+
+        updateLastMessageStatus(message, MessageStatus.REVOKED);
         broadcastStatusChange(message.getConversationId(), messageId, MessageStatus.REVOKED);
+
+        messageIndexEventPublisher.publishIndexRequest(message);
     }
 
     @Override
@@ -299,6 +314,66 @@ public class MessageServiceImpl implements MessageService {
         Query query = new Query(Criteria.where("id").is(messageId));
         Update update = new Update().addToSet("deletedBy", currentUserId);
         mongoTemplate.updateFirst(query, update, Message.class);
+
+        messageRepository.findById(messageId).ifPresent(messageIndexEventPublisher::publishIndexRequest);
+    }
+
+    @Override
+    public void deleteGroupMemberMessage(String conversationId, String messageId) {
+        String currentUserId = securityUtil.getCurrentUserId();
+
+        Conversation room = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
+        if (!room.isGroup()) throw new AppException(ErrorCode.CHAT_NOT_A_GROUP);
+
+        ConversationMember actor = room.getMembers().stream()
+                .filter(m -> m.getUserId().equals(currentUserId) && isActiveMember(m))
+                .findFirst()
+                .orElseThrow(() -> new AppException(ErrorCode.CHAT_MEMBER_NOT_FOUND));
+
+        MemberRole actorRole = actor.getRole() != null ? actor.getRole() : MemberRole.MEMBER;
+        if (actorRole == MemberRole.MEMBER) {
+            throw new AppException(ErrorCode.CHAT_NOT_GROUP_MANAGER);
+        }
+
+        Message message = messageRepository.findById(messageId)
+                .orElseThrow(() -> new AppException(ErrorCode.MESSAGE_NOT_FOUND));
+
+        if (!message.getConversationId().equals(conversationId)) {
+            throw new AppException(ErrorCode.MESSAGE_NOT_FOUND);
+        }
+
+        if (message.getCreatedAt().isBefore(LocalDateTime.now().minusHours(24))) {
+            throw new AppException(ErrorCode.MESSAGE_REVOKE_TIME_EXCEEDED);
+        }
+
+        if (actorRole == MemberRole.ADMIN) {
+            room.getMembers().stream()
+                    .filter(m -> m.getUserId().equals(message.getSenderId()))
+                    .findFirst()
+                    .ifPresent(sender -> {
+                        MemberRole senderRole = sender.getRole() != null ? sender.getRole() : MemberRole.MEMBER;
+                        if (senderRole == MemberRole.OWNER) {
+                            throw new AppException(ErrorCode.CHAT_ADMIN_CANNOT_DELETE_OWNER_MESSAGE);
+                        }
+                    });
+        }
+
+        message.setStatus(MessageStatus.DELETED_BY_ADMIN);
+        message.setDeletedByAdminId(currentUserId);
+        message.setContent(null);
+        message.setReplyTo(null);
+        messageRepository.save(message);
+
+        Query replyQuery = new Query(Criteria.where("replyTo.messageId").is(messageId));
+        Update replyUpdate = new Update()
+                .set("replyTo.content", null)
+                .set("replyTo.type", MessageType.CHAT);
+        mongoTemplate.updateMulti(replyQuery, replyUpdate, Message.class);
+
+        updateLastMessageStatus(message, MessageStatus.DELETED_BY_ADMIN);
+        broadcastStatusChange(conversationId, messageId, MessageStatus.DELETED_BY_ADMIN, currentUserId);
+        messageIndexEventPublisher.publishIndexRequest(message);
     }
 
     @Override
@@ -352,6 +427,78 @@ public class MessageServiceImpl implements MessageService {
         broadcastReactionUpdate(room, messageId, message.getReactions());
     }
 
+    @Override
+    public List<MessageSeenResponse> getSeenMembers(String conversationId, String messageId) {
+        String currentUserId = securityUtil.getCurrentUserId();
+
+        Conversation room = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
+        assertConversationMember(room, currentUserId);
+
+        Message targetMessage = messageRepository.findById(messageId)
+                .orElseThrow(() -> new AppException(ErrorCode.MESSAGE_NOT_FOUND));
+
+        if (!targetMessage.getConversationId().equals(conversationId)) {
+            throw new AppException(ErrorCode.MESSAGE_NOT_FOUND);
+        }
+
+        if (!targetMessage.getSenderId().equals(currentUserId)) {
+            throw new AppException(ErrorCode.CHAT_NOT_SENDER);
+        }
+
+        // Collect lastReadMessageIds from active members (exclude sender of the target message)
+        List<ConversationMember> activeMembers = room.getMembers().stream()
+                .filter(this::isActiveMember)
+                .filter(m -> !m.getUserId().equals(targetMessage.getSenderId()))
+                .filter(m -> m.getLastReadMessageId() != null)
+                .toList();
+
+        if (activeMembers.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        // Batch-fetch all lastRead messages and filter those with createdAt >= targetMessage.createdAt
+        Set<String> lastReadIds = activeMembers.stream()
+                .map(ConversationMember::getLastReadMessageId)
+                .collect(Collectors.toSet());
+
+        Query query = new Query(
+                Criteria.where("id").in(lastReadIds)
+                        .and("createdAt").gte(targetMessage.getCreatedAt())
+        );
+        List<Message> seenMessages = mongoTemplate.find(query, Message.class);
+        Set<String> seenMessageIds = seenMessages.stream()
+                .map(Message::getId)
+                .collect(Collectors.toSet());
+
+        // Find members whose lastReadMessageId indicates they have seen the target message
+        List<String> seenUserIds = activeMembers.stream()
+                .filter(m -> seenMessageIds.contains(m.getLastReadMessageId()))
+                .map(ConversationMember::getUserId)
+                .toList();
+
+        if (seenUserIds.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        Map<String, ChatUser> userMap = chatUserRepository.findAllById(seenUserIds).stream()
+                .collect(Collectors.toMap(ChatUser::getId, u -> u));
+
+        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+        return seenUserIds.stream()
+                .map(userId -> {
+                    ChatUser user = userMap.get(userId);
+                    return MessageSeenResponse.builder()
+                            .userId(userId)
+                            .fullName(user != null ? user.getFullName() : null)
+                            .avatar(user != null && user.getAvatar() != null
+                                    ? baseUrl + user.getAvatar()
+                                    : null)
+                            .build();
+                })
+                .collect(Collectors.toList());
+    }
+
     // ─────────────────────────── Private helpers ───────────────────────────
 
     /**
@@ -393,6 +540,11 @@ public class MessageServiceImpl implements MessageService {
         for (int i = 0; i < dtos.size(); i++) {
             MessageResponse d = dtos.get(i);
             MessageResponse enriched = d;
+
+            if (d.type() == MessageType.SYSTEM && d.metadata() != null) {
+                enriched = enriched.withMetadata(enrichSystemMetadata(d.metadata(), baseUrl));
+            }
+
             ChatUser sender = userMap.get(d.senderId());
             if (sender != null) {
                 enriched = enriched.withSenderName(sender.getFullName())
@@ -424,6 +576,13 @@ public class MessageServiceImpl implements MessageService {
         for (int i = 0; i < notifs.size(); i++) {
             ChatNotification n = notifs.get(i);
             ChatNotification enriched = n;
+
+            if (n.type() == MessageType.SYSTEM && n.metadata() != null) {
+                enriched = enriched.toBuilder()
+                        .metadata(enrichSystemMetadata(n.metadata(), baseUrl))
+                        .build();
+            }
+
             ChatUser sender = userMap.get(n.senderId());
             if (sender != null) {
                 enriched = enriched.withSenderName(sender.getFullName())
@@ -441,16 +600,48 @@ public class MessageServiceImpl implements MessageService {
         }
     }
 
-    private void updateLastMessageIfRevoked(Message revokedMsg) {
-        Query query = new Query(Criteria.where("id").is(revokedMsg.getConversationId())
-                .and("lastMessage.messageId").is(revokedMsg.getId()));
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> enrichSystemMetadata(Map<String, Object> metadata, String baseUrl) {
+        if (metadata == null) return null;
+        Map<String, Object> newMetadata = new HashMap<>(metadata);
+
+        if (newMetadata.get("targetAvatar") instanceof String avatar && !avatar.isBlank() && !avatar.startsWith("http")) {
+            newMetadata.put("targetAvatar", baseUrl + avatar);
+        }
+
+        if (newMetadata.get("payload") instanceof Map<?, ?> payload) {
+            Map<String, Object> newPayload = new HashMap<>((Map<String, Object>) payload);
+            if (newPayload.get("targetAvatars") instanceof List<?> avatars) {
+                List<String> enrichedAvatars = avatars.stream()
+                        .map(obj -> {
+                            if (obj instanceof String avatar && !avatar.isBlank() && !avatar.startsWith("http")) {
+                                return baseUrl + avatar;
+                            }
+                            return (String) obj;
+                        })
+                        .toList();
+                newPayload.put("targetAvatars", enrichedAvatars);
+            }
+            newMetadata.put("payload", newPayload);
+        }
+
+        return newMetadata;
+    }
+
+    private void updateLastMessageStatus(Message msg, MessageStatus newStatus) {
+        Query query = new Query(Criteria.where("id").is(msg.getConversationId())
+                .and("lastMessage.messageId").is(msg.getId()));
         Update update = new Update()
-                .set("lastMessage.content", "Tin nhắn đã được thu hồi")
-                .set("lastMessage.status", MessageStatus.REVOKED);
+                .set("lastMessage.content", null)
+                .set("lastMessage.status", newStatus);
         mongoTemplate.updateFirst(query, update, Conversation.class);
     }
 
     private void broadcastStatusChange(String conversationId, String messageId, MessageStatus newStatus) {
+        broadcastStatusChange(conversationId, messageId, newStatus, null);
+    }
+
+    private void broadcastStatusChange(String conversationId, String messageId, MessageStatus newStatus, String deletedByAdminId) {
         Conversation conversation = conversationRepository.findById(conversationId).orElse(null);
         if (conversation == null) return;
 
@@ -462,6 +653,9 @@ public class MessageServiceImpl implements MessageService {
             payload.put("conversationId", conversationId);
             payload.put("messageId", messageId);
             payload.put("newStatus", newStatus);
+            if (deletedByAdminId != null) {
+                payload.put("deletedByAdminId", deletedByAdminId);
+            }
 
             kafkaTemplate.send(socketEventsTopic,
                     new SocketEvent(SocketEventType.MESSAGE, member.getUserId(),
@@ -576,6 +770,70 @@ public class MessageServiceImpl implements MessageService {
             case LINK -> "[Liên kết]";
             default -> message.getContent();
         };
+    }
+
+    @Override
+    public MessageContextResponse getMessageContext(String conversationId, String messageId, int pageSize) {
+        String currentUserId = securityUtil.getCurrentUserId();
+
+        Conversation room = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
+        assertConversationMember(room, currentUserId);
+
+        Message targetMessage = messageRepository.findById(messageId)
+                .orElseThrow(() -> new AppException(ErrorCode.MESSAGE_NOT_FOUND));
+        if (!targetMessage.getConversationId().equals(conversationId)) {
+            throw new AppException(ErrorCode.MESSAGE_NOT_FOUND);
+        }
+
+        ConversationMember currentMember = room.getMembers().stream()
+                .filter(m -> m.getUserId().equals(currentUserId))
+                .findFirst().orElse(null);
+        LocalDateTime memberJoinedAt = (currentMember != null && currentMember.getJoinedAt() != null)
+                ? currentMember.getJoinedAt()
+                : LocalDateTime.of(1970, 1, 1, 0, 0);
+        LocalDateTime deletedBefore = (room.getDeletedBefore() != null)
+                ? room.getDeletedBefore().getOrDefault(currentUserId, LocalDateTime.of(1970, 1, 1, 0, 0))
+                : LocalDateTime.of(1970, 1, 1, 0, 0);
+
+        Criteria visibilityOrCriteria = new Criteria().orOperator(
+                Criteria.where("visibleTo").exists(false),
+                Criteria.where("visibleTo").is(null),
+                Criteria.where("visibleTo").size(0),
+                Criteria.where("visibleTo").in(currentUserId)
+        );
+        Criteria systemFilterCriteria = new Criteria().orOperator(
+                Criteria.where("type").ne(MessageType.SYSTEM),
+                Criteria.where("createdAt").gte(memberJoinedAt)
+        );
+
+        Criteria newerCriteria = Criteria.where("conversationId").is(conversationId)
+                .and("deletedBy").ne(currentUserId)
+                .andOperator(
+                        Criteria.where("createdAt").gt(targetMessage.getCreatedAt()),
+                        Criteria.where("createdAt").gt(deletedBefore),
+                        visibilityOrCriteria,
+                        systemFilterCriteria
+                );
+
+        long newerCount = mongoTemplate.count(new Query(newerCriteria), Message.class);
+        int page = (int) (newerCount / pageSize);
+
+        Criteria totalCriteria = Criteria.where("conversationId").is(conversationId)
+                .and("deletedBy").ne(currentUserId)
+                .and("createdAt").gt(deletedBefore)
+                .andOperator(visibilityOrCriteria, systemFilterCriteria);
+
+        long totalElements = mongoTemplate.count(new Query(totalCriteria), Message.class);
+
+        log.info("[ScrollTo] messageId={} → newerCount={}, page={}/{}, pageSize={}",
+                messageId, newerCount, page, (int) Math.ceil((double) totalElements / pageSize), pageSize);
+
+        return MessageContextResponse.builder()
+                .page(page)
+                .size(pageSize)
+                .totalElements(totalElements)
+                .build();
     }
 
 }

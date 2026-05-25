@@ -74,4 +74,7 @@ public class Conversation extends BaseModel {
 
     @Builder.Default
     Set<String> selfBlockedUserIds = new HashSet<>();
+
+    @Builder.Default
+    Set<String> invitedUserIds = new HashSet<>();
 }
