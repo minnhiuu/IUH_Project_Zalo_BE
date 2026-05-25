@@ -125,6 +125,26 @@ public class FallbackController {
                 .body(ApiResponse.error(503, errorTitle, errorDetails)));
     }
 
+    @RequestMapping("/search-service")
+    public Mono<ResponseEntity<ApiResponse<Object>>> searchServiceFallback(ServerHttpRequest request) {
+        log.error("Search service fallback triggered for request: {} {}", 
+                request.getMethod(), request.getPath());
+        
+        Locale locale = getLocaleFromRequest(request);
+        
+        Map<String, String> errorDetails = createErrorDetails(
+                messageSource.getMessage("fallback.search.service.name", null, locale),
+                messageSource.getMessage("fallback.search.service.message", null, locale),
+                request,
+                locale
+        );
+        
+        String errorTitle = messageSource.getMessage("fallback.search.service.unavailable", null, locale);
+        
+        return Mono.just(ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(ApiResponse.error(503, errorTitle, errorDetails)));
+    }
+
     /**
      * Fallback for general gateway errors
      */

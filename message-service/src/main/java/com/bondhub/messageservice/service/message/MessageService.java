@@ -2,7 +2,9 @@ package com.bondhub.messageservice.service.message;
 
 import com.bondhub.common.dto.PageResponse;
 import com.bondhub.common.dto.client.messageservice.MessageSendRequest;
+import com.bondhub.messageservice.dto.response.MessageContextResponse;
 import com.bondhub.messageservice.dto.response.MessageResponse;
+import com.bondhub.messageservice.dto.response.MessageSeenResponse;
 import com.bondhub.messageservice.model.Message;
 import java.util.List;
 
@@ -44,4 +46,27 @@ public interface MessageService {
      * Xóa toàn bộ reaction của current user khỏi tin nhắn.
      */
     void removeAllMyReactions(String messageId);
+
+    /**
+     * Xóa tin nhắn của thành viên trong nhóm (Admin/Owner).
+     * Admin không được xóa tin nhắn của Owner.
+     */
+    void deleteGroupMemberMessage(String conversationId, String messageId);
+
+    /**
+     * Lấy danh sách thành viên đã xem một tin nhắn trong nhóm.
+     * Loại trừ người gửi tin nhắn.
+     */
+    List<MessageSeenResponse> getSeenMembers(String conversationId, String messageId);
+
+    /**
+     * Lấy page index (0-based) của một message trong conversation.
+     * Dùng cho tính năng scroll-to khi click vào search result.
+     *
+     * @param conversationId ObjectId của conversation
+     * @param messageId      ObjectId của message cần tìm
+     * @param pageSize       Kích thước trang (phải khớp với pageSize FE dùng)
+     * @return {@link MessageContextResponse} chứa page, size, totalElements
+     */
+    MessageContextResponse getMessageContext(String conversationId, String messageId, int pageSize);
 }

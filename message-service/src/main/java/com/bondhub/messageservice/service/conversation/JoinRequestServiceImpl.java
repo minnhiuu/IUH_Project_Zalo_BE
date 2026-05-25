@@ -13,6 +13,7 @@ import com.bondhub.messageservice.model.Conversation;
 import com.bondhub.messageservice.model.ConversationMember;
 import com.bondhub.messageservice.model.GroupSettings;
 import com.bondhub.messageservice.model.JoinRequest;
+import com.bondhub.messageservice.model.enums.JoinMethod;
 import com.bondhub.messageservice.model.enums.JoinRequestStatus;
 import com.bondhub.messageservice.model.enums.MemberRole;
 import com.bondhub.messageservice.repository.ChatUserRepository;
@@ -66,9 +67,18 @@ public class JoinRequestServiceImpl implements JoinRequestService {
             throw new AppException(ErrorCode.CHAT_USER_BLOCKED_FROM_GROUP);
         }
 
-        if (settings.isMembershipApprovalEnabled() || settings.getJoinQuestion() != null) {
+        // Invited users (from group creation) bypass approval on first join
+        boolean isInvited = conversation.getInvitedUserIds() != null
+                && conversation.getInvitedUserIds().contains(currentUserId);
+
+        if (!isInvited && (settings.isMembershipApprovalEnabled() || settings.getJoinQuestion() != null)) {
             String joinAnswer = request != null ? request.joinAnswer() : null;
             return handleJoinRequest(conversation, currentUserId, joinAnswer);
+        }
+
+        // Remove from invited list so subsequent rejoins require approval
+        if (isInvited && conversation.getInvitedUserIds() != null) {
+            conversation.getInvitedUserIds().remove(currentUserId);
         }
 
         return directJoinByLink(conversation, currentUserId);
@@ -352,9 +362,12 @@ public class JoinRequestServiceImpl implements JoinRequestService {
             existingMember.setRemovedBy(null);
             existingMember.setRole(MemberRole.MEMBER);
             existingMember.setJoinedAt(now);
+            existingMember.setJoinMethod(JoinMethod.JOIN_BY_LINK);
+            existingMember.setAddedBy(null);
         } else {
             conversation.getMembers().add(
-                    ConversationMember.builder().userId(currentUserId).role(MemberRole.MEMBER).joinedAt(now).build());
+                    ConversationMember.builder().userId(currentUserId).role(MemberRole.MEMBER).joinedAt(now)
+                    .joinMethod(JoinMethod.JOIN_BY_LINK).build());
         }
 
         if (conversation.getUnreadCounts() == null) conversation.setUnreadCounts(new HashMap<>());
@@ -380,6 +393,7 @@ public class JoinRequestServiceImpl implements JoinRequestService {
 
     private ConversationResponse addMemberToConversation(Conversation conversation, String userId) {
         LocalDateTime now = LocalDateTime.now();
+        String currentUserId = helper.getSecurityUtil().getCurrentUserId();
 
         // Clear self-block if approved via join request
         if (conversation.getSelfBlockedUserIds() != null) {
@@ -396,9 +410,12 @@ public class JoinRequestServiceImpl implements JoinRequestService {
             existingMember.setRemovedBy(null);
             existingMember.setRole(MemberRole.MEMBER);
             existingMember.setJoinedAt(now);
+            existingMember.setJoinMethod(JoinMethod.ADDED_BY_MEMBER);
+            existingMember.setAddedBy(currentUserId);
         } else {
             conversation.getMembers().add(
-                    ConversationMember.builder().userId(userId).role(MemberRole.MEMBER).joinedAt(now).build());
+                    ConversationMember.builder().userId(userId).role(MemberRole.MEMBER).joinedAt(now)
+                    .joinMethod(JoinMethod.ADDED_BY_MEMBER).addedBy(currentUserId).build());
         }
 
         if (conversation.getUnreadCounts() == null) conversation.setUnreadCounts(new HashMap<>());

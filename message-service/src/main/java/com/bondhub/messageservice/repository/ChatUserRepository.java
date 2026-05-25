@@ -20,4 +20,6 @@ public interface ChatUserRepository extends MongoRepository<ChatUser, String> {
     Page<ChatUser> findByIdInAndFullNameContainingIgnoreCase(Set<String> ids, String fullName, Pageable pageable);
 
     Optional<ChatUser> findByPhoneNumber(String phoneNumber);
+    
+    List<ChatUser> findAllByPhoneNumberIn(List<String> phoneNumbers);
 }

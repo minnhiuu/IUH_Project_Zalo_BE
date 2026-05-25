@@ -6,17 +6,15 @@ import com.bondhub.messageservice.dto.request.AddMembersRequest;
 import com.bondhub.messageservice.dto.request.GroupConversationCreateRequest;
 import com.bondhub.messageservice.dto.request.JoinByLinkRequest;
 import com.bondhub.messageservice.dto.request.LeaveGroupRequest;
+import com.bondhub.messageservice.dto.request.MarkAsReadRequest;
 import com.bondhub.messageservice.dto.request.UpdateGroupSettingsRequest;
 import com.bondhub.messageservice.dto.request.UpdateJoinQuestionRequest;
-import com.bondhub.messageservice.dto.response.AdminMemberResponse;
-import com.bondhub.messageservice.dto.response.ConversationResponse;
-import com.bondhub.messageservice.dto.response.GroupMemberListItemResponse;
-import com.bondhub.messageservice.dto.response.JoinGroupPreviewResponse;
-import com.bondhub.messageservice.dto.response.JoinRequestResponse;
-import com.bondhub.messageservice.dto.response.SearchMemberResponse;
+import com.bondhub.messageservice.dto.response.*;
 import com.bondhub.messageservice.model.PinnedMessageInfo;
+import com.bondhub.messageservice.dto.request.GroupInviteSendRequest;
 import com.bondhub.messageservice.service.conversation.ConversationService;
 import com.bondhub.messageservice.service.conversation.GroupConversationService;
+import com.bondhub.messageservice.service.conversation.GroupInviteService;
 import com.bondhub.messageservice.service.message.PinService;
 import com.bondhub.messageservice.service.conversation.JoinRequestService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -39,6 +37,7 @@ public class ConversationController {
 
     private final ConversationService conversationService;
     private final GroupConversationService groupConversationService;
+    private final GroupInviteService groupInviteService;
     private final PinService pinService;
     private final JoinRequestService joinRequestService;
 
@@ -51,6 +50,18 @@ public class ConversationController {
                 conversationService.getUserConversations(page, size)));
     }
 
+    @GetMapping("/groups/mine")
+    @Operation(summary = "Get my group conversations with search, sort and filter")
+    public ResponseEntity<ApiResponse<PageResponse<List<ConversationResponse>>>> getMyGroupConversations(
+            @RequestParam(required = false) String query,
+            @RequestParam(defaultValue = "activity_newest") String sort,
+            @RequestParam(defaultValue = "all") String filter,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(ApiResponse.success(
+                groupConversationService.getMyGroupConversations(query, sort, filter, page, size)));
+    }
+
     @GetMapping("/partner/{partnerId}")
     @Operation(summary = "Get or create a one-to-one conversation with a partner")
     public ResponseEntity<ApiResponse<ConversationResponse>> getOrCreateConversationWithPartner(
@@ -61,9 +72,20 @@ public class ConversationController {
 
     @PutMapping("/{conversationId}/read")
     @Operation(summary = "Mark a conversation as read")
-    public ResponseEntity<ApiResponse<Void>> markAsRead(@PathVariable String conversationId) {
-        conversationService.markAsRead(conversationId);
+    public ResponseEntity<ApiResponse<Void>> markAsRead(
+            @PathVariable String conversationId,
+            @RequestBody(required = false) MarkAsReadRequest request) {
+        String lastReadMessageId = request != null ? request.lastReadMessageId() : null;
+        conversationService.markAsRead(conversationId, lastReadMessageId);
         return ResponseEntity.ok(ApiResponse.success(null));
+    }
+
+    @GetMapping("/{conversationId}/unread-anchor")
+    @Operation(summary = "Get first unread message ID and unread count")
+    public ResponseEntity<ApiResponse<UnreadAnchorResponse>> getUnreadAnchor(
+            @PathVariable String conversationId) {
+        return ResponseEntity.ok(ApiResponse.success(
+                conversationService.getUnreadAnchor(conversationId)));
     }
 
     @PostMapping("/groups")
@@ -72,6 +94,15 @@ public class ConversationController {
             @RequestBody @Valid GroupConversationCreateRequest request) {
         return ResponseEntity.ok(ApiResponse.success(
                 groupConversationService.createGroupConversation(request)));
+    }
+
+    @PostMapping("/groups/{conversationId}/invites")
+    @Operation(summary = "Send group invites to non-friend users")
+    public ResponseEntity<ApiResponse<Void>> sendGroupInvites(
+            @PathVariable String conversationId,
+            @RequestBody @Valid GroupInviteSendRequest request) {
+        groupInviteService.sendInvites(conversationId, request);
+        return ResponseEntity.ok(ApiResponse.success(null));
     }
 
     @PatchMapping("/{conversationId}/name")
@@ -157,9 +188,10 @@ public class ConversationController {
     @Operation(summary = "Kick a member from group conversation (Owner/Admin with role constraints)")
     public ResponseEntity<ApiResponse<ConversationResponse>> removeMemberFromGroup(
             @PathVariable String conversationId,
-            @PathVariable String targetUserId) {
+            @PathVariable String targetUserId,
+            @RequestParam(defaultValue = "false") boolean blockFromGroup) {
         return ResponseEntity.ok(ApiResponse.success(
-                groupConversationService.removeMemberFromGroup(conversationId, targetUserId)));
+                groupConversationService.removeMemberFromGroup(conversationId, targetUserId, blockFromGroup)));
     }
 
     @PatchMapping("/{conversationId}/members/{targetUserId}/promote")
@@ -180,6 +212,17 @@ public class ConversationController {
                 groupConversationService.demoteFromAdmin(conversationId, targetUserId)));
     }
 
+    @GetMapping("/{conversationId}/participants")
+    @Operation(summary = "Get all participants in a conversation for filtering (supports Group and 1:1)")
+    public ResponseEntity<ApiResponse<PageResponse<List<ConversationParticipantResponse>>>> getConversationParticipants(
+            @PathVariable String conversationId,
+            @RequestParam(required = false) String query,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(ApiResponse.success(
+                conversationService.getConversationParticipants(conversationId, query, page, size)));
+    }
+
     @GetMapping("/{conversationId}/group-members")
     @Operation(summary = "Get group members with pagination, search and friend-priority sorting")
     public ResponseEntity<ApiResponse<PageResponse<List<GroupMemberListItemResponse>>>> getGroupMembers(
@@ -189,6 +232,36 @@ public class ConversationController {
             @RequestParam(defaultValue = "20") int size) {
         return ResponseEntity.ok(ApiResponse.success(
                 groupConversationService.getGroupMembers(conversationId, query, page, size)));
+    }
+
+    @GetMapping("/{conversationId}/group-admins")
+    @Operation(summary = "Get group owner and admins (owner first, admins sorted by name ASC)")
+    public ResponseEntity<ApiResponse<PageResponse<List<AdminMemberResponse>>>> getGroupAdmins(
+            @PathVariable String conversationId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(ApiResponse.success(
+                groupConversationService.getGroupAdmins(conversationId, page, size)));
+    }
+
+    @GetMapping("/{conversationId}/admin-candidates")
+    @Operation(summary = "Get non-owner members for admin management (admins first then members, sorted by name ASC). Owner only.")
+    public ResponseEntity<ApiResponse<PageResponse<List<AdminMemberResponse>>>> getAdminCandidates(
+            @PathVariable String conversationId,
+            @RequestParam(required = false) String query,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(ApiResponse.success(
+                groupConversationService.getAdminCandidates(conversationId, query, page, size)));
+    }
+
+    @PatchMapping("/{conversationId}/transfer-owner/{targetUserId}")
+    @Operation(summary = "Transfer group ownership to another member (Owner only)")
+    public ResponseEntity<ApiResponse<ConversationResponse>> transferOwnership(
+            @PathVariable String conversationId,
+            @PathVariable String targetUserId) {
+        return ResponseEntity.ok(ApiResponse.success(
+                groupConversationService.transferOwnership(conversationId, targetUserId)));
     }
 
     @PostMapping("/{conversationId}/join-link")

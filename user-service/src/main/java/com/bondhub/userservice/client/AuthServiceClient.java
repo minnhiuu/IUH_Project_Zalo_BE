@@ -31,4 +31,10 @@ public interface AuthServiceClient {
 
     @PostMapping("/auth/accounts/internal/{id}/unban")
     ApiResponse<Void> unbanAccount(@PathVariable("id") String id);
+
+    @PutMapping("/auth/accounts/{id}")
+    ApiResponse<AccountResponse> updateAccount(@PathVariable("id") String id, @RequestBody com.bondhub.userservice.dto.request.auth.AccountUpdateRequest request);
+
+    @GetMapping("/auth/accounts/exists/phone/{phoneNumber}")
+    ApiResponse<Boolean> existsByPhoneNumber(@PathVariable("phoneNumber") String phoneNumber);
 }
