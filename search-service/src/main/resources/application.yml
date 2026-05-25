@@ -12,3 +12,26 @@ spring:
         initial-interval: 1000
         max-interval: 2000
         multiplier: 1.1
+    openfeign:
+      client:
+        config:
+          friend-service:
+            connectTimeout: 1000
+            readTimeout: 1500
+
+search:
+  ranking:
+    user:
+      exact-phone-boost: 10000
+      es-score-multiplier: 100
+      accepted-friend-boost: 1000
+      pending-received-boost: 800
+      pending-sent-boost: 500
+      mutual-friend-weight: 30
+      mutual-friend-cap: 10
+      shared-group-weight: 15
+      shared-group-cap: 10
+      contact-score-weight: 50
+      contact-score-cap: 5
+      recent-interaction-weight: 40
+      recent-interaction-cap: 5

@@ -2,6 +2,9 @@ package com.bondhub.fileservice.controller;
 
 import com.bondhub.common.dto.ApiResponse;
 import com.bondhub.common.dto.client.fileservice.FileUploadResponse;
+import com.bondhub.fileservice.dto.IngestUploadResponse;
+import com.bondhub.fileservice.dto.PresignFileRequest;
+import com.bondhub.fileservice.dto.PresignedUploadResponse;
 import com.bondhub.fileservice.service.file.FileService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
@@ -12,6 +15,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 @RestController
 @RequestMapping("/files")
@@ -26,6 +30,21 @@ public class FileController {
             @RequestParam(value = "folder", defaultValue = "misc") String folder) throws IOException {
         FileUploadResponse fileUploadResponse = fileService.uploadFile(file, folder);
         return ResponseEntity.ok(ApiResponse.success(fileUploadResponse));
+    }
+
+    @PostMapping("/presign/batch")
+    public ResponseEntity<ApiResponse<List<PresignedUploadResponse>>> generatePresignedUrls(
+            @RequestBody List<PresignFileRequest> requests) {
+        return ResponseEntity.ok(ApiResponse.success(fileService.generatePresignedUrls(requests)));
+    }
+
+    @PostMapping("/ingest/upload")
+    public ResponseEntity<ApiResponse<IngestUploadResponse>> ingestUpload(
+            @RequestPart("file") MultipartFile file,
+            @RequestParam("conversationId") String conversationId,
+            @RequestParam(value = "folder", defaultValue = "ingest") String folder) throws IOException {
+        IngestUploadResponse ingestUploadResponse = fileService.uploadForIngest(file, conversationId, folder);
+        return ResponseEntity.ok(ApiResponse.success(ingestUploadResponse));
     }
 
     @GetMapping("/download/{filename}")

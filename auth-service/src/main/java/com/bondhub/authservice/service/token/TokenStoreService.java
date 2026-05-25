@@ -3,6 +3,7 @@ package com.bondhub.authservice.service.token;
 import com.bondhub.authservice.enums.DeviceType;
 import com.bondhub.authservice.model.redis.RefreshTokenSession;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface TokenStoreService {
@@ -39,7 +40,17 @@ public interface TokenStoreService {
          * @param ipAddress    IP address of the client
          * @param ttlSeconds   Time to live in seconds
          */
-        void createRefreshSession(
+        /**
+         * @return list of sessions that were kicked/replaced by this new login
+         *         (callers may use these to blacklist access tokens and publish
+         *         FORCE_LOGOUT events)
+         */
+        /**
+         * @return list of sessions that were kicked/replaced by this new login
+         *         (callers may use these to blacklist access tokens and publish
+         *         FORCE_LOGOUT events)
+         */
+        List<RefreshTokenSession> createRefreshSession(
                         String sessionId,
                         String accountId,
                         String phoneNumber,

@@ -7,11 +7,13 @@ public enum NotificationType {
     FRIEND_ACCEPT,
 
     MESSAGE_DIRECT,
+    MESSAGE_GROUP,
     CALL,
 
-    POST_LIKE,
+    POST_REACTION,
     POST_COMMENT,
-    COMMENT_LIKE,
+    POST_PUBLISHED,
+    COMMENT_REACTION,
     COMMENT_REPLY,
 
     POST_TAG,
@@ -20,5 +22,19 @@ public enum NotificationType {
 
     SYSTEM,
 
-    DLQ_ALERT
+    DLQ_ALERT,
+
+    // --- ACCOUNT SECURITY ---
+    NEW_DEVICE_LOGIN,
+
+    // --- MODERATION ---
+    CONTENT_REMOVED,
+    CONTENT_HIDDEN,
+    USER_WARNED,
+
+    DND_SUMMARY,
+    DND_SUMMARY_MESSAGE,
+    DND_SUMMARY_FRIEND,
+    DND_SUMMARY_POST,
+    DND_SUMMARY_OTHER
 }

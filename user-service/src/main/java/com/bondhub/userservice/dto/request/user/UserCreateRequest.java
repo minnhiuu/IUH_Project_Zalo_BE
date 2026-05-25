@@ -3,6 +3,7 @@ package com.bondhub.userservice.dto.request.user;
 import com.bondhub.userservice.model.enums.Gender;
 import lombok.Builder;
 import java.time.LocalDate;
+import java.util.Set;
 
 @Builder
 public record UserCreateRequest(
@@ -12,5 +13,6 @@ public record UserCreateRequest(
     Gender gender,
     String accountId,
     String phoneNumber,
-    String role
+    String role,
+    Set<String> initialInterests
 ) {}

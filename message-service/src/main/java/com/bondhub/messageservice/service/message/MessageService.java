@@ -2,8 +2,8 @@ package com.bondhub.messageservice.service.message;
 
 import com.bondhub.common.dto.PageResponse;
 import com.bondhub.common.dto.client.messageservice.MessageSendRequest;
-import com.bondhub.messageservice.dto.response.MessageContextResponse;
 import com.bondhub.messageservice.dto.response.MessageResponse;
+import com.bondhub.messageservice.dto.response.CursorPageResponse;
 import com.bondhub.messageservice.dto.response.MessageSeenResponse;
 import com.bondhub.messageservice.model.Message;
 import java.util.List;
@@ -43,6 +43,12 @@ public interface MessageService {
     void toggleReaction(String messageId, String emoji);
 
     /**
+     * Lấy danh sách tin nhắn từ một mốc thời gian (sinceId).
+     * Phục vụ chức năng tóm tắt AI.
+     */
+    List<MessageResponse> getMessagesSince(String conversationId, String sinceId, String userId);
+
+    /**
      * Xóa toàn bộ reaction của current user khỏi tin nhắn.
      */
     void removeAllMyReactions(String messageId);
@@ -60,13 +66,11 @@ public interface MessageService {
     List<MessageSeenResponse> getSeenMembers(String conversationId, String messageId);
 
     /**
-     * Lấy page index (0-based) của một message trong conversation.
-     * Dùng cho tính năng scroll-to khi click vào search result.
-     *
-     * @param conversationId ObjectId của conversation
-     * @param messageId      ObjectId của message cần tìm
-     * @param pageSize       Kích thước trang (phải khớp với pageSize FE dùng)
-     * @return {@link MessageContextResponse} chứa page, size, totalElements
+     * Lấy tin nhắn theo conversationId với Cursor-based pagination (V2).
+     * Hỗ trợ lướt lên, lướt xuống và nhảy tới tin nhắn cụ thể.
      */
-    MessageContextResponse getMessageContext(String conversationId, String messageId, int pageSize);
+    CursorPageResponse<MessageResponse> findChatMessagesV2(
+            String conversationId, String cursor, int limit, String direction, String aroundMessageId);
+
+    MessageResponse findById(String messageId);
 }

@@ -1,12 +1,12 @@
 package com.bondhub.messageservice.event.listener;
 
 import com.bondhub.common.dto.client.userservice.user.response.UserSummaryResponse;
-import com.bondhub.common.utils.S3UrlUtil;
 import com.bondhub.common.utils.S3Util;
 import com.bondhub.messageservice.client.UserServiceClient;
 import com.bondhub.messageservice.event.UserSyncEvent;
 import com.bondhub.messageservice.model.ChatUser;
 import com.bondhub.messageservice.repository.ChatUserRepository;
+import com.bondhub.common.utils.S3UtilV2;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -25,11 +25,7 @@ public class UserSyncEventListener {
     private final UserServiceClient userServiceClient;
     private final ChatUserRepository chatUserRepository;
 
-    @Value("${aws.s3.bucket.name}")
-    private String bucketName;
-
-    @Value("${cloud.aws.region.static}")
-    private String region;
+    private final S3UtilV2 s3UtilV2;
 
     @Async
     @EventListener
@@ -56,13 +52,8 @@ public class UserSyncEventListener {
             ChatUser mirrorUser = existingUserOpt.orElseGet(() ->
                     ChatUser.builder().id(userDto.id() != null ? userDto.id() : userId).build());
 
-            String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
-
-            if (userDto.fullName() != null && !userDto.fullName().isBlank()) {
-                mirrorUser.setFullName(userDto.fullName());
-            }
             if (userDto.avatar() != null && !userDto.avatar().isBlank()) {
-                mirrorUser.setAvatar(S3UrlUtil.extractStorageKey(userDto.avatar(), baseUrl));
+                mirrorUser.setAvatar(s3UtilV2.extractStorageKey(userDto.avatar()));
 
                 log.info("✅ Updated ChatUser mirror22222222222 with avatar: {}", mirrorUser.getAvatar());
             }

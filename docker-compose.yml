@@ -1,7 +1,7 @@
 version: "3.8"
 
 services:
-  # MongoDB for Message Service and Notification Service
+  # MongoDB for Message, Notification, and Post Recommendation services
   mongodb:
     image: mongo:7.0
     container_name: bondhub-mongodb

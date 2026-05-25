@@ -5,6 +5,7 @@ import com.bondhub.common.dto.PageResponse;
 import com.bondhub.common.dto.client.userservice.user.response.UserSummaryResponse;
 import com.bondhub.friendservice.client.UserServiceClient;
 import com.bondhub.friendservice.dto.response.FriendSuggestionResponse;
+import com.bondhub.friendservice.graph.dto.UserSearchGraphMetrics;
 import com.bondhub.friendservice.graph.repository.UserNodeRepository;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
@@ -53,6 +54,35 @@ public class GraphFriendServiceImpl implements GraphFriendService {
     @Override
     public int getMutualFriendsCount(String userA, String userB) {
         return userNodeRepository.countMutualFriends(userA, userB);
+    }
+
+    @Override
+    public Map<String, UserSearchGraphMetrics> getUserSearchGraphMetrics(String userId, List<String> targetUserIds) {
+        if (targetUserIds == null || targetUserIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        log.debug("Neo4j: Getting user search graph metrics for user {} and {} targets",
+                userId, targetUserIds.size());
+
+        List<Map<String, Object>> results = userNodeRepository.findUserSearchGraphMetrics(userId, targetUserIds);
+
+        Map<String, UserSearchGraphMetrics> metricsByUserId = results.stream()
+                .map(this::normalizeRow)
+                .filter(row -> row.get("userId") != null)
+                .map(this::toUserSearchGraphMetrics)
+                .collect(Collectors.toMap(
+                        UserSearchGraphMetrics::userId,
+                        metrics -> metrics,
+                        (existing, replacement) -> existing));
+
+        return targetUserIds.stream()
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toMap(
+                        targetId -> targetId,
+                        targetId -> metricsByUserId.getOrDefault(targetId, UserSearchGraphMetrics.empty(targetId)),
+                        (existing, replacement) -> existing));
     }
 
     @Override
@@ -241,5 +271,21 @@ public class GraphFriendServiceImpl implements GraphFriendService {
             return (Map<String, Object>) nestedMap;
         }
         return row;
+    }
+
+    private UserSearchGraphMetrics toUserSearchGraphMetrics(Map<String, Object> row) {
+        String userId = (String) row.get("userId");
+
+        return UserSearchGraphMetrics.builder()
+                .userId(userId)
+                .mutualFriendsCount(numberValue(row.get("mutualFriendsCount")).intValue())
+                .sharedGroupsCount(numberValue(row.get("sharedGroupsCount")).intValue())
+                .inContact(Boolean.TRUE.equals(row.get("inContact")))
+                .contactScore(numberValue(row.get("contactScore")).doubleValue())
+                .build();
+    }
+
+    private Number numberValue(Object value) {
+        return value instanceof Number number ? number : 0;
     }
 }

@@ -8,6 +8,7 @@ import com.bondhub.common.event.user.UserCreatedEvent;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
 import com.bondhub.common.utils.S3Util;
+import com.bondhub.common.utils.S3UtilV2;
 import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.common.event.user.UserProfileUpdatedEvent;
 import com.bondhub.common.model.kafka.EventType;
@@ -56,12 +57,9 @@ public class UserServiceImpl implements UserService {
     final FileServiceClient fileServiceClient;
     final UserIndexEventPublisher userIndexEventPublisher;
     final OutboxEventPublisher outboxEventPublisher;
+    final S3UtilV2 s3UtilV2;
 
-    @Value("${aws.s3.bucket.name}")
-    String bucketName;
 
-    @Value("${cloud.aws.region.static}")
-    String region;
 
     @Override
     @Transactional
@@ -112,7 +110,8 @@ public class UserServiceImpl implements UserService {
     public UserResponse getUserById(String id) {
         log.info("Fetching user with id: {}", id);
         User user = userRepository.findById(id)
-                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+            .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+        ensureUserIsActive(user);
 
         AccountResponse accountResponse = null;
         try {
@@ -132,7 +131,8 @@ public class UserServiceImpl implements UserService {
     public UserResponse getUserByAccountId(String accountId) {
         log.info("Fetching user with accountId: {}", accountId);
         User user = userRepository.findByAccountId(accountId)
-                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+            .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+        ensureUserIsActive(user);
 
         AccountResponse accountResponse = null;
         try {
@@ -153,8 +153,7 @@ public class UserServiceImpl implements UserService {
         String accountId = securityUtil.getCurrentAccountId();
         log.info("Fetching detailed profile for account id: {}", accountId);
 
-        User user = userRepository.findByAccountId(accountId)
-                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+        User user = getCurrentUser(true);
 
         AccountResponse accountResponse = null;
         try {
@@ -174,9 +173,10 @@ public class UserServiceImpl implements UserService {
     @Override
     public List<UserResponse> getAllUsers() {
         log.info("Fetching all users");
-        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+        String baseUrl = s3UtilV2.getS3BaseUrl();
 
         return userRepository.findAll().stream()
+                .filter(User::isActive)
                 .map(user -> {
                     UserResponse response = userMapper.toUserResponse(user);
                     return UserResponse.builder()
@@ -185,6 +185,7 @@ public class UserServiceImpl implements UserService {
                             .dob(response.dob())
                             .bio(response.bio())
                             .gender(response.gender())
+                            .active(response.active())
                             .accountInfo(response.accountInfo())
                             .avatar(response.avatar() != null ? baseUrl + response.avatar() : null)
                             .background(response.background() != null ? baseUrl + response.background() : null)
@@ -200,8 +201,7 @@ public class UserServiceImpl implements UserService {
         String accountId = securityUtil.getCurrentAccountId();
         log.info("Updating user profile for account: {}", accountId);
 
-        User user = userRepository.findByAccountId(accountId)
-                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+        User user = getCurrentUser(true);
 
         AccountResponse accountResponse = null;
         try {
@@ -252,10 +252,11 @@ public class UserServiceImpl implements UserService {
 
     private UserProfileResponse getUserProfileResponseWithUrl(User user, AccountResponse accountResponse) {
         UserProfileResponse response = userProfileMapper.toUserProfileResponse(user, accountResponse);
-        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+        String baseUrl = s3UtilV2.getS3BaseUrl();
 
         return UserProfileResponse.builder()
                 .id(response.id())
+                .active(user.isActive())
                 .phoneNumber(response.phoneNumber())
                 .email(response.email())
                 .fullName(response.fullName())
@@ -270,7 +271,7 @@ public class UserServiceImpl implements UserService {
     }
 
     private UserResponse getUserResponseWithUrl(User user, AccountResponse accountResponse) {
-        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+        String baseUrl = s3UtilV2.getS3BaseUrl();
 
         return UserResponse.builder()
                 .id(user.getId())
@@ -278,6 +279,7 @@ public class UserServiceImpl implements UserService {
                 .dob(user.getDob())
                 .bio(user.getBio())
                 .gender(user.getGender())
+                .active(user.isActive())
                 .accountInfo(accountResponse)
                 .avatar(user.getAvatar() != null ? baseUrl + user.getAvatar() : null)
                 .background(user.getBackground() != null ? baseUrl + user.getBackground() : null)
@@ -291,18 +293,24 @@ public class UserServiceImpl implements UserService {
         String accountId = securityUtil.getCurrentAccountId();
         log.info("Updating avatar for user: {}", accountId);
 
-        User user = userRepository.findByAccountId(accountId)
-                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+        User user = getCurrentUser(true);
 
         String oldAvatarKey = user.getAvatar();
 
-        String email = securityUtil.getCurrentEmail();
+        String newKey = null;
+        if (request.imageKey() != null && !request.imageKey().isBlank()) {
+            newKey = request.imageKey();
+        } else if (request.file() != null) {
+            String email = securityUtil.getCurrentEmail();
+            ApiResponse<FileUploadResponse> response = fileServiceClient
+                    .uploadFile(accountId, email, request.file(), "avatars");
+            if (response != null && response.data() != null) {
+                newKey = response.data().key();
+            }
+        }
 
-        ApiResponse<FileUploadResponse> response = fileServiceClient
-                .uploadFile(accountId, email, request.file(), "avatars");
-        if (response != null && response.data() != null) {
-            String key = response.data().key();
-            user.setAvatar(key);
+        if (newKey != null) {
+            user.setAvatar(newKey);
             userRepository.save(user);
 
             if (oldAvatarKey != null && !oldAvatarKey.isEmpty()) {
@@ -326,14 +334,15 @@ public class UserServiceImpl implements UserService {
                 log.warn("Failed to fetch account info for updated avatar: {}", accountId, e);
             }
 
+
             publishUserIndexEvent(user, accountResponse);
             publishUserProfileUpdatedEvent(user, accountResponse != null ? accountResponse.phoneNumber() : null);
-
-            String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+            
+            String baseUrl = s3UtilV2.getS3BaseUrl();
             return userMapper.toAvatarResponse(user, baseUrl);
         }
 
-        throw new RuntimeException("Failed to upload avatar");
+        throw new AppException(ErrorCode.VALIDATION_ERROR);
     }
 
     @Override
@@ -341,18 +350,24 @@ public class UserServiceImpl implements UserService {
         String accountId = securityUtil.getCurrentAccountId();
         log.info("Updating background for user: {} with y: {}", accountId, request.y());
 
-        User user = userRepository.findByAccountId(accountId)
-                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+        User user = getCurrentUser(true);
 
         String oldBackgroundKey = user.getBackground();
 
-        String email = securityUtil.getCurrentEmail();
+        String newKey = null;
+        if (request.imageKey() != null && !request.imageKey().isBlank()) {
+            newKey = request.imageKey();
+        } else if (request.file() != null) {
+            String email = securityUtil.getCurrentEmail();
+            ApiResponse<FileUploadResponse> response = fileServiceClient
+                    .uploadFile(accountId, email, request.file(), "backgrounds");
+            if (response != null && response.data() != null) {
+                newKey = response.data().key();
+            }
+        }
 
-        ApiResponse<FileUploadResponse> response = fileServiceClient
-                .uploadFile(accountId, email, request.file(), "backgrounds");
-        if (response != null && response.data() != null) {
-            String key = response.data().key();
-            user.setBackground(key);
+        if (newKey != null) {
+            user.setBackground(newKey);
             user.setBackgroundY(request.y());
             userRepository.save(user);
 
@@ -365,11 +380,12 @@ public class UserServiceImpl implements UserService {
                 }
             }
 
+
             log.info("Background updated successfully for user: {}", accountId);
 
             publishUserIndexEvent(user, null);
 
-            String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+            String baseUrl = s3UtilV2.getS3BaseUrl();
             return userMapper.toBackgroundResponse(user, baseUrl);
         }
 
@@ -381,8 +397,7 @@ public class UserServiceImpl implements UserService {
         String accountId = securityUtil.getCurrentAccountId();
         log.info("Updating background position for user: {} to y: {}", accountId, y);
 
-        User user = userRepository.findByAccountId(accountId)
-                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+        User user = getCurrentUser(true);
 
         if (user.getBackground() == null) {
             throw new AppException(ErrorCode.USER_NOT_FOUND);
@@ -392,7 +407,7 @@ public class UserServiceImpl implements UserService {
         userRepository.save(user);
 
         log.info("Background position updated successfully for user: {}", accountId);
-        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+        String baseUrl = s3UtilV2.getS3BaseUrl();
         return userMapper.toBackgroundResponse(user, baseUrl);
     }
 
@@ -402,8 +417,7 @@ public class UserServiceImpl implements UserService {
         String accountId = securityUtil.getCurrentAccountId();
         log.info("Updating bio for user: {}", accountId);
 
-        User user = userRepository.findByAccountId(accountId)
-                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+        User user = getCurrentUser(true);
 
         user.setBio(request.bio());
         user = userRepository.save(user);
@@ -423,6 +437,85 @@ public class UserServiceImpl implements UserService {
         publishUserProfileUpdatedEvent(user, accountResponse != null ? accountResponse.phoneNumber() : null);
 
         return getUserProfileResponseWithUrl(user, accountResponse);
+    }
+
+    @Override
+    @Transactional
+    public UserProfileResponse deactivateMyAccount() {
+        String accountId = securityUtil.getCurrentAccountId();
+        log.info("Deactivating account for user: {}", accountId);
+
+        User user = getCurrentUser(false);
+
+        if (!user.isActive()) {
+            log.info("User already deactivated for account: {}", accountId);
+        } else {
+            user.setActive(false);
+            user = userRepository.save(user);
+            log.info("User deactivated successfully for account: {}", accountId);
+        }
+
+        AccountResponse accountResponse = null;
+        try {
+            ApiResponse<AccountResponse> accountApiResponse = authServiceClient.getAccountById(accountId);
+            if (accountApiResponse != null && accountApiResponse.data() != null) {
+                accountResponse = accountApiResponse.data();
+            }
+        } catch (Exception e) {
+            log.warn("Failed to fetch account info while deactivating user: {}", accountId, e);
+        }
+
+        publishUserProfileUpdatedEvent(user, accountResponse != null ? accountResponse.phoneNumber() : null);
+        return getUserProfileResponseWithUrl(user, accountResponse);
+    }
+
+    @Override
+    @Transactional
+    public UserProfileResponse activateMyAccount() {
+        String accountId = securityUtil.getCurrentAccountId();
+        log.info("Activating account for user: {}", accountId);
+
+        User user = getCurrentUser(false);
+
+        if (user.isActive()) {
+            log.info("User already active for account: {}", accountId);
+        } else {
+            user.setActive(true);
+            user = userRepository.save(user);
+            log.info("User activated successfully for account: {}", accountId);
+        }
+
+        AccountResponse accountResponse = null;
+        try {
+            ApiResponse<AccountResponse> accountApiResponse = authServiceClient.getAccountById(accountId);
+            if (accountApiResponse != null && accountApiResponse.data() != null) {
+                accountResponse = accountApiResponse.data();
+            }
+        } catch (Exception e) {
+            log.warn("Failed to fetch account info while activating user: {}", accountId, e);
+        }
+
+        publishUserProfileUpdatedEvent(user, accountResponse != null ? accountResponse.phoneNumber() : null);
+        return getUserProfileResponseWithUrl(user, accountResponse);
+    }
+
+    private User getCurrentUser(boolean requireActive) {
+        String accountId = securityUtil.getCurrentAccountId();
+        User user = userRepository.findByAccountId(accountId)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+
+        if (requireActive) {
+            ensureUserIsActive(user);
+        }
+
+        return user;
+    }
+
+    private void ensureUserIsActive(User user) {
+        if (!user.isActive()) {
+            log.warn("Profile access denied for deactivated userId={} accountId={}", user.getId(), user.getAccountId());
+            throw new AppException(ErrorCode.USER_NOT_FOUND);
+        }
     }
 
     private void publishUserProfileUpdatedEvent(User user, String phoneNumber) {
@@ -462,9 +555,11 @@ public class UserServiceImpl implements UserService {
         }
 
         List<User> users = userRepository.findAllById(userIds);
-        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+        String baseUrl = s3UtilV2.getS3BaseUrl();
 
-        return users.stream().collect(Collectors.toMap(
+        return users.stream()
+            .filter(User::isActive)
+            .collect(Collectors.toMap(
                 User::getId,
                 user -> UserSummaryResponse.builder()
                         .id(user.getId())

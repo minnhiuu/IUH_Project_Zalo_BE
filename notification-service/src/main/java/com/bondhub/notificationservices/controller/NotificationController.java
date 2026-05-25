@@ -66,6 +66,12 @@ public class NotificationController {
         return ResponseEntity.ok(ApiResponse.success(null));
     }
 
+    @PostMapping("/conversations/{conversationId}/read")
+    public ResponseEntity<ApiResponse<Void>> markChatConversationAsRead(@PathVariable String conversationId) {
+        notificationService.markChatConversationAsRead(conversationId);
+        return ResponseEntity.ok(ApiResponse.success(null));
+    }
+
     @PostMapping("/read-all")
     public ResponseEntity<ApiResponse<Void>> markAllAsRead() {
         notificationService.markAllAsRead();

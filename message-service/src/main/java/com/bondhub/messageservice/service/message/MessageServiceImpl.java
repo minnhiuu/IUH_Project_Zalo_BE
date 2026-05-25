@@ -1,9 +1,14 @@
 package com.bondhub.messageservice.service.message;
 
-import com.bondhub.common.utils.S3Util;
+import com.bondhub.common.utils.S3UtilV2;
 import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
+import com.bondhub.messageservice.dto.response.ChatNotification;
+import com.bondhub.messageservice.dto.response.CursorPageResponse;
+import com.bondhub.messageservice.dto.response.MessageResponse;
+import com.bondhub.messageservice.dto.response.MessageSeenResponse;
+import com.bondhub.messageservice.dto.response.ReplyMetadataResponse;
 import com.bondhub.messageservice.dto.response.*;
 import com.bondhub.messageservice.model.Conversation;
 import com.bondhub.messageservice.model.ConversationMember;
@@ -17,11 +22,15 @@ import com.bondhub.messageservice.repository.ConversationRepository;
 import com.bondhub.messageservice.repository.MessageRepository;
 import com.bondhub.messageservice.repository.ChatUserRepository;
 import com.bondhub.messageservice.service.conversation.ConversationService;
+import com.bondhub.common.enums.NotificationType;
+import com.bondhub.common.event.notification.RawNotificationEvent;
 import com.bondhub.common.dto.client.messageservice.MessageSendRequest;
 import com.bondhub.common.event.ai.AiMessageSaveEvent;
 import com.bondhub.common.dto.client.socketservice.SocketEvent;
 import com.bondhub.common.enums.SocketEventType;
+import com.bondhub.common.publisher.RawNotificationEventPublisher;
 import com.bondhub.messageservice.publisher.MessageIndexEventPublisher;
+import com.bondhub.messageservice.publisher.ChatInteractionEventPublisher;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -66,13 +75,10 @@ public class MessageServiceImpl implements MessageService {
     private final MessageMapper messageMapper;
     private final ConversationService conversationService;
     private final ConversationHelper conversationHelper;
+    private final S3UtilV2 s3UtilV2;
     private final MessageIndexEventPublisher messageIndexEventPublisher;
-
-    @Value("${aws.s3.bucket.name}")
-    private String bucketName;
-
-    @Value("${cloud.aws.region.static}")
-    private String region;
+    private final ChatInteractionEventPublisher chatInteractionEventPublisher;
+    private final RawNotificationEventPublisher rawNotificationEventPublisher;
 
     @Value("${kafka.topics.socket-events}")
     private String socketEventsTopic;
@@ -100,17 +106,19 @@ public class MessageServiceImpl implements MessageService {
         LocalDateTime deletedBefore = (room.getDeletedBefore() != null)
             ? room.getDeletedBefore().getOrDefault(currentUserId, LocalDateTime.of(1970, 1, 1, 0, 0))
             : LocalDateTime.of(1970, 1, 1, 0, 0);
+        LocalDateTime now = LocalDateTime.now();
         Page<Message> messagePage = isActive
-            ? messageRepository.findByConversationIdAndNotDeleted(conversationId, currentUserId, memberJoinedAt, deletedBefore, pageable)
+            ? messageRepository.findByConversationIdAndNotDeleted(conversationId, currentUserId, memberJoinedAt, deletedBefore, now, pageable)
             : messageRepository.findByConversationIdAndTypeAndNotDeleted(
                 conversationId,
                 currentUserId,
                 MessageType.SYSTEM,
                 deletedBefore,
+                now,
                 PageRequest.of(0, 1, Sort.by(Sort.Direction.DESC, "createdAt"))
             );
 
-        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+        String baseUrl = s3UtilV2.getS3BaseUrl();
         List<MessageResponse> dtos = messagePage.getContent().stream()
                 .map(msg -> messageMapper.mapToMessageResponse(msg, baseUrl))
                 .collect(Collectors.toList());
@@ -130,6 +138,7 @@ public class MessageServiceImpl implements MessageService {
         LocalDateTime deletedBefore = (room.getDeletedBefore() != null)
                 ? room.getDeletedBefore().getOrDefault(currentUserId, LocalDateTime.of(1970, 1, 1, 0, 0))
                 : LocalDateTime.of(1970, 1, 1, 0, 0);
+        LocalDateTime now = LocalDateTime.now();
 
         List<MessageType> messageTypes = types.stream()
                 .map(t -> {
@@ -145,14 +154,174 @@ public class MessageServiceImpl implements MessageService {
 
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
         Page<Message> messagePage = messageRepository.findByConversationIdAndTypesAndNotDeleted(
-                conversationId, currentUserId, messageTypes, deletedBefore, pageable);
+                conversationId, currentUserId, messageTypes, deletedBefore, now, pageable);
 
-        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+        String baseUrl = s3UtilV2.getS3BaseUrl();
         List<MessageResponse> dtos = messagePage.getContent().stream()
                 .map(msg -> messageMapper.mapToMessageResponse(msg, baseUrl))
                 .collect(Collectors.toList());
 
         return PageResponse.fromPageData(messagePage, dtos);
+    }
+
+    @Override
+    public CursorPageResponse<MessageResponse> findChatMessagesV2(
+            String conversationId, String cursor, int limit, String direction, String aroundMessageId) {
+
+        String currentUserId = securityUtil.getCurrentUserId();
+        Conversation room = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
+        assertConversationMember(room, currentUserId);
+
+        if (aroundMessageId != null) {
+            Message target = messageRepository.findById(aroundMessageId)
+                    .orElseThrow(() -> new AppException(ErrorCode.MESSAGE_NOT_FOUND));
+
+            if (!target.getConversationId().equals(conversationId)) {
+                throw new AppException(ErrorCode.MESSAGE_NOT_FOUND);
+            }
+
+            List<Message> older = findOlder(room, target.getCreatedAt(), limit / 2, currentUserId);
+            List<Message> newer = findNewer(room, target.getCreatedAt(), limit / 2, currentUserId);
+
+            List<Message> combined = new ArrayList<>();
+            combined.addAll(newer);
+            combined.add(target);
+            combined.addAll(older);
+
+            return buildCursorResponse(combined, limit, true);
+        }
+
+        return standardCursorPagination(room, cursor, direction, limit, currentUserId);
+    }
+
+    private CursorPageResponse<MessageResponse> standardCursorPagination(
+            Conversation room, String cursor, String direction, int limit, String currentUserId) {
+
+        Query query = new Query();
+        List<Criteria> allCriteria = new ArrayList<>();
+        allCriteria.add(Criteria.where("conversationId").is(room.getId()));
+
+        LocalDateTime cursorTime = (cursor != null && !cursor.isBlank())
+                ? LocalDateTime.parse(cursor)
+                : LocalDateTime.now();
+
+        if ("NEWER".equalsIgnoreCase(direction)) {
+            allCriteria.add(Criteria.where("createdAt").gt(cursorTime));
+            query.with(Sort.by(Sort.Direction.ASC, "createdAt"));
+        } else {
+            allCriteria.add(Criteria.where("createdAt").lt(cursorTime));
+            query.with(Sort.by(Sort.Direction.DESC, "createdAt"));
+        }
+
+        allCriteria.addAll(getSecurityCriteria(room, currentUserId));
+        query.addCriteria(new Criteria().andOperator(allCriteria.toArray(new Criteria[0])));
+
+        query.limit(limit);
+        List<Message> messages = mongoTemplate.find(query, Message.class);
+
+        // FE expects DESC order (newest first)
+        if ("NEWER".equalsIgnoreCase(direction)) {
+            Collections.reverse(messages);
+        }
+
+        return buildCursorResponse(messages, limit, false);
+    }
+
+    private List<Message> findOlder(Conversation room, LocalDateTime time, int limit, String currentUserId) {
+        Query query = new Query();
+        List<Criteria> allCriteria = new ArrayList<>();
+        allCriteria.add(Criteria.where("conversationId").is(room.getId()));
+        allCriteria.add(Criteria.where("createdAt").lt(time));
+        allCriteria.addAll(getSecurityCriteria(room, currentUserId));
+
+        query.addCriteria(new Criteria().andOperator(allCriteria.toArray(new Criteria[0])));
+        query.with(Sort.by(Sort.Direction.DESC, "createdAt"));
+        query.limit(limit);
+
+        List<Message> messages = mongoTemplate.find(query, Message.class);
+        return messages; // Already DESC
+    }
+
+    private List<Message> findNewer(Conversation room, LocalDateTime time, int limit, String currentUserId) {
+        Query query = new Query();
+        List<Criteria> allCriteria = new ArrayList<>();
+        allCriteria.add(Criteria.where("conversationId").is(room.getId()));
+        allCriteria.add(Criteria.where("createdAt").gt(time));
+        allCriteria.addAll(getSecurityCriteria(room, currentUserId));
+
+        query.addCriteria(new Criteria().andOperator(allCriteria.toArray(new Criteria[0])));
+        query.with(Sort.by(Sort.Direction.ASC, "createdAt"));
+        query.limit(limit);
+
+        List<Message> messages = mongoTemplate.find(query, Message.class);
+        Collections.reverse(messages); // Reverse to make it DESC
+        return messages;
+    }
+
+    private List<Criteria> getSecurityCriteria(Conversation room, String currentUserId) {
+        List<Criteria> securityCriteria = new ArrayList<>();
+
+        ConversationMember currentMember = room.getMembers().stream()
+                .filter(m -> m.getUserId().equals(currentUserId))
+                .findFirst().orElse(null);
+        boolean isActive = currentMember != null && isActiveMember(currentMember);
+
+        // Xác định mốc thời gian sớm nhất mà User có quyền xem tin nhắn
+        LocalDateTime memberJoinedAt = (currentMember != null && currentMember.getJoinedAt() != null)
+                ? currentMember.getJoinedAt()
+                : LocalDateTime.of(1970, 1, 1, 0, 0);
+        LocalDateTime deletedBefore = (room.getDeletedBefore() != null)
+                ? room.getDeletedBefore().getOrDefault(currentUserId, LocalDateTime.of(1970, 1, 1, 0, 0))
+                : LocalDateTime.of(1970, 1, 1, 0, 0);
+
+        LocalDateTime effectiveStartTime = memberJoinedAt.isAfter(deletedBefore) ? memberJoinedAt : deletedBefore;
+
+        securityCriteria.add(Criteria.where("deletedBy").ne(currentUserId));
+        securityCriteria.add(Criteria.where("createdAt").gt(effectiveStartTime));
+
+        // Visibility filter: visibleTo is null OR visibleTo contains currentUserId
+        securityCriteria.add(new Criteria().orOperator(
+                Criteria.where("visibleTo").is(null),
+                Criteria.where("visibleTo").size(0),
+                Criteria.where("visibleTo").is(currentUserId)
+        ));
+
+        // Expiration filter
+        securityCriteria.add(new Criteria().orOperator(
+                Criteria.where("expiredAt").exists(false),
+                Criteria.where("expiredAt").is(null),
+                Criteria.where("expiredAt").gt(LocalDateTime.now())
+        ));
+
+        if (!isActive) {
+            securityCriteria.add(Criteria.where("type").is(MessageType.SYSTEM));
+        }
+
+        return securityCriteria;
+    }
+
+    private CursorPageResponse<MessageResponse> buildCursorResponse(
+            List<Message> messages, int limit, boolean isJump) {
+
+        String baseUrl = s3UtilV2.getS3BaseUrl();
+        List<MessageResponse> dtos = messages.stream()
+                .map(msg -> messageMapper.mapToMessageResponse(msg, baseUrl))
+                .collect(Collectors.toList());
+        enrichMessages(dtos);
+
+        // List is DESC (newest at 0, oldest at size-1)
+        String newerCursor = messages.isEmpty() ? null : messages.get(0).getCreatedAt().toString();
+        String olderCursor = messages.isEmpty() ? null : messages.get(messages.size() - 1).getCreatedAt().toString();
+
+        return CursorPageResponse.<MessageResponse>builder()
+                .data(dtos)
+                .olderCursor(olderCursor)
+                .newerCursor(newerCursor)
+                .hasMoreOlder(messages.size() >= limit)
+                .hasMoreNewer(isJump || messages.size() >= limit)
+                .isJumpResult(isJump)
+                .build();
     }
 
     // ─────────────────────────── Gửi tin nhắn ───────────────────────────
@@ -172,6 +341,20 @@ public class MessageServiceImpl implements MessageService {
             room = conversationService.getOrCreateDirectConversation(currentUserId, request.recipientId());
         } else {
             throw new AppException(ErrorCode.VALIDATION_ERROR);
+        }
+
+        if (!room.isGroup()) {
+            boolean needSave = false;
+            for (com.bondhub.messageservice.model.ConversationMember m : room.getMembers()) {
+                if (!Boolean.TRUE.equals(m.getActive())) {
+                    m.setActive(true);
+                    m.setRemovedAt(null);
+                    needSave = true;
+                }
+            }
+            if (needSave) {
+                conversationRepository.save(room);
+            }
         }
 
         assertActiveMember(room, currentUserId);
@@ -197,6 +380,11 @@ public class MessageServiceImpl implements MessageService {
         MessageType messageType = resolveMessageType(request, linkPreview);
         List<AttachmentInfo> attachments = mapAttachments(request);
 
+        LocalDateTime expiredAt = null;
+        if (room.getMessageExpirationDays() != null && room.getMessageExpirationDays() > 0) {
+            expiredAt = LocalDateTime.now().plusDays(room.getMessageExpirationDays());
+        }
+
         Message message = Message.builder()
                 .conversationId(room.getId())
                 .senderId(currentUserId)
@@ -209,11 +397,25 @@ public class MessageServiceImpl implements MessageService {
                 .type(messageType)
                 .attachments(attachments)
                 .linkPreview(linkPreview)
+                .expiredAt(expiredAt)
                 .build();
         messageRepository.save(message);
 
-        // 4. Xây dựng last message preview
-        String previewContent = buildPreviewContent(message);
+        String previewContent = null;
+        Map<String, Object> lastMessageMetadata = new HashMap<>();
+        
+        // Extract attachment metadata for notification rendering (chỉ khi có attachment)
+        if (message.getAttachments() != null && !message.getAttachments().isEmpty()) {
+            Map<String, Object> attachmentMetadata = extractAttachmentMetadata(message.getAttachments());
+            lastMessageMetadata.putAll(attachmentMetadata);
+        }
+        
+        if (message.getType() == MessageType.CHAT && message.getContent() != null && !message.getContent().isBlank()) {
+            previewContent = message.getContent();
+        }
+        
+        String notificationContentVi = buildNotificationContent(message, "vi");
+        String notificationContentEn = buildNotificationContent(message, "en");
         LastMessageInfo lastInfo = LastMessageInfo.builder()
                 .messageId(message.getId())
                 .senderId(currentUserId)
@@ -221,15 +423,19 @@ public class MessageServiceImpl implements MessageService {
                 .timestamp(message.getCreatedAt())
                 .type(message.getType())
                 .status(message.getStatus())
+                .metadata(lastMessageMetadata.isEmpty() ? null : lastMessageMetadata)
                 .build();
 
         // 5. Cập nhật lastMessage + tăng unreadCount cho tất cả member trừ sender
         Query query = new Query(Criteria.where("id").is(room.getId()));
         Update update = new Update().set("lastMessage", lastInfo);
-        room.getMembers().stream()
-            .filter(this::isActiveMember)
+        
+        if (message.getType() != MessageType.SYSTEM) {
+            room.getMembers().stream()
+                .filter(this::isActiveMember)
                 .filter(m -> !m.getUserId().equals(currentUserId))
                 .forEach(m -> update.inc("unreadCounts." + m.getUserId(), 1));
+        }
 
         Conversation updatedRoom = mongoTemplate.findAndModify(
                 query, update,
@@ -239,7 +445,7 @@ public class MessageServiceImpl implements MessageService {
         log.info("[Chat] Saved message & updated conversation state for room: {}", room.getId());
 
         // 6. Push notification qua Kafka cho từng thành viên
-        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+        String baseUrl = s3UtilV2.getS3BaseUrl();
         Conversation finalRoom = updatedRoom != null ? updatedRoom : room;
 
         List<ChatNotification> notifPrototypes = new ArrayList<>(
@@ -247,20 +453,75 @@ public class MessageServiceImpl implements MessageService {
         enrichNotifications(notifPrototypes);
         ChatNotification baseNotif = notifPrototypes.get(0);
 
+        NotificationType notiType = finalRoom.isGroup() ? NotificationType.MESSAGE_GROUP : NotificationType.MESSAGE_DIRECT;
+
         finalRoom.getMembers().stream()
             .filter(this::isActiveMember)
+            .filter(member -> {
+                // Respect visibility if restricted
+                if (message.getVisibleTo() != null && !message.getVisibleTo().isEmpty()) {
+                    return message.getVisibleTo().contains(member.getUserId());
+                }
+                return true;
+            })
             .forEach(member -> {
-            boolean isFromMe = member.getUserId().equals(currentUserId);
-            Integer unreadCount = finalRoom.getUnreadCounts().getOrDefault(member.getUserId(), 0);
+                boolean isFromMe = member.getUserId().equals(currentUserId);
+                Integer unreadCount = finalRoom.getUnreadCounts().getOrDefault(member.getUserId(), 0);
 
-            ChatNotification personalNotif = baseNotif.toBuilder()
-                    .isFromMe(isFromMe)
-                    .unreadCount(unreadCount)
-                    .build();
+                ChatNotification personalNotif = baseNotif.toBuilder()
+                        .isFromMe(isFromMe)
+                        .unreadCount(unreadCount)
+                        .build();
 
-            kafkaTemplate.send(socketEventsTopic,
-                    new SocketEvent(SocketEventType.MESSAGE, member.getUserId(),
-                            "/queue/messages", personalNotif));
+                    kafkaTemplate.send(socketEventsTopic,
+                            new SocketEvent(SocketEventType.MESSAGE, member.getUserId(),
+                                    "/queue/messages", personalNotif));
+
+                    // Publish RawNotificationEvent for push notifications (only for others)
+                    if (!isFromMe) {
+                        String dynamicGroupName = finalRoom.getName();
+                        if (finalRoom.isGroup() && (dynamicGroupName == null || dynamicGroupName.isBlank())) {
+                            // Fetch minimal user info for dynamic name generation
+                            Set<String> memberIdsToFetch = finalRoom.getMembers().stream()
+                                    .filter(this::isActiveMember)
+                                    .map(ConversationMember::getUserId)
+                                    .limit(5)
+                                    .collect(Collectors.toSet());
+                            Map<String, ChatUser> groupUserCache = chatUserRepository.findAllById(memberIdsToFetch).stream()
+                                    .collect(Collectors.toMap(ChatUser::getId, u -> u));
+                            dynamicGroupName = conversationHelper.getDynamicGroupName(finalRoom, member.getUserId(), groupUserCache);
+                        }
+
+                        // Extract attachment metadata for i18n rebuilding
+                        Map<String, Object> attachmentMetadata = extractAttachmentMetadata(message.getAttachments());
+
+                        Map<String, Object> payloadMap = new HashMap<>();
+                        payloadMap.put("conversationId", finalRoom.getId());
+                        payloadMap.put("messageId", message.getId());
+                        payloadMap.put("content", notificationContentVi);
+                        payloadMap.put("contentVi", notificationContentVi);
+                        payloadMap.put("contentEn", notificationContentEn);
+                        payloadMap.put("senderId", currentUserId);
+                        payloadMap.put("senderName", sender != null ? sender.getFullName() : "Người dùng");
+                        payloadMap.put("isGroup", finalRoom.isGroup());
+                        payloadMap.put("groupName", dynamicGroupName != null ? dynamicGroupName : "");
+                        payloadMap.put("conversationAvatar", finalRoom.isGroup() ? (finalRoom.getAvatar() != null ? baseUrl + finalRoom.getAvatar() : "") : (sender != null && sender.getAvatar() != null ? baseUrl + sender.getAvatar() : ""));
+                        payloadMap.put("messageType", message.getType().name());
+                        payloadMap.putAll(attachmentMetadata);
+
+                        RawNotificationEvent rawEvent = RawNotificationEvent.builder()
+                                .recipientId(member.getUserId())
+                                .actorId(currentUserId)
+                                .actorName(sender != null ? sender.getFullName() : "Người dùng")
+                                .actorAvatar(sender != null && sender.getAvatar() != null ? baseUrl + sender.getAvatar() : null)
+                                .type(notiType)
+                                .referenceId(message.getId())
+                                .payload(payloadMap)
+                                .occurredAt(message.getCreatedAt())
+                                .build();
+
+                        rawNotificationEventPublisher.publish(rawEvent);
+                    }
                 });
 
         // 7. Ingest vào AI system
@@ -272,6 +533,7 @@ public class MessageServiceImpl implements MessageService {
                 .build());
 
         messageIndexEventPublisher.publishIndexRequest(message);
+        chatInteractionEventPublisher.publishDirectChatInteraction(message, finalRoom);
     }
 
     // ─────────────────────────── Thu hồi / Xóa ───────────────────────────
@@ -356,8 +618,8 @@ public class MessageServiceImpl implements MessageService {
                         if (senderRole == MemberRole.OWNER) {
                             throw new AppException(ErrorCode.CHAT_ADMIN_CANNOT_DELETE_OWNER_MESSAGE);
                         }
-                    });
-        }
+            });
+    }
 
         message.setStatus(MessageStatus.DELETED_BY_ADMIN);
         message.setDeletedByAdminId(currentUserId);
@@ -484,7 +746,7 @@ public class MessageServiceImpl implements MessageService {
         Map<String, ChatUser> userMap = chatUserRepository.findAllById(seenUserIds).stream()
                 .collect(Collectors.toMap(ChatUser::getId, u -> u));
 
-        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+        String baseUrl = s3UtilV2.getS3BaseUrl();
         return seenUserIds.stream()
                 .map(userId -> {
                     ChatUser user = userMap.get(userId);
@@ -499,12 +761,55 @@ public class MessageServiceImpl implements MessageService {
                 .collect(Collectors.toList());
     }
 
+    @Override
+    public MessageResponse findById(String messageId) {
+        String currentUserId = securityUtil.getCurrentUserId();
+        Message message = messageRepository.findById(messageId)
+                .orElseThrow(() -> new AppException(ErrorCode.MESSAGE_NOT_FOUND));
+
+        Conversation room = conversationRepository.findById(message.getConversationId())
+                .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
+        assertConversationMember(room, currentUserId);
+
+        String baseUrl = s3UtilV2.getS3BaseUrl();
+        MessageResponse dto = messageMapper.mapToMessageResponse(message, baseUrl);
+        List<MessageResponse> dtos = new ArrayList<>(List.of(dto));
+        enrichMessages(dtos);
+        return dtos.get(0);
+    }
+
     // ─────────────────────────── Private helpers ───────────────────────────
 
     /**
      * Kiểm tra user có trong members của conversation không.
      * Nếu không → throw UNAUTHORIZED (403).
      */
+    @Override
+    public List<MessageResponse> getMessagesSince(String conversationId, String sinceId, String userId) {
+        // 1. Kiểm tra quyền membership
+        Conversation room = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
+        
+        boolean isMember = room.getMembers().stream()
+                .anyMatch(m -> m.getUserId().equals(userId) && isActiveMember(m));
+        
+        if (!isMember) {
+            throw new AppException(ErrorCode.CHAT_NOT_A_MEMBER);
+        }
+
+        // 2. Lấy 100 tin nhắn gần nhất tính từ sinceId
+        List<Message> messages = messageRepository.findTop100ByConversationIdAndIdGreaterThanAndStatusNot(
+                conversationId, sinceId, MessageStatus.REVOKED);
+
+        String baseUrl = s3UtilV2.getS3BaseUrl();
+        List<MessageResponse> dtos = messages.stream()
+                .map(msg -> messageMapper.mapToMessageResponse(msg, baseUrl))
+                .collect(Collectors.toList());
+
+        enrichMessages(dtos);
+        return dtos;
+    }
+
     private void assertConversationMember(Conversation room, String userId) {
         boolean isMember = room.getMembers().stream()
                 .anyMatch(m -> m.getUserId().equals(userId));
@@ -535,7 +840,7 @@ public class MessageServiceImpl implements MessageService {
 
         Map<String, ChatUser> userMap = chatUserRepository.findAllById(userIds).stream()
                 .collect(Collectors.toMap(ChatUser::getId, u -> u));
-        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+        String baseUrl = s3UtilV2.getS3BaseUrl();
 
         for (int i = 0; i < dtos.size(); i++) {
             MessageResponse d = dtos.get(i);
@@ -571,7 +876,7 @@ public class MessageServiceImpl implements MessageService {
 
         Map<String, ChatUser> userMap = chatUserRepository.findAllById(userIds).stream()
                 .collect(Collectors.toMap(ChatUser::getId, u -> u));
-        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+        String baseUrl = s3UtilV2.getS3BaseUrl();
 
         for (int i = 0; i < notifs.size(); i++) {
             ChatNotification n = notifs.get(i);
@@ -695,7 +1000,7 @@ public class MessageServiceImpl implements MessageService {
             Map<String, ChatUser> userCache = chatUserRepository.findAllById(memberIds).stream()
                     .collect(Collectors.toMap(ChatUser::getId, u -> u));
 
-            String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+            String baseUrl = s3UtilV2.getS3BaseUrl();
             List<LinkPreview.MemberSnapshot> previews = activeMembers.stream()
                     .map(ConversationMember::getUserId)
                     .limit(5)
@@ -751,18 +1056,31 @@ public class MessageServiceImpl implements MessageService {
     private List<AttachmentInfo> mapAttachments(MessageSendRequest request) {
         if (request.attachments() == null || request.attachments().isEmpty()) return List.of();
         return request.attachments().stream()
-                .map(a -> AttachmentInfo.builder()
-                        .key(a.key())
-                        .url(a.url())
-                        .fileName(a.fileName())
-                        .originalFileName(a.originalFileName())
-                        .contentType(a.contentType())
-                        .size(a.size())
-                        .build())
+                .map(a -> {
+                    String originalFileName = a.originalFileName();
+                    String extension = null;
+                    if (originalFileName != null && originalFileName.contains(".")) {
+                        extension = originalFileName.substring(originalFileName.lastIndexOf(".") + 1).toLowerCase().trim();
+                    }
+                    return AttachmentInfo.builder()
+                            .key(a.key())
+                            .url(a.url())
+                            .fileName(a.fileName())
+                            .originalFileName(originalFileName)
+                            .extension(extension)
+                            .contentType(a.contentType())
+                            .size(a.size())
+                            .build();
+                })
                 .toList();
     }
 
     private String buildPreviewContent(Message message) {
+        String attachmentPreview = buildAttachmentPreview(message, "vi");
+        if (attachmentPreview != null) {
+            return attachmentPreview;
+        }
+
         return switch (message.getType() == null ? MessageType.CHAT : message.getType()) {
             case IMAGE -> "[Hình ảnh]";
             case VIDEO -> "[Video]";
@@ -772,68 +1090,125 @@ public class MessageServiceImpl implements MessageService {
         };
     }
 
-    @Override
-    public MessageContextResponse getMessageContext(String conversationId, String messageId, int pageSize) {
-        String currentUserId = securityUtil.getCurrentUserId();
-
-        Conversation room = conversationRepository.findById(conversationId)
-                .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
-        assertConversationMember(room, currentUserId);
-
-        Message targetMessage = messageRepository.findById(messageId)
-                .orElseThrow(() -> new AppException(ErrorCode.MESSAGE_NOT_FOUND));
-        if (!targetMessage.getConversationId().equals(conversationId)) {
-            throw new AppException(ErrorCode.MESSAGE_NOT_FOUND);
+    private String buildNotificationContent(Message message, String locale) {
+        String attachmentPreview = buildAttachmentPreview(message, locale);
+        if (attachmentPreview != null) {
+            return attachmentPreview;
         }
 
-        ConversationMember currentMember = room.getMembers().stream()
-                .filter(m -> m.getUserId().equals(currentUserId))
-                .findFirst().orElse(null);
-        LocalDateTime memberJoinedAt = (currentMember != null && currentMember.getJoinedAt() != null)
-                ? currentMember.getJoinedAt()
-                : LocalDateTime.of(1970, 1, 1, 0, 0);
-        LocalDateTime deletedBefore = (room.getDeletedBefore() != null)
-                ? room.getDeletedBefore().getOrDefault(currentUserId, LocalDateTime.of(1970, 1, 1, 0, 0))
-                : LocalDateTime.of(1970, 1, 1, 0, 0);
+        String content = message.getContent();
+        if (content != null && !content.isBlank()) {
+            return content;
+        }
 
-        Criteria visibilityOrCriteria = new Criteria().orOperator(
-                Criteria.where("visibleTo").exists(false),
-                Criteria.where("visibleTo").is(null),
-                Criteria.where("visibleTo").size(0),
-                Criteria.where("visibleTo").in(currentUserId)
-        );
-        Criteria systemFilterCriteria = new Criteria().orOperator(
-                Criteria.where("type").ne(MessageType.SYSTEM),
-                Criteria.where("createdAt").gte(memberJoinedAt)
-        );
+        return isEnglish(locale) ? "Sent a message" : "\u0110\u00e3 g\u1eedi m\u1ed9t tin nh\u1eafn";
+    }
 
-        Criteria newerCriteria = Criteria.where("conversationId").is(conversationId)
-                .and("deletedBy").ne(currentUserId)
-                .andOperator(
-                        Criteria.where("createdAt").gt(targetMessage.getCreatedAt()),
-                        Criteria.where("createdAt").gt(deletedBefore),
-                        visibilityOrCriteria,
-                        systemFilterCriteria
-                );
+    private String buildAttachmentPreview(Message message, String locale) {
+        List<AttachmentInfo> attachments = message.getAttachments();
+        if (attachments == null || attachments.isEmpty()) {
+            return null;
+        }
 
-        long newerCount = mongoTemplate.count(new Query(newerCriteria), Message.class);
-        int page = (int) (newerCount / pageSize);
+        int imageCount = 0;
+        int videoCount = 0;
+        for (AttachmentInfo attachment : attachments) {
+            String contentType = attachment.getContentType();
+            if (contentType != null && contentType.startsWith("image/")) {
+                imageCount++;
+            } else if (contentType != null && contentType.startsWith("video/")) {
+                videoCount++;
+            }
+        }
 
-        Criteria totalCriteria = Criteria.where("conversationId").is(conversationId)
-                .and("deletedBy").ne(currentUserId)
-                .and("createdAt").gt(deletedBefore)
-                .andOperator(visibilityOrCriteria, systemFilterCriteria);
+        int mediaCount = imageCount + videoCount;
+        if (mediaCount == attachments.size() && mediaCount > 0) {
+            return buildMediaPreview(imageCount, videoCount, locale);
+        }
 
-        long totalElements = mongoTemplate.count(new Query(totalCriteria), Message.class);
+        AttachmentInfo firstFile = attachments.stream()
+                .filter(a -> {
+                    String contentType = a.getContentType();
+                    return contentType == null || (!contentType.startsWith("image/") && !contentType.startsWith("video/"));
+                })
+                .findFirst()
+                .orElse(attachments.get(0));
 
-        log.info("[ScrollTo] messageId={} → newerCount={}, page={}/{}, pageSize={}",
-                messageId, newerCount, page, (int) Math.ceil((double) totalElements / pageSize), pageSize);
+        return "[File] " + resolveAttachmentFileName(firstFile);
+    }
 
-        return MessageContextResponse.builder()
-                .page(page)
-                .size(pageSize)
-                .totalElements(totalElements)
-                .build();
+    private String buildMediaPreview(int imageCount, int videoCount, String locale) {
+        boolean english = isEnglish(locale);
+
+        if (imageCount > 0 && videoCount > 0) {
+            String imageLabel = imageCount > 1
+                    ? (english ? "Photos" : "Nhiều ảnh")
+                    : (english ? "Photo" : "Ảnh");
+            String videoLabel = videoCount > 1
+                    ? (english ? "Videos" : "Nhiều video")
+                    : (english ? "Video" : "Video");
+            return "[" + imageLabel + (english ? " and " : " và ") + videoLabel + "]";
+        }
+
+        if (imageCount > 0) {
+            return imageCount > 1
+                    ? (english ? "[Photos]" : "[Nhiều ảnh]")
+                    : (english ? "[Photo]" : "[Ảnh]");
+        }
+
+        if (videoCount > 0) {
+            return videoCount > 1
+                    ? (english ? "[Videos]" : "[Nhiều video]")
+                    : (english ? "[Video]" : "[Video]");
+        }
+
+        return "[Other]";
+    }
+
+    private String resolveAttachmentFileName(AttachmentInfo attachment) {
+        if (attachment == null) {
+            return "file";
+        }
+        if (attachment.getOriginalFileName() != null && !attachment.getOriginalFileName().isBlank()) {
+            return attachment.getOriginalFileName();
+        }
+        if (attachment.getFileName() != null && !attachment.getFileName().isBlank()) {
+            return attachment.getFileName();
+        }
+        return "file";
+    }
+
+    private boolean isEnglish(String locale) {
+        return "en".equalsIgnoreCase(locale);
+    }
+
+    private Map<String, Object> extractAttachmentMetadata(List<AttachmentInfo> attachments) {
+        Map<String, Object> metadata = new HashMap<>();
+        if (attachments == null || attachments.isEmpty()) {
+            metadata.put("imageCount", 0);
+            metadata.put("videoCount", 0);
+            log.debug("[Attachment Debug] Attachments is null or empty");
+            return metadata;
+        }
+
+        int imageCount = 0;
+        int videoCount = 0;
+        for (AttachmentInfo attachment : attachments) {
+            String contentType = attachment.getContentType();
+            log.debug("[Attachment Debug] Processing attachment: fileName={}, contentType={}", 
+                    attachment.getFileName(), contentType);
+            if (contentType != null && contentType.startsWith("image/")) {
+                imageCount++;
+            } else if (contentType != null && contentType.startsWith("video/")) {
+                videoCount++;
+            }
+        }
+
+        log.debug("[Attachment Debug] Final counts: imageCount={}, videoCount={}, total attachments={}", 
+                imageCount, videoCount, attachments.size());
+        metadata.put("imageCount", imageCount);
+        metadata.put("videoCount", videoCount);
+        return metadata;
     }
 
 }

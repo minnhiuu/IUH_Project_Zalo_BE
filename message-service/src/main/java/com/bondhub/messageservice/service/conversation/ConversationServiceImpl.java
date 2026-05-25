@@ -1,9 +1,12 @@
 package com.bondhub.messageservice.service.conversation;
 
+import com.bondhub.common.utils.S3UtilV2;
 import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
+import com.bondhub.common.dto.client.userservice.user.response.UserSummaryResponse;
 import com.bondhub.messageservice.dto.response.*;
+import com.bondhub.messageservice.service.message.SystemMessageService;
 import com.bondhub.messageservice.event.UserSyncEvent;
 import com.bondhub.messageservice.model.ChatUser;
 import com.bondhub.messageservice.model.Conversation;
@@ -16,6 +19,7 @@ import com.bondhub.messageservice.client.FriendServiceClient;
 import com.bondhub.messageservice.model.enums.MemberRole;
 import com.bondhub.common.dto.client.socketservice.SocketEvent;
 import com.bondhub.common.enums.SocketEventType;
+import com.bondhub.common.enums.SystemActionType;
 import com.bondhub.common.dto.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -28,6 +32,10 @@ import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
+import org.springframework.data.mongodb.core.aggregation.Aggregation;
+import org.springframework.data.mongodb.core.aggregation.ArrayOperators;
+import org.springframework.data.mongodb.core.aggregation.ComparisonOperators;
+import org.springframework.data.mongodb.core.aggregation.ConditionalOperators;
 import com.mongodb.client.result.UpdateResult;
 
 import java.time.LocalDateTime;
@@ -46,6 +54,8 @@ public class ConversationServiceImpl implements ConversationService {
     private final MongoTemplate mongoTemplate;
     private final FriendServiceClient friendServiceClient;
     private final ConversationHelper helper;
+    private final SystemMessageService systemMessageService;
+    private final S3UtilV2 s3UtilV2;
 
     // ─────────────────────────── Core: Tạo / Lấy phòng chat ───────────────────────────
 
@@ -92,7 +102,7 @@ public class ConversationServiceImpl implements ConversationService {
 
         ChatUser partner = helper.resolvePartner(partnerId, currentUserId, userCache);
         boolean viewerCanSee = helper.canViewerSeeStatus(currentUserId, userCache);
-        String baseUrl = helper.getBaseUrl();
+        String baseUrl = s3UtilV2.getS3BaseUrl();
 
         String friendshipStatus = null;
         try {
@@ -112,13 +122,54 @@ public class ConversationServiceImpl implements ConversationService {
     @Override
     public PageResponse<List<ConversationResponse>> getUserConversations(int page, int size) {
         String currentUserId = securityUtil.getCurrentUserId();
-        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "lastMessage.timestamp"));
-        Page<Conversation> roomsPage = conversationRepository.findAllByMembersUserId(currentUserId, pageable);
-        log.info("[Conversation] Fetched page {} of conversations for user {} with {} rooms",
-                page, currentUserId, roomsPage.getTotalElements());
-        if (roomsPage.isEmpty()) {
+
+        // 1. Build the base criteria (same as ConversationRepository.findAllByMembersUserId)
+        Criteria memberCriteria = new Criteria().orOperator(
+            Criteria.where("members").elemMatch(Criteria.where("userId").is(currentUserId).and("active").ne(false)),
+            new Criteria().andOperator(
+                Criteria.where("isGroup").is(true),
+                Criteria.where("members").elemMatch(Criteria.where("userId").is(currentUserId).and("active").is(false)),
+                Criteria.where("deletedBefore." + currentUserId).exists(false)
+            )
+        );
+
+        // 2. Build Aggregation
+        Aggregation agg = Aggregation.newAggregation(
+            Aggregation.match(memberCriteria),
+            // Extract the current user's member object to get the pinned flag
+            Aggregation.addFields()
+                .addField("currentUserMember")
+                .withValue(ArrayOperators.Filter.filter("members")
+                    .as("m")
+                    .by(ComparisonOperators.Eq.valueOf("m.userId").equalToValue(currentUserId)))
+                .build(),
+            Aggregation.addFields()
+                .addField("isPinned")
+                .withValue(ConditionalOperators.ifNull(
+                    ArrayOperators.ArrayElemAt.arrayOf("currentUserMember.pinned").elementAt(0)
+                ).then(false))
+                .build(),
+            Aggregation.addFields()
+                .addField("pinPriority")
+                .withValue(ConditionalOperators.when(ComparisonOperators.Eq.valueOf("isPinned").equalToValue(true))
+                    .then(1).otherwise(0))
+                .build(),
+            Aggregation.sort(Sort.Direction.DESC, "pinPriority", "lastMessage.timestamp"),
+            Aggregation.skip((long) page * size),
+            Aggregation.limit(size)
+        );
+
+        List<Conversation> rooms = mongoTemplate.aggregate(agg, "conversations", Conversation.class).getMappedResults();
+        long total = mongoTemplate.count(new Query(memberCriteria), "conversations");
+
+        Pageable pageable = PageRequest.of(page, size);
+        log.info("[Conversation] Fetched {} rooms (total {}) for user {}", rooms.size(), total, currentUserId);
+
+        if (rooms.isEmpty()) {
             return PageResponse.empty(pageable);
         }
+
+        Page<Conversation> roomsPage = new PageImpl<>(rooms, pageable, total);
 
         Set<String> allUserIds = new HashSet<>();
         allUserIds.add(currentUserId);
@@ -143,7 +194,7 @@ public class ConversationServiceImpl implements ConversationService {
         final Map<String, String> friendshipStatusMap = tempMap;
 
         boolean viewerCanSee = helper.canViewerSeeStatus(currentUserId, userCache);
-        String baseUrl = helper.getBaseUrl();
+        String baseUrl = s3UtilV2.getS3BaseUrl();
 
         return PageResponse.fromPage(roomsPage, room -> {
             String partnerId = room.getMembers().stream()
@@ -169,6 +220,56 @@ public class ConversationServiceImpl implements ConversationService {
         });
     }
 
+    @Override
+    public List<UserSummaryResponse> getQuickConversations(int size) {
+        String currentUserId = securityUtil.getCurrentUserId();
+        Pageable pageable = PageRequest.of(0, size, Sort.by(Sort.Direction.DESC, "lastMessage.timestamp"));
+        Page<Conversation> roomsPage = conversationRepository.findAllByMembersUserId(currentUserId, pageable);
+        
+        if (roomsPage.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        // Get partners maintaining order of conversations
+        List<String> orderedPartnerIds = roomsPage.getContent().stream()
+                .map(room -> room.getMembers().stream()
+                        .filter(helper::isActiveMember)
+                        .map(ConversationMember::getUserId)
+                        .filter(uid -> !uid.equals(currentUserId))
+                        .findFirst()
+                        .orElse(null))
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+
+        if (orderedPartnerIds.isEmpty()) return Collections.emptyList();
+
+        Map<String, ChatUser> userCache = chatUserRepository.findAllById(orderedPartnerIds).stream()
+                .collect(Collectors.toMap(ChatUser::getId, u -> u));
+
+        String baseUrl = s3UtilV2.getS3BaseUrl();
+
+        return orderedPartnerIds.stream()
+                .map(pid -> {
+                    ChatUser user = userCache.get(pid);
+                    if (user == null) {
+                        // Trigger sync if missing
+                        eventPublisher.publishEvent(new UserSyncEvent(pid));
+                        return com.bondhub.common.dto.client.userservice.user.response.UserSummaryResponse.builder()
+                                .id(pid)
+                                .fullName("Unknown User")
+                                .build();
+                    }
+                    return com.bondhub.common.dto.client.userservice.user.response.UserSummaryResponse.builder()
+                            .id(pid)
+                            .fullName(user.getFullName())
+                            .avatar(user.getAvatar() != null ? baseUrl + user.getAvatar() : null)
+                            .phoneNumber(user.getPhoneNumber())
+                            .build();
+                })
+                .toList();
+    }
+
     // ─────────────────────────── Đánh dấu đã đọc ───────────────────────────
 
     @Override
@@ -190,7 +291,8 @@ public class ConversationServiceImpl implements ConversationService {
 
         Query query = new Query(Criteria.where("id").is(conversationId)
                 .and("members.userId").is(currentUserId));
-        Update update = new Update().set("unreadCounts." + currentUserId, 0);
+        Update update = new Update().set("unreadCounts." + currentUserId, 0)
+                .set("members.$.manuallyMarkedUnread", false);
         if (finalReadId != null) {
             update.set("members.$.lastReadMessageId", finalReadId);
         }
@@ -236,11 +338,11 @@ public class ConversationServiceImpl implements ConversationService {
 
         String lastReadMessageId = currentMember.getLastReadMessageId();
 
-        // Determine anchor and count by querying actual messages —
-        // do NOT rely on unreadCounts cache, which may already be zeroed by markAsRead
         if (lastReadMessageId == null) {
-            // Never read — oldest visible message is the anchor, count all visible messages
-            Criteria base = buildMessageVisibilityCriteria(conversationId, currentUserId, memberJoinedAt, deletedBefore);
+            Criteria base = new Criteria().andOperator(
+                buildMessageVisibilityCriteria(conversationId, currentUserId, memberJoinedAt, deletedBefore),
+                Criteria.where("type").ne("SYSTEM")
+            );
             Query firstQ = new Query(base).with(Sort.by(Sort.Direction.ASC, "createdAt")).limit(1);
             Message firstMsg = mongoTemplate.findOne(firstQ, Message.class);
             long count = mongoTemplate.count(new Query(base), Message.class);
@@ -261,6 +363,7 @@ public class ConversationServiceImpl implements ConversationService {
         // First visible message strictly after lastReadMsg, respecting all visibility rules
         Criteria afterLastRead = new Criteria().andOperator(
                 buildMessageVisibilityCriteria(conversationId, currentUserId, memberJoinedAt, deletedBefore),
+                Criteria.where("type").ne("SYSTEM"),
                 Criteria.where("createdAt").gt(lastReadMsg.getCreatedAt())
         );
         Query afterQ = new Query(afterLastRead);
@@ -296,6 +399,11 @@ public class ConversationServiceImpl implements ConversationService {
                         Criteria.where("visibleTo").is(userId)
                 ),
                 new Criteria().orOperator(
+                        Criteria.where("expiredAt").exists(false),
+                        Criteria.where("expiredAt").is(null),
+                        Criteria.where("expiredAt").gt(LocalDateTime.now())
+                ),
+                new Criteria().orOperator(
                         Criteria.where("type").ne("SYSTEM"),
                         Criteria.where("createdAt").gte(memberJoinedAt)
                 )
@@ -313,8 +421,10 @@ public class ConversationServiceImpl implements ConversationService {
                 .filter(m -> m.getUserId().equals(currentUserId))
                 .findFirst()
                 .ifPresent(member -> {
-                    member.setActive(false);
-                    member.setRemovedAt(LocalDateTime.now());
+                    if (conversation.isGroup()) {
+                        member.setActive(false);
+                        member.setRemovedAt(LocalDateTime.now());
+                    }
                 });
 
         if (conversation.getDeletedBefore() == null) {
@@ -328,6 +438,38 @@ public class ConversationServiceImpl implements ConversationService {
 
         conversationRepository.save(conversation);
         log.info("[Conversation] User {} deleted conversation {}", currentUserId, conversationId);
+    }
+
+    @Override
+    public void clearChatHistory(String conversationId) {
+        String currentUserId = securityUtil.getCurrentUserId();
+
+        Conversation conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
+
+        ConversationMember member = conversation.getMembers().stream()
+                .filter(m -> m.getUserId().equals(currentUserId))
+                .findFirst()
+                .orElseThrow(() -> new AppException(ErrorCode.CHAT_MEMBER_NOT_FOUND));
+
+        // User can clear history whether active or inactive, as long as they belong to this conversation.
+        LocalDateTime now = LocalDateTime.now();
+
+        if (conversation.getDeletedBefore() == null) {
+            conversation.setDeletedBefore(new HashMap<>());
+        }
+        conversation.getDeletedBefore().put(currentUserId, now);
+
+        if (conversation.getUnreadCounts() != null) {
+            conversation.getUnreadCounts().put(currentUserId, 0);
+        }
+
+        if (conversation.getLastMessage() != null) {
+            member.setLastReadMessageId(conversation.getLastMessage().getMessageId());
+        }
+
+        conversationRepository.save(conversation);
+        log.info("[Conversation] User {} cleared chat history in conversation {}", currentUserId, conversationId);
     }
 
     // ─────────────────────────── Private helpers ───────────────────────────
@@ -375,7 +517,7 @@ public class ConversationServiceImpl implements ConversationService {
     public PageResponse<List<ConversationParticipantResponse>> getConversationParticipants(
             String conversationId, String query, int page, int size) {
         String currentUserId = securityUtil.getCurrentUserId();
-        log.info("[Conversation] User {} is fetching participants for sidebar dropdown in conversation {} with query: '{}'", 
+        log.info("[Conversation] User {} is fetching participants for sidebar dropdown in conversation {} with query: '{}'",
                 currentUserId, conversationId, query);
 
         Conversation conversation = conversationRepository.findById(conversationId)
@@ -396,7 +538,7 @@ public class ConversationServiceImpl implements ConversationService {
                 .collect(Collectors.toMap(ChatUser::getId, u -> u));
 
         String normalizedQuery = (query != null) ? query.trim().toLowerCase() : "";
-        String baseUrl = helper.getBaseUrl();
+        String baseUrl = s3UtilV2.getS3BaseUrl();
 
         List<ConversationParticipantResponse> allParticipants = activeMembers.stream()
                 .map(m -> {
@@ -427,11 +569,11 @@ public class ConversationServiceImpl implements ConversationService {
         int total = allParticipants.size();
         int start = page * size;
         int end = Math.min(start + size, total);
-        List<ConversationParticipantResponse> pagedList = (start < total) 
-                ? allParticipants.subList(start, end) 
+        List<ConversationParticipantResponse> pagedList = (start < total)
+                ? allParticipants.subList(start, end)
                 : Collections.emptyList();
 
-        log.debug("[Conversation] Dropdown fetch: found {} participants, returning {} for page {}", 
+        log.debug("[Conversation] Dropdown fetch: found {} participants, returning {} for page {}",
                 total, pagedList.size(), page);
 
         return PageResponse.fromPage(
@@ -439,6 +581,64 @@ public class ConversationServiceImpl implements ConversationService {
                         PageRequest.of(page, size), total),
                 r -> r
         );
+    }
+    @Override
+    public void markAsUnread(String conversationId) {
+        String currentUserId = securityUtil.getCurrentUserId();
+        Query query = new Query(Criteria.where("id").is(conversationId)
+                .and("members.userId").is(currentUserId));
+        Update update = new Update().set("members.$.manuallyMarkedUnread", true);
+        mongoTemplate.updateFirst(query, update, Conversation.class);
+    }
+
+    @Override
+    public void togglePin(String conversationId, boolean pin) {
+        String currentUserId = securityUtil.getCurrentUserId();
+        Query query = new Query(Criteria.where("id").is(conversationId)
+                .and("members.userId").is(currentUserId));
+        Update update = new Update().set("members.$.pinned", pin);
+        mongoTemplate.updateFirst(query, update, Conversation.class);
+    }
+
+    @Override
+    public void toggleMute(String conversationId, boolean mute) {
+        String currentUserId = securityUtil.getCurrentUserId();
+        Query query = new Query(Criteria.where("id").is(conversationId)
+                .and("members.userId").is(currentUserId));
+        Update update = new Update().set("members.$.muted", mute);
+        mongoTemplate.updateFirst(query, update, Conversation.class);
+    }
+
+    @Override
+    public void toggleHide(String conversationId, boolean hide) {
+        String currentUserId = securityUtil.getCurrentUserId();
+        Query query = new Query(Criteria.where("id").is(conversationId)
+                .and("members.userId").is(currentUserId));
+        Update update = new Update().set("members.$.hidden", hide);
+        mongoTemplate.updateFirst(query, update, Conversation.class);
+    }
+
+    @Override
+    public ConversationResponse updateMessageExpiration(String conversationId, Integer days) {
+        String currentUserId = securityUtil.getCurrentUserId();
+        Conversation conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new AppException(ErrorCode.CHAT_ROOM_NOT_FOUND));
+
+        helper.assertMember(conversation, currentUserId);
+
+        Integer newDays = (days != null && days > 0) ? days : null;
+        conversation.setMessageExpirationDays(newDays);
+        conversationRepository.save(conversation);
+
+        // System message for all members
+        Map<String, Object> metadata = new HashMap<>();
+        metadata.put("action", "UPDATE_EXPIRATION");
+        metadata.put("days", newDays != null ? newDays : 0);
+        
+        var actorInfo = helper.fetchActorInfo(currentUserId);
+        systemMessageService.sendSystemMessage(conversationId, currentUserId, actorInfo.name(), actorInfo.avatar(), SystemActionType.UPDATE_EXPIRATION, metadata);
+
+        return helper.buildConversationResponseForCurrentUser(conversation, currentUserId);
     }
 }
 

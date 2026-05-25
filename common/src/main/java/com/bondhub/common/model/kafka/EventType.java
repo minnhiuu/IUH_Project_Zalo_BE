@@ -16,6 +16,17 @@ public enum EventType {
 
     USER_INDEX_REQUESTED,
     USER_INDEX_DELETED,
+    NOTIFICATION_SETTINGS_UPDATED,
+
+    // Social Feed Events (social-feed-service)
+    POST_CREATED,
+    POST_UPDATED,
+    POST_DELETED,
+    REACTION_TOGGLE_COMMAND_REQUESTED,
+    POST_COMMENT_COUNT_PROJECTION_REQUESTED,
+    USER_INTERACTION_RECORDED,
+    POST_VIEW_RECORDED,
+    POST_DISLIKE_RECORDED,
     USER_PRIVACY_CHANGED,
 
     // Friend Events (friend-service)
@@ -26,4 +37,9 @@ public enum EventType {
 
     // Message Search Events (message-service → search-service)
     MESSAGE_INDEX_REQUESTED,
+    CHAT_INTERACTION_OCCURRED,
+    SOCIAL_FEED_INTERACTION_OCCURRED,
+
+    // Notification Events
+    EMAIL_NOTIFICATION,
 }

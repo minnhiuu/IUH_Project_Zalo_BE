@@ -42,7 +42,7 @@ public class DataInitializer {
     @EventListener(ApplicationReadyEvent.class)
     public void init() {
         seedTemplates();
-        seedNotifications();
+//        seedNotifications();
     }
 
     public void seedTemplates() {
@@ -61,19 +61,40 @@ public class DataInitializer {
                 "New message",
                 "<b>{{actorName}}</b> sent you a message");
 
-        seedIfAbsent(NotificationType.POST_LIKE, NotificationChannel.IN_APP, "vi",
-                "Lượt thích bài viết",
-                "<b>{{actorName}}</b>{{#showSecondActor}} và <b>{{secondActorName}}</b>{{/showSecondActor}}{{#othersCount}} và <b>{{othersCount}} người khác</b>{{/othersCount}} đã thích bài viết của bạn");
-        seedIfAbsent(NotificationType.POST_LIKE, NotificationChannel.IN_APP, "en",
-                "Post liked",
-                "<b>{{actorName}}</b>{{#showSecondActor}} and <b>{{secondActorName}}</b>{{/showSecondActor}}{{#othersCount}} and <b>{{othersCount}} others</b>{{/othersCount}} liked your post");
+        seedIfAbsent(NotificationType.MESSAGE_GROUP, NotificationChannel.IN_APP, "vi",
+                "Tin nhắn nhóm",
+                "<b>{{groupName}}</b>: {{actorName}} {{contentVi}}");
+        seedIfAbsent(NotificationType.MESSAGE_GROUP, NotificationChannel.IN_APP, "en",
+                "Group message",
+                "<b>{{groupName}}</b>: {{actorName}} {{contentEn}}");
+
+        seedIfAbsent(NotificationType.POST_REACTION, NotificationChannel.IN_APP, "vi",
+                "Cảm xúc bài viết",
+                "<b>{{actorName}}</b>{{#showSecondActor}} và <b>{{secondActorName}}</b>{{/showSecondActor}}{{#othersCount}} và <b>{{othersCount}} người khác</b>{{/othersCount}} đã {{reactionActionVi}} bài viết của bạn");
+        seedIfAbsent(NotificationType.POST_REACTION, NotificationChannel.IN_APP, "en",
+                "Post Reaction",
+                "<b>{{actorName}}</b>{{#showSecondActor}} and <b>{{secondActorName}}</b>{{/showSecondActor}}{{#othersCount}} and <b>{{othersCount}} others</b>{{/othersCount}} {{reactionActionEn}} your post");
 
         seedIfAbsent(NotificationType.POST_COMMENT, NotificationChannel.IN_APP, "vi",
                 "Bình luận mới",
-                "<b>{{actorName}}</b> đã bình luận về bài viết của bạn");
+                "<b>{{actorName}}</b>{{#showSecondActor}} và <b>{{secondActorName}}</b>{{/showSecondActor}}{{#othersCount}} và <b>{{othersCount}} người khác</b>{{/othersCount}} đã bình luận về bài viết của bạn");
         seedIfAbsent(NotificationType.POST_COMMENT, NotificationChannel.IN_APP, "en",
                 "New comment",
-                "<b>{{actorName}}</b> commented on your post");
+                "<b>{{actorName}}</b>{{#showSecondActor}} and <b>{{secondActorName}}</b>{{/showSecondActor}}{{#othersCount}} and <b>{{othersCount}} others</b>{{/othersCount}} commented on your post");
+
+        seedIfAbsent(NotificationType.COMMENT_REPLY, NotificationChannel.IN_APP, "vi",
+                "Phản hồi bình luận",
+                "<b>{{actorName}}</b>{{#showSecondActor}} và <b>{{secondActorName}}</b>{{/showSecondActor}}{{#othersCount}} và <b>{{othersCount}} người khác</b>{{/othersCount}} đã trả lời bình luận của bạn");
+        seedIfAbsent(NotificationType.COMMENT_REPLY, NotificationChannel.IN_APP, "en",
+                "Comment reply",
+                "<b>{{actorName}}</b>{{#showSecondActor}} and <b>{{secondActorName}}</b>{{/showSecondActor}}{{#othersCount}} and <b>{{othersCount}} others</b>{{/othersCount}} replied to your comment");
+
+        seedIfAbsent(NotificationType.POST_PUBLISHED, NotificationChannel.IN_APP, "vi",
+                "Bài viết mới",
+                "<b>{{actorName}}</b> vừa đăng một bài viết mới");
+        seedIfAbsent(NotificationType.POST_PUBLISHED, NotificationChannel.IN_APP, "en",
+                "New post",
+                "<b>{{actorName}}</b> published a new post");
 
         seedIfAbsent(NotificationType.POST_TAG, NotificationChannel.IN_APP, "vi",
                 "Gắn thẻ",
@@ -92,10 +113,10 @@ public class DataInitializer {
         // --- FCM TEMPLATES (Standard Push Notifications) ---
         seedIfAbsent(NotificationType.FRIEND_REQUEST, NotificationChannel.FCM, "vi",
                 "Lời mời kết bạn",
-                "{{actorName}}{{#othersCount}} và {{othersCount}} người khác{{/othersCount}} đã gửi cho bạn lời mời kết bạn.");
+                "{{actorName}}{{#showSecondActor}} và {{secondActorName}}{{/showSecondActor}}{{#othersCount}} và {{othersCount}} người khác{{/othersCount}} đã gửi cho bạn lời mời kết bạn.");
         seedIfAbsent(NotificationType.FRIEND_REQUEST, NotificationChannel.FCM, "en",
                 "New friend request",
-                "{{actorName}}{{#othersCount}} and {{othersCount}} others{{/othersCount}} sent you a friend request.");
+                "{{actorName}}{{#showSecondActor}} and {{secondActorName}}{{/showSecondActor}}{{#othersCount}} and {{othersCount}} others{{/othersCount}} sent you a friend request.");
 
         seedIfAbsent(NotificationType.MESSAGE_DIRECT, NotificationChannel.FCM, "vi",
                 "Tin nhắn mới",
@@ -104,12 +125,47 @@ public class DataInitializer {
                 "New message",
                 "{{actorName}} sent you a message.");
 
+        seedIfAbsent(NotificationType.MESSAGE_GROUP, NotificationChannel.FCM, "vi",
+                "Tin nhắn nhóm",
+                "{{groupName}}: {{actorName}} {{contentVi}}");
+        seedIfAbsent(NotificationType.MESSAGE_GROUP, NotificationChannel.FCM, "en",
+                "Group message",
+                "{{groupName}}: {{actorName}} {{contentEn}}");
+
         seedIfAbsent(NotificationType.FRIEND_ACCEPT, NotificationChannel.FCM, "vi",
                 "Chấp nhận kết bạn",
                 "{{actorName}} đã chấp nhận lời mời kết bạn của bạn.");
         seedIfAbsent(NotificationType.FRIEND_ACCEPT, NotificationChannel.FCM, "en",
                 "Friend accepted",
                 "{{actorName}} accepted your friend request.");
+
+        seedIfAbsent(NotificationType.POST_REACTION, NotificationChannel.FCM, "vi",
+                "Cảm xúc bài viết",
+                "{{actorName}}{{#showSecondActor}} và {{secondActorName}}{{/showSecondActor}}{{#othersCount}} và {{othersCount}} người khác{{/othersCount}} đã {{reactionActionVi}} bài viết của bạn.");
+        seedIfAbsent(NotificationType.POST_REACTION, NotificationChannel.FCM, "en",
+                "Post Reaction",
+                "{{actorName}}{{#showSecondActor}} and {{secondActorName}}{{/showSecondActor}}{{#othersCount}} and {{othersCount}} others{{/othersCount}} {{reactionActionEn}} your post.");
+
+        seedIfAbsent(NotificationType.POST_COMMENT, NotificationChannel.FCM, "vi",
+                "Bình luận mới",
+                "{{actorName}}{{#showSecondActor}} và {{secondActorName}}{{/showSecondActor}}{{#othersCount}} và {{othersCount}} người khác{{/othersCount}} đã bình luận về bài viết của bạn.");
+        seedIfAbsent(NotificationType.POST_COMMENT, NotificationChannel.FCM, "en",
+                "New comment",
+                "{{actorName}}{{#showSecondActor}} and {{secondActorName}}{{/showSecondActor}}{{#othersCount}} and {{othersCount}} others{{/othersCount}} commented on your post.");
+
+        seedIfAbsent(NotificationType.COMMENT_REPLY, NotificationChannel.FCM, "vi",
+                "Phản hồi bình luận",
+                "{{actorName}}{{#showSecondActor}} và {{secondActorName}}{{/showSecondActor}}{{#othersCount}} và {{othersCount}} người khác{{/othersCount}} đã trả lời bình luận của bạn.");
+        seedIfAbsent(NotificationType.COMMENT_REPLY, NotificationChannel.FCM, "en",
+                "Comment reply",
+                "{{actorName}}{{#showSecondActor}} and {{secondActorName}}{{/showSecondActor}}{{#othersCount}} and {{othersCount}} others{{/othersCount}} replied to your comment.");
+
+        seedIfAbsent(NotificationType.POST_PUBLISHED, NotificationChannel.FCM, "vi",
+                "Bài viết mới",
+                "{{actorName}} vừa đăng một bài viết mới.");
+        seedIfAbsent(NotificationType.POST_PUBLISHED, NotificationChannel.FCM, "en",
+                "New post",
+                "{{actorName}} published a new post.");
 
         // --- SHARED SYSTEM TEMPLATES ---
         seedIfAbsent(NotificationType.SYSTEM, NotificationChannel.IN_APP, "vi",
@@ -153,6 +209,110 @@ public class DataInitializer {
         seedIfAbsent(NotificationType.CALL, NotificationChannel.IN_APP, "en",
                 "Incoming call",
                 "<b>{{actorName}}</b> is calling you");
+
+        // --- SECURITY TEMPLATES ---
+        seedIfAbsent(NotificationType.NEW_DEVICE_LOGIN, NotificationChannel.IN_APP, "vi",
+                "Cảnh báo đăng nhập mới",
+                "Tài khoản của bạn vừa được đăng nhập từ một thiết bị mới ({{deviceName}}) với IP: {{ipAddress}}. Nếu không phải bạn, vui lòng bảo mật tài khoản ngay lập tức.");
+        seedIfAbsent(NotificationType.NEW_DEVICE_LOGIN, NotificationChannel.IN_APP, "en",
+                "New Login Detected",
+                "Your account was just logged into from a new device ({{deviceName}}) with IP: {{ipAddress}}. If this was not you, please secure your account.");
+        seedIfAbsent(NotificationType.NEW_DEVICE_LOGIN, NotificationChannel.FCM, "vi",
+                "Cảnh báo đăng nhập mới",
+                "Tài khoản của bạn vừa được đăng nhập từ một thiết bị mới ({{deviceName}}) với IP: {{ipAddress}}. Nếu không phải bạn, vui lòng bảo mật tài khoản ngay lập tức.");
+        seedIfAbsent(NotificationType.NEW_DEVICE_LOGIN, NotificationChannel.FCM, "en",
+                "New Login Detected",
+                "Your account was just logged into from a new device ({{deviceName}}) with IP: {{ipAddress}}. If this was not you, please secure your account.");
+
+        // --- MODERATION TEMPLATES ---
+        // --- MODERATION TEMPLATES ---
+        seedOrUpdate(NotificationType.CONTENT_REMOVED, NotificationChannel.IN_APP, "vi",
+                "Nội dung đã bị xóa",
+                "Một trong những {{targetTypeVi}} của bạn đã vi phạm chính sách nền tảng.");
+        seedOrUpdate(NotificationType.CONTENT_REMOVED, NotificationChannel.IN_APP, "en",
+                "Content Removed",
+                "One of your {{targetType}}s has violated the platform policy.");
+        seedOrUpdate(NotificationType.CONTENT_REMOVED, NotificationChannel.FCM, "vi",
+                "Nội dung đã bị xóa",
+                "Một trong những {{targetTypeVi}} của bạn đã vi phạm chính sách nền tảng.");
+        seedOrUpdate(NotificationType.CONTENT_REMOVED, NotificationChannel.FCM, "en",
+                "Content Removed",
+                "One of your {{targetType}}s has violated the platform policy.");
+
+        seedOrUpdate(NotificationType.CONTENT_HIDDEN, NotificationChannel.IN_APP, "vi",
+                "Nội dung đã bị ẩn",
+                "Một trong những {{targetTypeVi}} của bạn đã vi phạm chính sách nền tảng.");
+        seedOrUpdate(NotificationType.CONTENT_HIDDEN, NotificationChannel.IN_APP, "en",
+                "Content Hidden",
+                "One of your {{targetType}}s has violated the platform policy.");
+        seedOrUpdate(NotificationType.CONTENT_HIDDEN, NotificationChannel.FCM, "vi",
+                "Nội dung đã bị ẩn",
+                "Một trong những {{targetTypeVi}} của bạn đã vi phạm chính sách nền tảng.");
+        seedOrUpdate(NotificationType.CONTENT_HIDDEN, NotificationChannel.FCM, "en",
+                "Content Hidden",
+                "One of your {{targetType}}s has violated the platform policy.");
+
+        seedOrUpdate(NotificationType.USER_WARNED, NotificationChannel.IN_APP, "vi",
+                "Cảnh báo tài khoản",
+                "Một trong những {{targetTypeVi}} của bạn đã vi phạm chính sách nền tảng.{{#adminNote}} Ghi chú: {{adminNote}}{{/adminNote}}");
+        seedOrUpdate(NotificationType.USER_WARNED, NotificationChannel.IN_APP, "en",
+                "Account Warning",
+                "One of your {{targetType}}s has violated the platform policy.{{#adminNote}} Note: {{adminNote}}{{/adminNote}}");
+        seedOrUpdate(NotificationType.USER_WARNED, NotificationChannel.FCM, "vi",
+                "Cảnh báo tài khoản",
+                "Một trong những {{targetTypeVi}} của bạn đã vi phạm chính sách nền tảng.{{#adminNote}} Ghi chú: {{adminNote}}{{/adminNote}}");
+        seedOrUpdate(NotificationType.USER_WARNED, NotificationChannel.FCM, "en",
+                "Account Warning",
+                "One of your {{targetType}}s has violated the platform policy.{{#adminNote}} Note: {{adminNote}}{{/adminNote}}");
+
+        // --- DND SUMMARY ---
+        // Use a force update approach for DND_SUMMARY to ensure latest placeholders are present
+        seedOrUpdate(NotificationType.DND_SUMMARY, NotificationChannel.FCM, "vi",
+                "Tóm tắt chế độ im lặng",
+                "Bạn có {{totalCount}} thông báo mới khi đang ở chế độ im lặng: {{summaryText}}.");
+        seedOrUpdate(NotificationType.DND_SUMMARY, NotificationChannel.FCM, "en",
+                "Quiet Mode Summary",
+                "You have {{totalCount}} new notifications while in quiet mode: {{summaryText}}.");
+
+        seedOrUpdate(NotificationType.DND_SUMMARY, NotificationChannel.IN_APP, "vi",
+                "Tóm tắt chế độ im lặng",
+                "Bạn có <b>{{totalCount}}</b> thông báo mới khi đang ở chế độ im lặng: {{summaryText}}.");
+        seedOrUpdate(NotificationType.DND_SUMMARY, NotificationChannel.IN_APP, "en",
+                "Quiet Mode Summary",
+                "You have <b>{{totalCount}}</b> new notifications while in quiet mode: {{summaryText}}.");
+
+        // --- DND SUMMARY FRAGMENTS ---
+        seedOrUpdate(NotificationType.DND_SUMMARY_MESSAGE, NotificationChannel.FCM, "vi",
+                "", "{{messageCount}} tin nhắn trong {{conversationCount}} cuộc trò chuyện");
+        seedOrUpdate(NotificationType.DND_SUMMARY_MESSAGE, NotificationChannel.FCM, "en",
+                "", "{{messageCount}} messages in {{conversationCount}} conversations");
+
+        seedOrUpdate(NotificationType.DND_SUMMARY_FRIEND, NotificationChannel.FCM, "vi",
+                "", "{{count}} lời mời kết bạn");
+        seedOrUpdate(NotificationType.DND_SUMMARY_FRIEND, NotificationChannel.FCM, "en",
+                "", "{{count}} friend requests");
+
+        seedOrUpdate(NotificationType.DND_SUMMARY_POST, NotificationChannel.FCM, "vi",
+                "", "{{interactionCount}} tương tác trên {{postCount}} bài viết");
+        seedOrUpdate(NotificationType.DND_SUMMARY_POST, NotificationChannel.FCM, "en",
+                "", "{{interactionCount}} interactions on {{postCount}} posts");
+
+        seedOrUpdate(NotificationType.DND_SUMMARY_OTHER, NotificationChannel.FCM, "vi",
+                "", "{{count}} thông báo khác");
+        seedOrUpdate(NotificationType.DND_SUMMARY_OTHER, NotificationChannel.FCM, "en",
+                "", "{{count}} other notifications");
+    }
+
+    private void seedOrUpdate(NotificationType type, NotificationChannel channel, String locale, String title, String body) {
+        templateRepository.findByTypeAndChannelAndLocaleAndActiveTrue(type, channel, locale)
+                .ifPresentOrElse(
+                    existing -> {
+                        existing.setTitleTemplate(title);
+                        existing.setBodyTemplate(body);
+                        templateRepository.save(existing);
+                    },
+                    () -> seedIfAbsent(type, channel, locale, title, body)
+                );
     }
 
     private static final List<String> NAMES = List.of(
@@ -169,7 +329,7 @@ public class DataInitializer {
 
         LocalDateTime now = LocalDateTime.now();
         List<NotificationType> types = List.of(
-                NotificationType.FRIEND_REQUEST, NotificationType.MESSAGE_DIRECT, NotificationType.POST_LIKE,
+                NotificationType.FRIEND_REQUEST, NotificationType.MESSAGE_DIRECT, NotificationType.POST_REACTION,
                 NotificationType.POST_COMMENT, NotificationType.POST_TAG, NotificationType.FRIEND_ACCEPT,
                 NotificationType.SYSTEM
         );

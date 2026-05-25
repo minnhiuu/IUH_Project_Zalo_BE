@@ -1,0 +1,45 @@
+package com.bondhub.socialfeedservice.publisher;
+
+import com.bondhub.common.event.socialfeed.InteractionType;
+import com.bondhub.common.event.socialfeed.UserInteractionEvent;
+import com.bondhub.common.model.kafka.EventType;
+import com.bondhub.common.publisher.OutboxEventPublisher;
+import lombok.AccessLevel;
+import lombok.RequiredArgsConstructor;
+import lombok.experimental.FieldDefaults;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.Instant;
+
+@Service
+@RequiredArgsConstructor
+@Slf4j
+@FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
+public class PostDislikeEventPublisher {
+
+    OutboxEventPublisher outboxEventPublisher;
+    SocialFeedInteractionEventPublisher socialFeedInteractionEventPublisher;
+
+    @Transactional
+    public void publishPostDisliked(String postId, String userId) {
+        UserInteractionEvent event = UserInteractionEvent.builder()
+                .postId(postId)
+                .userId(userId)
+                .interactionType(InteractionType.DISLIKE)
+                .weight(InteractionType.DISLIKE.getWeight())
+                .createdAt(Instant.now())
+                .build();
+
+        outboxEventPublisher.saveAndPublish(
+                postId,
+                "Post",
+                EventType.POST_DISLIKE_RECORDED,
+                event
+        );
+        socialFeedInteractionEventPublisher.publishPostAuthorInteraction(userId, postId, InteractionType.DISLIKE);
+
+        log.debug("Published POST_DISLIKE_RECORDED event: postId={}, userId={}", postId, userId);
+    }
+}

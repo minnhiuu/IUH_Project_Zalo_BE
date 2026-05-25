@@ -3,6 +3,7 @@ package com.bondhub.messageservice.dto.response;
 import com.bondhub.common.enums.Status;
 import com.bondhub.messageservice.model.GroupSettings;
 import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Builder;
 
 import java.time.OffsetDateTime;
@@ -18,9 +19,19 @@ public record ConversationResponse(
         @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss.SSSXXX", timezone = "GMT+7")
         OffsetDateTime lastSeenAt,        // Thời điểm online gần nhất của partner
         String friendshipStatus,          // null | PENDING | ACCEPTED | DECLINED | CANCELLED
+        @JsonProperty("isGroup")
         boolean isGroup,
+        @JsonProperty("isDisbanded")
         boolean isDisbanded,
+        @JsonProperty("isPinned")
+        boolean isPinned,
+        @JsonProperty("isMuted")
+        boolean isMuted,
+        @JsonProperty("isHidden")
+        boolean isHidden,
+        boolean manuallyMarkedUnread,
         Integer unreadCount,
+        Integer messageExpirationDays,
         LastMessageResponse lastMessage,
         List<ConversationMemberResponse> members,
         GroupSettings settings,

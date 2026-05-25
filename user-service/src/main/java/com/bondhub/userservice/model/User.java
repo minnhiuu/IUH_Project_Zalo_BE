@@ -14,6 +14,7 @@ import org.springframework.data.mongodb.core.mapping.MongoId;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.Set;
 
 @Document("users")
@@ -39,10 +40,16 @@ public class User extends BaseModel {
     String accountId;
     Set<String> pinnedConversations;
 
+    @Builder.Default
+    Set<String> initialInterests = new HashSet<>();
+
     String avatar;
     String background;
     Double backgroundY;
 
     /** Updated on every successful login (set by auth-service via internal API) */
     LocalDateTime lastLoginAt;
+
+    @Builder.Default
+    UserSetting userSetting = new UserSetting();
 }

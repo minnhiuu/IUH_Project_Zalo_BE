@@ -3,6 +3,7 @@ package com.bondhub.messageservice.service.conversation;
 import com.bondhub.common.enums.Status;
 import com.bondhub.common.utils.PhoneUtil;
 import com.bondhub.common.utils.S3Util;
+import com.bondhub.common.utils.S3UtilV2;
 import com.bondhub.common.utils.SecurityUtil;
 import com.bondhub.common.exception.AppException;
 import com.bondhub.common.exception.ErrorCode;
@@ -49,12 +50,7 @@ public class ConversationHelper {
     private final SecurityUtil securityUtil;
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final MongoTemplate mongoTemplate;
-
-    @Value("${aws.s3.bucket.name}")
-    private String bucketName;
-
-    @Value("${cloud.aws.region.static}")
-    private String region;
+    private final S3UtilV2 s3UtilV2;
 
     @Value("${kafka.topics.socket-events}")
     private String socketEventsTopic;
@@ -149,7 +145,7 @@ public class ConversationHelper {
         Map<String, ChatUser> userCache = chatUserRepository.findAllById(allUserIds).stream()
                 .collect(Collectors.toMap(ChatUser::getId, u -> u));
 
-        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+        String baseUrl = s3UtilV2.getS3BaseUrl();
 
         ChatUser partner = null;
         if (!room.isGroup()) {
@@ -178,16 +174,29 @@ public class ConversationHelper {
             String friendshipStatus, Long pendingJoinRequestCount) {
 
         LastMessageInfo last = room.getLastMessage();
+        LocalDateTime deletedBefore = room.getDeletedBefore() != null
+                ? room.getDeletedBefore().get(currentUserId)
+                : null;
         if (last != null && last.getVisibleTo() != null && !last.getVisibleTo().isEmpty()
                 && !last.getVisibleTo().contains(currentUserId)) {
-            last = findFallbackLastMessage(room.getId(), currentUserId);
+            last = findFallbackLastMessage(room.getId(), currentUserId, deletedBefore);
+        }
+        if (last != null && deletedBefore != null
+                && last.getTimestamp() != null
+                && !last.getTimestamp().isAfter(deletedBefore)) {
+            last = findFallbackLastMessage(room.getId(), currentUserId, deletedBefore);
+        }
+        if (last != null && room.getMessageExpirationDays() != null && room.getMessageExpirationDays() > 0
+                && last.getTimestamp() != null
+                && last.getTimestamp().isBefore(LocalDateTime.now().minusDays(room.getMessageExpirationDays()))) {
+            last = findFallbackLastMessage(room.getId(), currentUserId, deletedBefore);
         }
         List<ConversationMemberResponse> members = buildMembersWithCache(
                 room, currentUserId, userCache, baseUrl, viewerCanSee);
 
         String partnerDisplayName = safeDisplayName(partner != null ? partner.getFullName() : null);
         String displayName = room.getName();
-        if (room.isGroup() && (displayName == null || displayName.isBlank())) {
+        if (room.isGroup() && (displayName == null || displayName.isBlank() || "Nhóm mới".equalsIgnoreCase(displayName))) {
             displayName = getDynamicGroupName(room, currentUserId, userCache);
         } else if (!room.isGroup()) {
             displayName = partnerDisplayName;
@@ -200,6 +209,19 @@ public class ConversationHelper {
                 : (partner != null && partner.getAvatar() != null ? baseUrl + partner.getAvatar() : null);
 
         boolean isFriend = !room.isGroup() && "ACCEPTED".equals(friendshipStatus);
+
+        ConversationMember currentMember = room.getMembers().stream()
+                .filter(m -> m.getUserId().equals(currentUserId))
+                .findFirst()
+                .orElse(null);
+
+        boolean isPinned = currentMember != null && Boolean.TRUE.equals(currentMember.getPinned());
+        boolean isMuted = currentMember != null && Boolean.TRUE.equals(currentMember.getMuted());
+        boolean isHidden = currentMember != null && Boolean.TRUE.equals(currentMember.getHidden());
+        boolean manuallyMarkedUnread = currentMember != null && Boolean.TRUE.equals(currentMember.getManuallyMarkedUnread());
+
+        int unreadCount = room.getUnreadCounts() != null
+                ? room.getUnreadCounts().getOrDefault(currentUserId, 0) : 0;
 
         Status displayStatus = room.isGroup()
                 ? (room.getMembers().stream()
@@ -224,8 +246,12 @@ public class ConversationHelper {
                 .friendshipStatus(friendshipStatus)
                 .isGroup(room.isGroup())
                 .isDisbanded(room.isDisbanded())
-                .unreadCount(room.getUnreadCounts() != null
-                        ? room.getUnreadCounts().getOrDefault(currentUserId, 0) : 0)
+                .isPinned(isPinned)
+                .isMuted(isMuted)
+                .isHidden(isHidden)
+                .manuallyMarkedUnread(manuallyMarkedUnread)
+                .unreadCount(unreadCount)
+                .messageExpirationDays(room.getMessageExpirationDays())
                 .lastMessage(last != null ? LastMessageResponse.builder()
                         .id(last.getMessageId())
                         .senderId(last.getSenderId())
@@ -266,7 +292,7 @@ public class ConversationHelper {
         Map<String, ChatUser> userCache = chatUserRepository.findAllById(userIds).stream()
                 .collect(Collectors.toMap(ChatUser::getId, u -> u));
 
-        String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+        String baseUrl = s3UtilV2.getS3BaseUrl();
 
         Long pendingJoinRequestCount = room.isGroup() && room.getSettings() != null
                 && room.getSettings().isMembershipApprovalEnabled()
@@ -354,7 +380,6 @@ public class ConversationHelper {
 
         return room.getMembers().stream()
                 .filter(this::isActiveMember)
-                .filter(m -> room.isGroup() || !m.getUserId().equals(currentUserId))
                 .sorted(Comparator
                         .comparing((ConversationMember m) ->
                                         m.getJoinedAt() != null ? m.getJoinedAt() : LocalDateTime.MIN,
@@ -374,6 +399,10 @@ public class ConversationHelper {
                                     ? baseUrl + memberInfo.getAvatar() : null)
                             .lastReadMessageId(canSeeStatus ? m.getLastReadMessageId() : null)
                             .role(m.getRole() != null ? m.getRole() : null)
+                            .pinned(m.getPinned())
+                            .muted(m.getMuted())
+                            .hidden(m.getHidden())
+                            .manuallyMarkedUnread(m.getManuallyMarkedUnread())
                             .build();
                 })
                 .collect(Collectors.toList());
@@ -395,17 +424,30 @@ public class ConversationHelper {
         return PhoneUtil.isValidVnPhone(query);
     }
 
-    private LastMessageInfo findFallbackLastMessage(String conversationId, String currentUserId) {
+        private LastMessageInfo findFallbackLastMessage(String conversationId, String currentUserId, LocalDateTime deletedBefore) {
+        List<Criteria> criteriaList = new ArrayList<>();
+        criteriaList.add(Criteria.where("conversationId").is(conversationId));
+        criteriaList.add(Criteria.where("deletedBy").ne(currentUserId));
+        criteriaList.add(new Criteria().orOperator(
+            Criteria.where("visibleTo").exists(false),
+            Criteria.where("visibleTo").is(null),
+            Criteria.where("visibleTo").size(0),
+            Criteria.where("visibleTo").is(currentUserId)
+        ));
+        if (deletedBefore != null) {
+            criteriaList.add(Criteria.where("createdAt").gt(deletedBefore));
+        }
+
+        criteriaList.add(new Criteria().orOperator(
+                Criteria.where("expiredAt").exists(false),
+                Criteria.where("expiredAt").is(null),
+                Criteria.where("expiredAt").gt(LocalDateTime.now())
+        ));
+
         Criteria criteria = new Criteria().andOperator(
-                Criteria.where("conversationId").is(conversationId),
-                Criteria.where("deletedBy").ne(currentUserId),
-                new Criteria().orOperator(
-                        Criteria.where("visibleTo").exists(false),
-                        Criteria.where("visibleTo").is(null),
-                        Criteria.where("visibleTo").size(0),
-                        Criteria.where("visibleTo").is(currentUserId)
-                )
+            criteriaList.toArray(new Criteria[0])
         );
+
         Query query = new Query(criteria)
                 .with(Sort.by(Sort.Direction.DESC, "createdAt"))
                 .limit(1);
@@ -435,9 +477,5 @@ public class ConversationHelper {
             }
         }
         return "";
-    }
-
-    public String getBaseUrl() {
-        return S3Util.getS3BaseUrl(bucketName, region);
     }
 }

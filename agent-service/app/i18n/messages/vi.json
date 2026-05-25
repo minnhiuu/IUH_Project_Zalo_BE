@@ -1,0 +1,21 @@
+{
+  "response.success": "Thanh cong",
+  "error.sys.uncategorized": "He thong gap loi khong xac dinh",
+  "error.validation.error": "Du lieu khong hop le",
+  "error.request.invalid": "Yeu cau khong hop le",
+  "error.chat.query_or_content.required": "Vui long cung cap query hoac content",
+  "error.ingest.chunks.required": "Danh sach chunks khong duoc de trong",
+  "error.ingest.excel.strategy.disabled": "Chien luoc excel_row dang bi tat",
+  "error.ingest.excel.params.required": "Can s3Key va fileName cho chien luoc excel_row",
+  "error.ingest.excel.filetype.invalid": "Chien luoc excel_row chi ho tro .xlsx/.xls",
+  "ingest.started": "Da bat dau ingest tai lieu",
+  "ingest.already.running": "Tai lieu dang duoc ingest",
+  "ingest.progress.chunk_uploading": "Dang upload chunk {vectorId}",
+  "ingest.progress.chunk_uploaded": "Da upload xong chunk {vectorId}",
+  "ingest.progress.uploaded_ratio": "Da upload {uploaded} tren tong {total} chunks",
+  "ingest.progress.completed": "Upload hoan tat",
+  "ingest.progress.failed": "Upload that bai: {reason}",
+  "summary.no_history": "Toi khong tim thay lich su hoi thoai gan day de tom tat cho ban.",
+  "summary.no_content": "Khong tim thay noi dung de tom tat.",
+  "summary.insufficient_content": "Noi dung khong du du lieu de tom tat."
+}

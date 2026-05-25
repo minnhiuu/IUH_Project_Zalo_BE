@@ -1,7 +1,6 @@
 package com.bondhub.messageservice.consumer;
 
-import com.bondhub.common.utils.S3UrlUtil;
-import com.bondhub.common.utils.S3Util;
+import com.bondhub.common.utils.S3UtilV2;
 import com.bondhub.common.event.user.UserPrivacyChangedEvent;
 import com.bondhub.common.event.user.UserProfileUpdatedEvent;
 import com.bondhub.common.enums.SocketEventType;
@@ -37,55 +36,52 @@ public class UserMirrorConsumer {
     @Value("${kafka.topics.socket-events}")
     private String socketEventsTopic;
 
-    @Value("${aws.s3.bucket.name}")
-    private String bucketName;
-
-    @Value("${cloud.aws.region.static}")
-    private String region;
+    private final S3UtilV2 s3UtilV2;
 
     @KafkaListener(topics = "${kafka.topics.user-events.updated}", groupId = "${spring.kafka.consumer.group-id:message-service-group}")
-    public void handleUserUpdated(UserProfileUpdatedEvent event, Acknowledgment ack) {
-        log.info("Received USER_UPDATED event for userId: {}", event.userId());
-        try {
-            String baseUrl = S3Util.getS3BaseUrl(bucketName, region);
+    public void handleUserUpdated(Object event, Acknowledgment ack) {
+        if (!(event instanceof UserProfileUpdatedEvent profileEvent)) {
+            log.debug("Skipping non-profile update event of type: {}", event.getClass().getName());
+            ack.acknowledge();
+            return;
+        }
 
-            chatUserRepository.findById(event.userId()).ifPresentOrElse(user -> {
-                LocalDateTime eventTime = new Timestamp(event.timestamp()).toLocalDateTime();
+        log.info("Received USER_UPDATED event for userId: {}", profileEvent.userId());
+        try {
+            chatUserRepository.findById(profileEvent.userId()).ifPresentOrElse(user -> {
+                LocalDateTime eventTime = new Timestamp(profileEvent.timestamp()).toLocalDateTime();
                 if (user.getLastUpdatedAt() == null || user.getLastUpdatedAt().isBefore(eventTime)) {
-                    user.setFullName(event.fullName());
-                    user.setAvatar(event.avatar());
-                    user.setPhoneNumber(event.phoneNumber());
-                    if (StringUtils.hasText(event.fullName())) {
-                        user.setFullName(event.fullName());
+                    if (StringUtils.hasText(profileEvent.fullName())) {
+                        user.setFullName(profileEvent.fullName());
                     }
-                    if (StringUtils.hasText(event.avatar())) {
-                        user.setAvatar(S3UrlUtil.extractStorageKey(event.avatar(), baseUrl));
+                    if (StringUtils.hasText(profileEvent.avatar())) {
+                        user.setAvatar(s3UtilV2.extractStorageKey(profileEvent.avatar()));
                         log.info("✅ Updated ChatUser mirror with avatar: {}", user.getAvatar());
                     }
                     user.setLastUpdatedAt(eventTime);
                     chatUserRepository.save(user);
-                    log.info("✅ Updated ChatUser mirror for userId: {}", event.userId());
+                    log.info("✅ Updated ChatUser mirror for userId: {}", profileEvent.userId());
                 } else {
-                    log.info("⏩ Skipped outdated USER_UPDATED event for userId: {}", event.userId());
+                    log.info("⏩ Skipped outdated USER_UPDATED event for userId: {}", profileEvent.userId());
                 }
             }, () -> {
                 ChatUser newUser = ChatUser.builder()
-                        .id(event.userId())
-                        .fullName(event.fullName())
-                        .avatar(event.avatar())
-                        .phoneNumber(event.phoneNumber())
-                        .fullName(StringUtils.hasText(event.fullName()) ? event.fullName() : "Người dùng mới")
-                    .avatar(StringUtils.hasText(event.avatar())
-                        ? S3UrlUtil.extractStorageKey(event.avatar(), baseUrl)
+                        .id(profileEvent.userId())
+                        .fullName(profileEvent.fullName())
+                        .avatar(profileEvent.avatar())
+                        .phoneNumber(profileEvent.phoneNumber())
+                        .fullName(StringUtils.hasText(profileEvent.fullName()) ? profileEvent.fullName() : "Người dùng mới")
+                    .avatar(StringUtils.hasText(profileEvent.avatar())
+                        ? s3UtilV2.extractStorageKey(profileEvent.avatar())
                         : null)
-                        .lastUpdatedAt(new Timestamp(event.timestamp()).toLocalDateTime())
+                        .lastUpdatedAt(new Timestamp(profileEvent.timestamp()).toLocalDateTime())
                         .build();
                 chatUserRepository.save(newUser);
-                log.info("✅ Created new ChatUser mirror for userId: {}", event.userId());
+                log.info("✅ Created new ChatUser mirror for userId: {}", profileEvent.userId());
             });
             ack.acknowledge();
         } catch (Exception e) {
-            log.error("❌ Error processing USER_UPDATED event for userId: {}", event.userId(), e);
+            log.error("❌ Error processing USER_UPDATED event for userId: {}", profileEvent.userId(), e);
         }
     }
 

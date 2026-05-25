@@ -26,5 +26,17 @@ public class ConversationMember {
     String removedBy;
 
     JoinMethod joinMethod;
-    String addedBy;  
+    String addedBy;
+
+    @Builder.Default
+    Boolean pinned = false;
+
+    @Builder.Default
+    Boolean muted = false;
+
+    @Builder.Default
+    Boolean hidden = false;
+
+    @Builder.Default
+    Boolean manuallyMarkedUnread = false;
 }

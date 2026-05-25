@@ -15,31 +15,43 @@ import java.util.List;
 public interface MessageRepository extends MongoRepository<Message, String> {
 
     @Query("{ 'conversationId': ?0, 'deletedBy': { $ne: ?1 }, 'createdAt': { $gt: ?3 }, "
+         + "$or: [ { 'expiredAt': { $exists: false } }, { 'expiredAt': null }, { 'expiredAt': { $gt: ?4 } } ], "
          + "$and: [ "
          + "  { $or: [ { 'visibleTo': { $exists: false } }, { 'visibleTo': null }, { 'visibleTo': { $size: 0 } }, { 'visibleTo': ?1 } ] }, "
          + "  { $or: [ { 'type': { $ne: 'SYSTEM' } }, { 'createdAt': { $gte: ?2 } } ] } "
          + "] }")
-    Page<Message> findByConversationIdAndNotDeleted(String conversationId, String userId, LocalDateTime memberJoinedAt, LocalDateTime deletedBefore, Pageable pageable);
+    Page<Message> findByConversationIdAndNotDeleted(String conversationId, String userId, LocalDateTime memberJoinedAt, LocalDateTime deletedBefore, LocalDateTime now, Pageable pageable);
 
-    @Query("{ 'conversationId': ?0, 'deletedBy': { $ne: ?1 }, 'createdAt': { $gt: ?3 }, 'type': ?2, $or: [ { 'visibleTo': { $exists: false } }, { 'visibleTo': null }, { 'visibleTo': { $size: 0 } }, { 'visibleTo': ?1 } ] }")
+    @Query("{ 'conversationId': ?0, 'deletedBy': { $ne: ?1 }, 'createdAt': { $gt: ?3 }, 'type': ?2, "
+         + "$or: [ { 'expiredAt': { $exists: false } }, { 'expiredAt': null }, { 'expiredAt': { $gt: ?4 } } ], "
+         + "$or: [ { 'visibleTo': { $exists: false } }, { 'visibleTo': null }, { 'visibleTo': { $size: 0 } }, { 'visibleTo': ?1 } ] }")
     Page<Message> findByConversationIdAndTypeAndNotDeleted(
             String conversationId,
             String userId,
             MessageType type,
             LocalDateTime deletedBefore,
+            LocalDateTime now,
             Pageable pageable
     );
 
-    @Query("{ 'conversationId': ?0, 'deletedBy': { $ne: ?1 }, 'type': { $in: ?2 }, 'status': { $ne: 'REVOKED' }, 'createdAt': { $gt: ?3 } }")
+    @Query("{ 'conversationId': ?0, 'deletedBy': { $ne: ?1 }, 'type': { $in: ?2 }, 'status': { $ne: 'REVOKED' }, 'createdAt': { $gt: ?3 }, "
+         + "$or: [ { 'expiredAt': { $exists: false } }, { 'expiredAt': null }, { 'expiredAt': { $gt: ?4 } } ] }")
     Page<Message> findByConversationIdAndTypesAndNotDeleted(
             String conversationId,
             String userId,
             List<MessageType> types,
             LocalDateTime deletedBefore,
+            LocalDateTime now,
             Pageable pageable
     );
 
     Page<Message> findByConversationId(String conversationId, Pageable pageable);
+
+    List<Message> findByIdGreaterThanOrderByIdAsc(String id, Pageable pageable);
+
+    List<Message> findAllByOrderByIdAsc(Pageable pageable);
+
+    List<Message> findTop100ByConversationIdAndIdGreaterThanAndStatusNot(String conversationId, String sinceId, com.bondhub.common.enums.MessageStatus status);
 
     void deleteByConversationId(String conversationId);
 }

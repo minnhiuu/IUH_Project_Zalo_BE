@@ -32,6 +32,10 @@ public interface UserService {
 
     UserProfileResponse updateBio(BioUpdateRequest request);
 
+    UserProfileResponse deactivateMyAccount();
+
+    UserProfileResponse activateMyAccount();
+
     void deleteUser(String id);
 
     Map<String, UserSummaryResponse> getUsersByIds(List<String> userIds);
