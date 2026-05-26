@@ -210,6 +210,20 @@ public class DataInitializer {
                 "Incoming call",
                 "<b>{{actorName}}</b> is calling you");
 
+        // REMINDER
+        seedIfAbsent(NotificationType.REMINDER, NotificationChannel.FCM, "vi",
+                "Nhắc nhở",
+                "{{message}}");
+        seedIfAbsent(NotificationType.REMINDER, NotificationChannel.FCM, "en",
+                "Reminder",
+                "{{message}}");
+        seedIfAbsent(NotificationType.REMINDER, NotificationChannel.IN_APP, "vi",
+                "Nhắc nhở",
+                "{{message}}");
+        seedIfAbsent(NotificationType.REMINDER, NotificationChannel.IN_APP, "en",
+                "Reminder",
+                "{{message}}");
+
         // --- SECURITY TEMPLATES ---
         seedIfAbsent(NotificationType.NEW_DEVICE_LOGIN, NotificationChannel.IN_APP, "vi",
                 "Cảnh báo đăng nhập mới",
