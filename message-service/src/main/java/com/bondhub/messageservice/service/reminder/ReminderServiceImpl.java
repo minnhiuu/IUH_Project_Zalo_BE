@@ -7,12 +7,17 @@ import com.bondhub.messageservice.dto.request.ReminderRequest;
 import com.bondhub.messageservice.dto.response.ReminderResponse;
 import com.bondhub.messageservice.mapper.ReminderMapper;
 import com.bondhub.messageservice.model.ChatUser;
+import com.bondhub.messageservice.model.Message;
 import com.bondhub.messageservice.model.Reminder;
 import com.bondhub.messageservice.model.enums.ReminderStatus;
 import com.bondhub.messageservice.repository.ChatUserRepository;
 import com.bondhub.messageservice.repository.ReminderRepository;
 import com.bondhub.messageservice.service.message.SystemMessageService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
@@ -28,6 +33,7 @@ public class ReminderServiceImpl implements ReminderService {
     private final ReminderMapper reminderMapper;
     private final SystemMessageService systemMessageService;
     private final ChatUserRepository chatUserRepository;
+    private final MongoTemplate mongoTemplate;
 
     @Override
     public ReminderResponse createReminder(ReminderRequest request, String creatorId) {
@@ -141,6 +147,7 @@ public class ReminderServiceImpl implements ReminderService {
         payload.put("remindAt", reminder.getRemindAt());
         payload.put("reminderId", reminder.getId());
         payload.put("deleteAction", true);
+        payload.put("deleteNotice", true);
         if (reminder.getMessageId() != null) {
             payload.put("messageId", reminder.getMessageId());
         }
@@ -157,6 +164,26 @@ public class ReminderServiceImpl implements ReminderService {
             extraMetadata
         );
 
+        markReminderMessagesDeleted(reminder);
+
         reminderRepository.delete(reminder);
+    }
+
+    private void markReminderMessagesDeleted(Reminder reminder) {
+        if (reminder == null || reminder.getId() == null) {
+            return;
+        }
+
+        Query query = new Query();
+        query.addCriteria(Criteria.where("conversationId").is(reminder.getConversationId()));
+        query.addCriteria(Criteria.where("type").is(com.bondhub.common.enums.MessageType.SYSTEM));
+        query.addCriteria(Criteria.where("metadata.action").is(SystemActionType.REMINDER.name()));
+        query.addCriteria(Criteria.where("metadata.payload.reminderId").is(reminder.getId()));
+
+        Update update = new Update();
+        update.set("metadata.payload.deleteAction", true);
+        update.set("metadata.payload.hasTriggered", true);
+
+        mongoTemplate.updateMulti(query, update, Message.class);
     }
 }
