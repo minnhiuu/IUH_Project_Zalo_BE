@@ -61,6 +61,8 @@ public class Conversation extends BaseModel {
     @Builder.Default
     boolean isDisbanded = false;
 
+    Integer messageExpirationDays;
+
     GroupSettings settings;
 
     @Builder.Default

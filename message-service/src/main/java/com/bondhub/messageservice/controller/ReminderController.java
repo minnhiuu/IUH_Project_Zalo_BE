@@ -25,6 +25,12 @@ public class ReminderController {
         return ApiResponse.success(reminderService.createReminder(request, userId));
     }
 
+    @PutMapping("/{id}")
+    public ApiResponse<ReminderResponse> updateReminder(@PathVariable String id, @RequestBody @Valid ReminderRequest request) {
+        String userId = securityUtil.getCurrentUserId();
+        return ApiResponse.success(reminderService.updateReminder(id, request, userId));
+    }
+
     @GetMapping("/conversations/{conversationId}")
     public ApiResponse<List<ReminderResponse>> getReminders(@PathVariable String conversationId) {
         return ApiResponse.success(reminderService.getReminders(conversationId));

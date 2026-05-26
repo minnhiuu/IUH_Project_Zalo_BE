@@ -106,13 +106,15 @@ public class MessageServiceImpl implements MessageService {
         LocalDateTime deletedBefore = (room.getDeletedBefore() != null)
             ? room.getDeletedBefore().getOrDefault(currentUserId, LocalDateTime.of(1970, 1, 1, 0, 0))
             : LocalDateTime.of(1970, 1, 1, 0, 0);
+        LocalDateTime now = LocalDateTime.now();
         Page<Message> messagePage = isActive
-            ? messageRepository.findByConversationIdAndNotDeleted(conversationId, currentUserId, memberJoinedAt, deletedBefore, pageable)
+            ? messageRepository.findByConversationIdAndNotDeleted(conversationId, currentUserId, memberJoinedAt, deletedBefore, now, pageable)
             : messageRepository.findByConversationIdAndTypeAndNotDeleted(
                 conversationId,
                 currentUserId,
                 MessageType.SYSTEM,
                 deletedBefore,
+                now,
                 PageRequest.of(0, 1, Sort.by(Sort.Direction.DESC, "createdAt"))
             );
 
@@ -136,6 +138,7 @@ public class MessageServiceImpl implements MessageService {
         LocalDateTime deletedBefore = (room.getDeletedBefore() != null)
                 ? room.getDeletedBefore().getOrDefault(currentUserId, LocalDateTime.of(1970, 1, 1, 0, 0))
                 : LocalDateTime.of(1970, 1, 1, 0, 0);
+        LocalDateTime now = LocalDateTime.now();
 
         List<MessageType> messageTypes = types.stream()
                 .map(t -> {
@@ -151,7 +154,7 @@ public class MessageServiceImpl implements MessageService {
 
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
         Page<Message> messagePage = messageRepository.findByConversationIdAndTypesAndNotDeleted(
-                conversationId, currentUserId, messageTypes, deletedBefore, pageable);
+                conversationId, currentUserId, messageTypes, deletedBefore, now, pageable);
 
         String baseUrl = s3UtilV2.getS3BaseUrl();
         List<MessageResponse> dtos = messagePage.getContent().stream()
@@ -284,6 +287,13 @@ public class MessageServiceImpl implements MessageService {
                 Criteria.where("visibleTo").is(currentUserId)
         ));
 
+        // Expiration filter
+        securityCriteria.add(new Criteria().orOperator(
+                Criteria.where("expiredAt").exists(false),
+                Criteria.where("expiredAt").is(null),
+                Criteria.where("expiredAt").gt(LocalDateTime.now())
+        ));
+
         if (!isActive) {
             securityCriteria.add(Criteria.where("type").is(MessageType.SYSTEM));
         }
@@ -333,6 +343,20 @@ public class MessageServiceImpl implements MessageService {
             throw new AppException(ErrorCode.VALIDATION_ERROR);
         }
 
+        if (!room.isGroup()) {
+            boolean needSave = false;
+            for (com.bondhub.messageservice.model.ConversationMember m : room.getMembers()) {
+                if (!Boolean.TRUE.equals(m.getActive())) {
+                    m.setActive(true);
+                    m.setRemovedAt(null);
+                    needSave = true;
+                }
+            }
+            if (needSave) {
+                conversationRepository.save(room);
+            }
+        }
+
         assertActiveMember(room, currentUserId);
         conversationHelper.assertSettingAllowed(room, currentUserId, GroupSettings::isMemberCanSendMessages);
 
@@ -356,6 +380,11 @@ public class MessageServiceImpl implements MessageService {
         MessageType messageType = resolveMessageType(request, linkPreview);
         List<AttachmentInfo> attachments = mapAttachments(request);
 
+        LocalDateTime expiredAt = null;
+        if (room.getMessageExpirationDays() != null && room.getMessageExpirationDays() > 0) {
+            expiredAt = LocalDateTime.now().plusDays(room.getMessageExpirationDays());
+        }
+
         Message message = Message.builder()
                 .conversationId(room.getId())
                 .senderId(currentUserId)
@@ -368,6 +397,7 @@ public class MessageServiceImpl implements MessageService {
                 .type(messageType)
                 .attachments(attachments)
                 .linkPreview(linkPreview)
+                .expiredAt(expiredAt)
                 .build();
         messageRepository.save(message);
 

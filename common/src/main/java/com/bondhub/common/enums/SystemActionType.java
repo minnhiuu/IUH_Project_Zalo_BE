@@ -26,5 +26,6 @@ public enum SystemActionType {
     ADD_MEMBERS_FAILED,
     DISABLE_JOIN_LINK,
     DND_AUTO_REPLY,
+    UPDATE_EXPIRATION,
     REMINDER
 }

@@ -8,6 +8,7 @@ import com.bondhub.messageservice.dto.response.ReminderResponse;
 import com.bondhub.messageservice.mapper.ReminderMapper;
 import com.bondhub.messageservice.model.ChatUser;
 import com.bondhub.messageservice.model.Reminder;
+import com.bondhub.messageservice.model.enums.ReminderStatus;
 import com.bondhub.messageservice.repository.ChatUserRepository;
 import com.bondhub.messageservice.repository.ReminderRepository;
 import com.bondhub.messageservice.service.message.SystemMessageService;
@@ -65,6 +66,56 @@ public class ReminderServiceImpl implements ReminderService {
     }
 
     @Override
+    public ReminderResponse updateReminder(String reminderId, ReminderRequest request, String userId) {
+        Reminder reminder = reminderRepository.findById(reminderId)
+            .orElseThrow(() -> new AppException(ErrorCode.MESSAGE_NOT_FOUND));
+        if (!reminder.getCreatorId().equals(userId)) {
+            throw new AppException(ErrorCode.UNAUTHORIZED);
+        }
+
+        reminder.setTitle(request.getTitle());
+        reminder.setRemindAt(request.getRemindAt());
+        reminder.setRemindFor(request.getRemindFor());
+        reminder.setRepeatType(request.getRepeatType());
+        if (request.getMessageId() != null) {
+            reminder.setMessageId(request.getMessageId());
+        }
+        reminder.setNextRemindAt(request.getRemindAt());
+        reminder.setStatus(ReminderStatus.ACTIVE);
+
+        Reminder saved = reminderRepository.save(reminder);
+
+        ChatUser creator = chatUserRepository.findById(userId).orElse(null);
+        String actorName = creator != null && creator.getFullName() != null
+            ? creator.getFullName()
+            : "Nguoi dung";
+        String actorAvatar = creator != null ? creator.getAvatar() : null;
+
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("title", saved.getTitle());
+        payload.put("remindAt", saved.getRemindAt());
+        payload.put("reminderId", saved.getId());
+        payload.put("editAction", true);
+        if (saved.getMessageId() != null) {
+            payload.put("messageId", saved.getMessageId());
+        }
+
+        Map<String, Object> extraMetadata = new HashMap<>();
+        extraMetadata.put("payload", payload);
+
+        systemMessageService.sendSystemMessage(
+            saved.getConversationId(),
+            userId,
+            actorName,
+            actorAvatar,
+            SystemActionType.REMINDER,
+            extraMetadata
+        );
+
+        return reminderMapper.toResponse(saved);
+    }
+
+    @Override
     public List<ReminderResponse> getReminders(String conversationId) {
         return reminderRepository.findByConversationId(conversationId).stream()
                 .map(reminderMapper::toResponse)
@@ -78,6 +129,34 @@ public class ReminderServiceImpl implements ReminderService {
         if (!reminder.getCreatorId().equals(userId)) {
             throw new AppException(ErrorCode.UNAUTHORIZED);
         }
+
+        ChatUser creator = chatUserRepository.findById(userId).orElse(null);
+        String actorName = creator != null && creator.getFullName() != null
+            ? creator.getFullName()
+            : "Nguoi dung";
+        String actorAvatar = creator != null ? creator.getAvatar() : null;
+
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("title", reminder.getTitle());
+        payload.put("remindAt", reminder.getRemindAt());
+        payload.put("reminderId", reminder.getId());
+        payload.put("deleteAction", true);
+        if (reminder.getMessageId() != null) {
+            payload.put("messageId", reminder.getMessageId());
+        }
+
+        Map<String, Object> extraMetadata = new HashMap<>();
+        extraMetadata.put("payload", payload);
+
+        systemMessageService.sendSystemMessage(
+            reminder.getConversationId(),
+            userId,
+            actorName,
+            actorAvatar,
+            SystemActionType.REMINDER,
+            extraMetadata
+        );
+
         reminderRepository.delete(reminder);
     }
 }

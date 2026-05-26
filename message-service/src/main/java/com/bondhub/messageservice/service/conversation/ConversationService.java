@@ -40,4 +40,6 @@ public interface ConversationService {
     void toggleMute(String conversationId, boolean mute);
 
     void toggleHide(String conversationId, boolean hide);
+
+    ConversationResponse updateMessageExpiration(String conversationId, Integer days);
 }

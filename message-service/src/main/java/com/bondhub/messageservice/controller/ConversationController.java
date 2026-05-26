@@ -190,6 +190,15 @@ public class ConversationController {
                 groupConversationService.updateGroupSettings(conversationId, request)));
     }
 
+    @PatchMapping("/{conversationId}/expiration")
+    @Operation(summary = "Update disappearing messages expiration days")
+    public ResponseEntity<ApiResponse<ConversationResponse>> updateMessageExpiration(
+            @PathVariable String conversationId,
+            @RequestBody @Valid com.bondhub.messageservice.dto.request.UpdateExpirationRequest request) {
+        return ResponseEntity.ok(ApiResponse.success(
+                conversationService.updateMessageExpiration(conversationId, request.days())));
+    }
+
     @DeleteMapping("/{conversationId}")
     @Operation(summary = "Delete conversation only for current user")
     public ResponseEntity<ApiResponse<Void>> deleteConversation(@PathVariable String conversationId) {
