@@ -232,13 +232,101 @@ class MessageServiceImplTest {
     @DisplayName("UTCID06 - Send message when group setting disabled")
     void sendMessage_SettingDisabled() {
         MessageSendRequest request = new MessageSendRequest("conv1", null, "Hello", null, null, false, null);
-        
-        when(conversationRepository.findById("conv1")).thenReturn(Optional.of(conversation));
-        
-        doThrow(new AppException(ErrorCode.CHAT_SETTING_RESTRICTED))
-            .when(conversationHelper).assertSettingAllowed(any(), any(), any());
 
+        when(conversationRepository.findById("conv1")).thenReturn(Optional.of(conversation));
+
+        doThrow(new AppException(ErrorCode.CHAT_SETTING_RESTRICTED))
+                .when(conversationHelper).assertSettingAllowed(any(), any(), any());
         AppException ex = assertThrows(AppException.class, () -> messageService.sendMessage("conv1", request));
         assertEquals(ErrorCode.CHAT_SETTING_RESTRICTED, ex.getErrorCode());
+    }
+
+    @Test
+    @DisplayName("UTCID07 - Toggle reaction on a message successfully")
+    void toggleReaction_Success() {
+        Message message = new Message();
+        message.setId("msg1");
+        message.setConversationId("conv1");
+        Map<String, List<String>> reactions = new HashMap<>(); // Empty initially
+        message.setReactions(reactions);
+
+        when(messageRepository.findById("msg1")).thenReturn(Optional.of(message));
+        when(conversationRepository.findById("conv1")).thenReturn(Optional.of(conversation));
+
+        assertDoesNotThrow(() -> messageService.toggleReaction("msg1", ":smile:"));
+
+        verify(messageRepository, times(1)).save(message);
+
+        assertNotNull(message.getReactions());
+        assertTrue(message.getReactions().containsKey(":smile:"));
+        assertTrue(message.getReactions().get(":smile:").contains(currentUserId));
+
+        verify(kafkaTemplate, times(1)).send(any(), any());
+    }
+
+    @Test
+    @DisplayName("UTCID08 - Toggle reaction on non-existent message")
+    void toggleReaction_MessageNotFound() {
+        when(messageRepository.findById("msg99")).thenReturn(Optional.empty());
+
+        AppException ex = assertThrows(AppException.class, () -> messageService.toggleReaction("msg99", ":smile:"));
+        assertEquals(ErrorCode.MESSAGE_NOT_FOUND, ex.getErrorCode());
+
+        verify(messageRepository, never()).save(any());
+        verify(kafkaTemplate, never()).send(any(), any());
+    }
+
+    @Test
+    @DisplayName("UTCID09 - Remove all my reactions successfully")
+    void removeAllMyReactions_Success() {
+        Message message = new Message();
+        message.setId("msg1");
+        message.setConversationId("conv1");
+
+        Map<String, List<String>> reactions = new HashMap<>();
+        List<String> smileUsers = new ArrayList<>();
+        smileUsers.add(currentUserId);
+        smileUsers.add("otherUser");
+        reactions.put(":smile:", smileUsers);
+
+        List<String> sadUsers = new ArrayList<>();
+        sadUsers.add(currentUserId);
+        reactions.put(":sad:", sadUsers);
+
+        message.setReactions(reactions);
+
+        when(messageRepository.findById("msg1")).thenReturn(Optional.of(message));
+        when(conversationRepository.findById("conv1")).thenReturn(Optional.of(conversation));
+
+        assertDoesNotThrow(() -> messageService.removeAllMyReactions("msg1"));
+
+        verify(messageRepository, times(1)).save(message);
+
+        if (message.getReactions() != null) {
+            if (message.getReactions().containsKey(":smile:")) {
+                assertFalse(message.getReactions().get(":smile:").contains(currentUserId));
+                assertTrue(message.getReactions().get(":smile:").contains("otherUser"));
+            }
+            assertFalse(message.getReactions().containsKey(":sad:")); // Should be empty and removed entirely
+        }
+
+        verify(kafkaTemplate, times(1)).send(any(), any());
+    }
+
+    @Test
+    @DisplayName("UTCID10 - Remove all my reactions on a message with no reactions")
+    void removeAllMyReactions_NoReactions_Success() {
+        Message message = new Message();
+        message.setId("msg1");
+        message.setConversationId("conv1");
+        message.setReactions(null); // No reactions
+
+        when(messageRepository.findById("msg1")).thenReturn(Optional.of(message));
+        when(conversationRepository.findById("conv1")).thenReturn(Optional.of(conversation));
+
+        assertDoesNotThrow(() -> messageService.removeAllMyReactions("msg1"));
+
+        verify(messageRepository, never()).save(message);
+        verify(kafkaTemplate, never()).send(any(), any());
     }
 }
